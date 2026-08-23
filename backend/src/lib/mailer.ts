@@ -163,26 +163,22 @@ export async function sendEmail(message: EmailMessage) {
  */
 export async function verifyMailer() {
   if (resend) {
-    // Resend has no lightweight "ping" endpoint; listing domains is a cheap
-    // authenticated call that confirms the API key itself is valid.
-    try {
-      const { error } = await resend.domains.list();
-      if (error) {
-        console.error("[Mailer/Resend] API key check failed:", error);
-        return false;
-      }
-      console.log(
-        `[Mailer/Resend] API key verified. Sending from "${resendFrom}". ` +
-          (resendFromEmail === "onboarding@resend.dev"
-            ? "Using Resend's shared test address — verify your own domain at " +
-              "https://resend.com/domains and set RESEND_FROM_EMAIL to send to any recipient."
-            : "Ready to send emails."),
-      );
-      return true;
-    } catch (err: any) {
-      console.error("[Mailer/Resend] API key check failed:", err.message || err);
-      return false;
-    }
+    // Resend has no lightweight endpoint that works with a "sending-only"
+    // scoped API key (the key type we recommend, since it needs no broader
+    // access) — domains.list()/api-keys.list() etc. all require full
+    // access and return 401 "restricted_api_key" for a sending-only key,
+    // even though sending itself works fine. So we don't probe the API
+    // here; we just confirm the key is present and let the first real send
+    // (logged in sendViaResend above) be the actual confirmation.
+    console.log(
+      `[Mailer/Resend] API key configured. Sending from "${resendFrom}". ` +
+        (resendFromEmail === "onboarding@resend.dev"
+          ? "Using Resend's shared test address — verify your own domain at " +
+            "https://resend.com/domains and set RESEND_FROM_EMAIL to send to any recipient."
+          : "") +
+        " (If the key is invalid or restricted, this will show up as a failure on the first real send.)",
+    );
+    return true;
   }
 
   if (transporter) {
