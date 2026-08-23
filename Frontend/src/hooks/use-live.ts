@@ -53,19 +53,25 @@ export function useLiveChatHistory(id: string) {
   });
 }
 
-export function useStartLive() {
+/**
+ * Starts a live stream. Pass `asStaff: true` when the broadcaster is a
+ * moderator/admin/superadmin going live with their staff session — the
+ * backend's `authenticateConsumerOrStaff` middleware accepts either token,
+ * so this only changes which access token gets sent.
+ */
+export function useStartLive(asStaff = false) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { title: string; description?: string | undefined; subsOnly?: boolean | undefined; giftsEnabled?: boolean | undefined }) =>
-      api.post<{ stream: LiveStreamData; livekitToken: string | null; livekitUrl: string }>("/live/start", input),
+      api.post<{ stream: LiveStreamData; livekitToken: string | null; livekitUrl: string }>("/live/start", input, asStaff),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["live"] }),
   });
 }
 
-export function useEndLive() {
+export function useEndLive(asStaff = false) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.post<{ stream: LiveStreamData }>(`/live/${id}/end`),
+    mutationFn: (id: string) => api.post<{ stream: LiveStreamData }>(`/live/${id}/end`, undefined, asStaff),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["live"] }),
   });
 }
@@ -104,10 +110,10 @@ export function useLiveKitConfig() {
   });
 }
 
-export function useLiveKitToken(streamId: string, enabled: boolean) {
+export function useLiveKitToken(streamId: string, enabled: boolean, asStaff = false) {
   return useQuery({
-    queryKey: ["live", "token", streamId],
-    queryFn: () => api.post<{ livekitToken: string; livekitUrl: string }>(`/live/${streamId}/token`),
+    queryKey: ["live", "token", streamId, asStaff],
+    queryFn: () => api.post<{ livekitToken: string; livekitUrl: string }>(`/live/${streamId}/token`, undefined, asStaff),
     enabled: enabled && Boolean(streamId),
     staleTime: 5 * 60_000,
     retry: false,
@@ -116,46 +122,50 @@ export function useLiveKitToken(streamId: string, enabled: boolean) {
 
 // ── Moderation, earnings, reporting ─────────────────────────────────────────
 
-export function useAddModerator(streamId: string) {
+// All of these are host/moderator actions — `asStaff` routes them through the
+// staff access token for a moderator/admin/superadmin broadcasting or
+// moderating with only their staff session open (see live.$streamId.tsx).
+
+export function useAddModerator(streamId: string, asStaff = false) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (username: string) => api.post(`/live/${streamId}/moderators`, { username }),
+    mutationFn: (username: string) => api.post(`/live/${streamId}/moderators`, { username }, asStaff),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["live", "detail", streamId] }),
   });
 }
 
-export function useMuteViewer(streamId: string) {
+export function useMuteViewer(streamId: string, asStaff = false) {
   return useMutation({
-    mutationFn: (userId: string) => api.post<{ muted: boolean }>(`/live/${streamId}/viewers/${userId}/mute`),
+    mutationFn: (userId: string) => api.post<{ muted: boolean }>(`/live/${streamId}/viewers/${userId}/mute`, undefined, asStaff),
   });
 }
 
-export function useBanViewer(streamId: string) {
+export function useBanViewer(streamId: string, asStaff = false) {
   return useMutation({
-    mutationFn: (userId: string) => api.post<{ banned: boolean }>(`/live/${streamId}/viewers/${userId}/ban`),
+    mutationFn: (userId: string) => api.post<{ banned: boolean }>(`/live/${streamId}/viewers/${userId}/ban`, undefined, asStaff),
   });
 }
 
-export function useLiveEarnings(streamId: string, enabled: boolean) {
+export function useLiveEarnings(streamId: string, enabled: boolean, asStaff = false) {
   return useQuery({
-    queryKey: ["live", "earnings", streamId],
-    queryFn: () => api.get<{ totalPoints: number; giftCount: number }>(`/live/${streamId}/earnings`),
+    queryKey: ["live", "earnings", streamId, asStaff],
+    queryFn: () => api.get<{ totalPoints: number; giftCount: number }>(`/live/${streamId}/earnings`, asStaff),
     enabled,
   });
 }
 
-export function useUpdateLiveSettings(streamId: string) {
+export function useUpdateLiveSettings(streamId: string, asStaff = false) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { giftsEnabled?: boolean; subsOnly?: boolean }) =>
-      api.patch<{ stream: LiveStreamData }>(`/live/${streamId}/settings`, input),
+      api.patch<{ stream: LiveStreamData }>(`/live/${streamId}/settings`, input, asStaff),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["live", "detail", streamId] }),
   });
 }
 
-export function useInviteFollowers(streamId: string) {
+export function useInviteFollowers(streamId: string, asStaff = false) {
   return useMutation({
-    mutationFn: () => api.post<{ invited: number }>(`/live/${streamId}/invite`),
+    mutationFn: () => api.post<{ invited: number }>(`/live/${streamId}/invite`, undefined, asStaff),
   });
 }
 

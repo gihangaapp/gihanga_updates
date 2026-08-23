@@ -42,15 +42,26 @@ export function createApp(): Express {
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 
   // CORS
+  // FRONTEND_ORIGIN may hold one origin or a comma-separated list (handy for
+  // Vercel, which serves both a stable production domain and a fresh preview
+  // domain per branch/PR — e.g. "https://app.vercel.app,https://staging.app.vercel.app").
+  // Leaving FRONTEND_ORIGIN unset (local/dev) falls back to reflecting
+  // whatever origin the request came from, so localhost AND a LAN IP (e.g.
+  // a phone on the same network, per the dynamic API URL resolution in the
+  // frontend's api-client.ts) both keep working with zero config.
+  const allowedOrigins = (process.env.FRONTEND_ORIGIN || "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+
   app.use(
     cors({
-      // Reflects whatever origin the request came from. This intentionally
-      // isn't locked down to a fixed allowlist — the frontend can be opened
-      // from localhost OR a LAN IP (e.g. from a phone on the same network,
-      // per the dynamic API URL resolution in the frontend's api-client.ts),
-      // and the exact IP varies by network. Tighten this before deploying
-      // somewhere public — check the origin against your real domain(s).
-      origin: (_origin, callback) => callback(null, true),
+      origin: (origin, callback) => {
+        if (allowedOrigins.length === 0) return callback(null, true);
+        if (!origin) return callback(null, true); // same-origin / server-to-server / curl
+        if (allowedOrigins.includes(origin)) return callback(null, true);
+        callback(new Error(`Origin ${origin} is not allowed by CORS`));
+      },
       credentials: true,
     })
   );

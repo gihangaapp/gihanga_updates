@@ -47,9 +47,9 @@ function toDisplayUser(host: LiveStreamData["host"]) {
   };
 }
 
-function GoLiveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+function GoLiveDialog({ open, onOpenChange, asStaff }: { open: boolean; onOpenChange: (v: boolean) => void; asStaff: boolean }) {
   const navigate = useNavigate();
-  const startLive = useStartLive();
+  const startLive = useStartLive(asStaff);
   const [step, setStep] = useState<"details" | "preview">("details");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -177,7 +177,11 @@ function GoLiveDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v:
 }
 
 function LiveDiscoveryPage() {
-  const { user } = useAuth();
+  const { user, staffUser } = useAuth();
+  // A moderator/admin/superadmin can go live too — even with only their
+  // staff session open, no consumer login needed.
+  const canGoLive = Boolean(user?.isCreator || staffUser);
+  const asStaff = !user && Boolean(staffUser);
   const [searchQuery, setSearchQuery] = useState("");
   const [goLiveOpen, setGoLiveOpen] = useState(false);
   const { data, isLoading } = useLiveStreams();
@@ -200,7 +204,7 @@ function LiveDiscoveryPage() {
             <h1 className="font-display text-2xl font-extrabold tracking-tight">Live Streams</h1>
             <p className="mt-0.5 text-sm text-muted-foreground">What's happening right now on Gihanga Updates</p>
           </div>
-          {user?.isCreator && (
+          {canGoLive && (
             <Button variant="brand" onClick={() => setGoLiveOpen(true)}>
               <Radio className="size-4" /> Go Live
             </Button>
@@ -213,7 +217,7 @@ function LiveDiscoveryPage() {
           <div className="surface-card flex flex-col items-center gap-2 py-16 text-center">
             <Radio className="size-8 text-muted-foreground" />
             <p className="font-bold text-muted-foreground">No one is live right now</p>
-            {user?.isCreator ? (
+            {canGoLive ? (
               <Button variant="brand" size="sm" onClick={() => setGoLiveOpen(true)}>
                 Be the first to go live
               </Button>
@@ -321,7 +325,7 @@ function LiveDiscoveryPage() {
           </ul>
         )}
 
-        {user?.isCreator && streams.length > 0 && (
+        {canGoLive && streams.length > 0 && (
           <div className="surface-card flex flex-wrap items-center gap-4 p-5">
             <Flame className="size-8 shrink-0 text-primary" />
             <div className="min-w-0 flex-1">
@@ -334,7 +338,7 @@ function LiveDiscoveryPage() {
           </div>
         )}
       </div>
-      <GoLiveDialog open={goLiveOpen} onOpenChange={setGoLiveOpen} />
+      <GoLiveDialog open={goLiveOpen} onOpenChange={setGoLiveOpen} asStaff={asStaff} />
     </AppShell>
   );
 }

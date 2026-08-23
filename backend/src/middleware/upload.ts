@@ -8,9 +8,25 @@ const UPLOAD_ROOT = path.join(__dirname, "..", "..", "uploads");
 const SUBDIRS = ["photos", "videos", "reels", "avatars", "stories"] as const;
 export type UploadKind = (typeof SUBDIRS)[number];
 
-for (const dir of SUBDIRS) {
-  const full = path.join(UPLOAD_ROOT, dir);
-  if (!fs.existsSync(full)) fs.mkdirSync(full, { recursive: true });
+// Cloudinary is checked lazily (via env vars) rather than importing
+// ./cloudinary.ts at module load — that file imports this one (for
+// UploadKind), so a top-level import here would create a circular require.
+function cloudinaryConfigured(): boolean {
+  return Boolean(
+    process.env.CLOUDINARY_URL ||
+      (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET)
+  );
+}
+
+// Local disk is only used as a dev fallback when Cloudinary isn't configured
+// (Render's filesystem is ephemeral, so production should always set
+// Cloudinary env vars — see lib/cloudinary.ts). Skip creating these
+// directories entirely when Cloudinary is configured.
+if (!cloudinaryConfigured()) {
+  for (const dir of SUBDIRS) {
+    const full = path.join(UPLOAD_ROOT, dir);
+    if (!fs.existsSync(full)) fs.mkdirSync(full, { recursive: true });
+  }
 }
 
 const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
@@ -29,6 +45,14 @@ function destinationFor(kind: UploadKind) {
 }
 
 function storageFor(kind: UploadKind) {
+  // When Cloudinary is configured, files are buffered in memory and streamed
+  // up to Cloudinary by the upload route (see routes/v1/uploads/upload.ts) —
+  // nothing is written to local disk, which is what makes this work on
+  // Render's ephemeral filesystem. Otherwise, fall back to disk storage for
+  // local development.
+  if (cloudinaryConfigured()) {
+    return multer.memoryStorage();
+  }
   return multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, destinationFor(kind)),
     filename: (_req, file, cb) => {
@@ -75,4 +99,4 @@ export function publicUrlFor(kind: UploadKind, filename: string) {
   return `/uploads/${kind}/${filename}`;
 }
 
-export { UPLOAD_ROOT, maxBytesFor };
+export { UPLOAD_ROOT, maxBytesFor, cloudinaryConfigured };

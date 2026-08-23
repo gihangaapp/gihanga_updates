@@ -59,7 +59,7 @@ import {
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { useToggleBlock, useBlockedSet } from "@/hooks/use-blocks";
 import { useLiveKitRoom } from "@/lib/livekit";
-import { getSocket } from "@/lib/socket-client";
+import { getLiveSocket } from "@/lib/socket-client";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/live/$streamId")({
@@ -162,8 +162,8 @@ function ReportDialog({ streamId, open, onOpenChange }: { streamId: string; open
   );
 }
 
-function AddModeratorDialog({ streamId, open, onOpenChange }: { streamId: string; open: boolean; onOpenChange: (v: boolean) => void }) {
-  const addMod = useAddModerator(streamId);
+function AddModeratorDialog({ streamId, asStaff, open, onOpenChange }: { streamId: string; asStaff: boolean; open: boolean; onOpenChange: (v: boolean) => void }) {
+  const addMod = useAddModerator(streamId, asStaff);
   const [username, setUsername] = useState("");
 
   return (
@@ -203,11 +203,17 @@ function AddModeratorDialog({ streamId, open, onOpenChange }: { streamId: string
 
 function LiveRoomPage() {
   const { streamId } = Route.useParams();
-  const { user } = useAuth();
+  const { user, staffUser } = useAuth();
   const navigate = useNavigate();
   const { data, isLoading } = useLiveStream(streamId);
   const { data: chatHistory } = useLiveChatHistory(streamId);
-  const endLive = useEndLive();
+  // A moderator/admin/superadmin can be the host with only a staff session
+  // open (no consumer login) — fall back to staffUser for identity so
+  // isHost/isMod still resolve, and route their mutations through the
+  // staff-authenticated request when there's no consumer session.
+  const activeIdentity = user ?? staffUser;
+  const asStaff = !user && Boolean(staffUser);
+  const endLive = useEndLive(asStaff);
   const sendGift = useSendGift(streamId);
   const { data: walletData } = useMyWallet();
   const { data: kitConfig } = useLiveKitConfig();
@@ -215,8 +221,8 @@ function LiveRoomPage() {
   const { data: followingSet } = useFollowingSet();
   const toggleBlock = useToggleBlock();
   const { data: blockedSet } = useBlockedSet();
-  const muteViewer = useMuteViewer(streamId);
-  const banViewer = useBanViewer(streamId);
+  const muteViewer = useMuteViewer(streamId, asStaff);
+  const banViewer = useBanViewer(streamId, asStaff);
 
   const [messages, setMessages] = useState<LiveChatEntry[]>([]);
   const [pinned, setPinned] = useState<LiveChatEntry | null>(null);
@@ -231,9 +237,9 @@ function LiveRoomPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const stream = data?.stream as any;
-  const isHost = Boolean(user && stream && stream.host.username === user.username);
+  const isHost = Boolean(activeIdentity && stream && stream.host.username === activeIdentity.username);
   const isMod = Boolean(
-    user && stream?.moderators?.some((m: Author) => m.username === user.username),
+    activeIdentity && stream?.moderators?.some((m: Author) => m.username === activeIdentity.username),
   );
   const canModerate = isHost || isMod;
   const isOver = stream ? stream.status !== "live" || Boolean(ended) : false;
@@ -242,6 +248,7 @@ function LiveRoomPage() {
   const { data: tokenData, isLoading: tokenLoading, error: tokenError } = useLiveKitToken(
     streamId,
     kitConfigured && !isOver && Boolean(stream),
+    asStaff,
   );
 
   const { localStream, remoteStream, connected, error: kitError, micOn, camOn, toggleMic, toggleCamera, switchCamera } =
@@ -251,8 +258,8 @@ function LiveRoomPage() {
       publish: isHost,
       enabled: Boolean(tokenData?.livekitToken) && !isOver,
     });
-  const updateSettings = useUpdateLiveSettings(streamId);
-  const inviteFollowers = useInviteFollowers(streamId);
+  const updateSettings = useUpdateLiveSettings(streamId, asStaff);
+  const inviteFollowers = useInviteFollowers(streamId, asStaff);
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.srcObject = (isHost ? localStream : remoteStream) ?? null;
@@ -269,7 +276,7 @@ function LiveRoomPage() {
   }, [stream?.viewerCount]);
 
   useEffect(() => {
-    const socket = getSocket();
+    const socket = getLiveSocket();
     if (!socket) return;
     socket.emit("live:join", { streamId });
 
@@ -342,12 +349,12 @@ function LiveRoomPage() {
 
   function sendChat() {
     if (!draft.trim()) return;
-    getSocket()?.emit("live:chat", { streamId, body: draft.trim() });
+    getLiveSocket()?.emit("live:chat", { streamId, body: draft.trim() });
     setDraft("");
   }
 
   function sendReaction() {
-    getSocket()?.emit("live:react", { streamId, kind: "heart" });
+    getLiveSocket()?.emit("live:react", { streamId, kind: "heart" });
     setHeartBurst((n) => n + 1);
   }
 
@@ -592,7 +599,7 @@ function LiveRoomPage() {
           {kitError && <p className="border-t border-border px-4 py-3 text-sm text-danger">{kitError}</p>}
 
           {isHost && (
-            <HostEarnings streamId={streamId} isOver={isOver} />
+            <HostEarnings streamId={streamId} isOver={isOver} asStaff={asStaff} />
           )}
 
           {giftPickerOpen && (
@@ -628,7 +635,7 @@ function LiveRoomPage() {
               {canModerate && (
                 <button
                   type="button"
-                  onClick={() => getSocket()?.emit("live:unpin-comment", { streamId, commentId: pinned._id })}
+                  onClick={() => getLiveSocket()?.emit("live:unpin-comment", { streamId, commentId: pinned._id })}
                   className="shrink-0 text-muted-foreground hover:text-foreground"
                 >
                   <X className="size-3.5" />
@@ -654,7 +661,7 @@ function LiveRoomPage() {
                     <span className="text-foreground/85">{m.body}</span>
                   )}
                 </p>
-                {(canModerate || m.sender.username !== user?.username) && !m.isGift && (
+                {(canModerate || m.sender.username !== activeIdentity?.username) && !m.isGift && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <button
@@ -669,13 +676,13 @@ function LiveRoomPage() {
                       {canModerate && (
                         <>
                           <DropdownMenuItem
-                            onClick={() => getSocket()?.emit("live:pin-comment", { streamId, commentId: m._id })}
+                            onClick={() => getLiveSocket()?.emit("live:pin-comment", { streamId, commentId: m._id })}
                           >
                             <Pin className="size-3.5" /> Pin
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-danger"
-                            onClick={() => getSocket()?.emit("live:delete-comment", { streamId, commentId: m._id })}
+                            onClick={() => getLiveSocket()?.emit("live:delete-comment", { streamId, commentId: m._id })}
                           >
                             <Trash2 className="size-3.5" /> Delete
                           </DropdownMenuItem>
@@ -701,7 +708,7 @@ function LiveRoomPage() {
                           <DropdownMenuSeparator />
                         </>
                       )}
-                      {m.sender.username !== user?.username && (
+                      {m.sender.username !== activeIdentity?.username && (
                         <DropdownMenuItem
                           onClick={() =>
                             toggleBlock.mutate(
@@ -738,13 +745,13 @@ function LiveRoomPage() {
       </div>
 
       <ReportDialog streamId={streamId} open={reportOpen} onOpenChange={setReportOpen} />
-      <AddModeratorDialog streamId={streamId} open={addModOpen} onOpenChange={setAddModOpen} />
+      <AddModeratorDialog streamId={streamId} asStaff={asStaff} open={addModOpen} onOpenChange={setAddModOpen} />
     </AppShell>
   );
 }
 
-function HostEarnings({ streamId, isOver }: { streamId: string; isOver: boolean }) {
-  const { data } = useLiveEarnings(streamId, true);
+function HostEarnings({ streamId, isOver, asStaff }: { streamId: string; isOver: boolean; asStaff: boolean }) {
+  const { data } = useLiveEarnings(streamId, true, asStaff);
   if (!data) return null;
   return (
     <div className="flex items-center gap-2 border-t border-border px-4 py-2.5 text-sm">

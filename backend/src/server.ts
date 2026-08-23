@@ -17,9 +17,18 @@ async function startServer() {
   const app = createApp();
   const server = http.createServer(app);
 
+  // Same allowlist logic as the Express CORS setup in app.ts — Socket.IO
+  // has its own separate CORS handshake. Auth here is via a bearer token in
+  // `auth: { token }`, not cookies, so reflecting "*" is safe either way,
+  // but mirroring FRONTEND_ORIGIN keeps both layers consistent in production.
+  const socketAllowedOrigins = (process.env.FRONTEND_ORIGIN || "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+
   const io = new SocketIOServer(server, {
     cors: {
-      origin: "*",
+      origin: socketAllowedOrigins.length > 0 ? socketAllowedOrigins : "*",
       methods: ["GET", "POST"],
     },
   });
@@ -30,6 +39,12 @@ async function startServer() {
     // Consumer sockets join a private `user:<id>` room so notify() can reach exactly
     // that user; staff sockets with a moderation permission join `staff:moderators`
     // so live-chat keyword alerts and other moderation pushes reach the right people.
+    //
+    // Staff (moderator/admin/superadmin) accounts share the same underlying User._id
+    // as their consumer identity, so when a staff member goes live as themselves,
+    // their socket ALSO joins `user:<id>` and gets a real `userId` — this is what lets
+    // attachLiveHandlers (live:join, live:chat, kick, pin, etc.) treat a staff host
+    // exactly like a consumer host, with no changes needed on that side.
     const token = socket.handshake.auth?.token as string | undefined;
     const isStaff = Boolean(socket.handshake.auth?.isStaff);
     let userId: string | undefined;
@@ -42,6 +57,8 @@ async function startServer() {
           if (decoded.role === "moderator" || decoded.role === "admin" || decoded.role === "superadmin") {
             socket.join("staff:moderators");
           }
+          userId = decoded.userId;
+          socket.join(`user:${decoded.userId}`);
         } else {
           const decoded = verifyConsumerAccessToken(token);
           userId = decoded.userId;

@@ -5,7 +5,7 @@ import { Follow } from "../../../models/Follow";
 import { Wallet } from "../../../models/Wallet";
 import { Transaction } from "../../../models/Transaction";
 import { Report } from "../../../models/Report";
-import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/rbac";
+import { authenticateConsumer, authenticateConsumerOrStaff, AuthenticatedRequest } from "../../../middleware/rbac";
 import { optionalAuth } from "../../../middleware/optionalAuth";
 import { getIO } from "../../../lib/socket";
 import { applyLedgerEntry } from "../../../lib/wallet";
@@ -22,7 +22,7 @@ router.get("/config", (req, res: Response) => {
 });
 
 // PATCH /api/v1/live/:id/settings — host adjusts gifts/subsOnly while live
-router.patch("/:id/settings", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+router.patch("/:id/settings", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const stream = await LiveStream.findOne({ _id: req.params.id, host: req.user!.userId });
     if (!stream) return res.status(404).json({ error: "Stream not found" });
@@ -38,12 +38,13 @@ router.patch("/:id/settings", authenticateConsumer, async (req: AuthenticatedReq
   }
 });
 
-// POST /api/v1/live/start — a creator goes live
-router.post("/start", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+// POST /api/v1/live/start — a creator, moderator, admin, or superadmin goes live
+router.post("/start", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const user = await User.findById(req.user!.userId);
-    if (!user?.isCreator) {
-      return res.status(403).json({ error: "Only creator accounts can go live" });
+    if (!user) return res.status(404).json({ error: "Account not found" });
+    if (!user.isCreator && user.role === "user") {
+      return res.status(403).json({ error: "Only creator or staff accounts can go live" });
     }
 
     const existing = await LiveStream.findOne({ host: user._id, status: "live" });
@@ -91,8 +92,8 @@ router.post("/start", authenticateConsumer, async (req: AuthenticatedRequest, re
   }
 });
 
-// POST /api/v1/live/:id/token — a viewer (or the returning host) requests a LiveKit room token
-router.post("/:id/token", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+// POST /api/v1/live/:id/token — a viewer (or the returning host, including staff hosts) requests a LiveKit room token
+router.post("/:id/token", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const stream = await LiveStream.findById(req.params.id);
     if (!stream) return res.status(404).json({ error: "Stream not found" });
@@ -115,7 +116,7 @@ router.post("/:id/token", authenticateConsumer, async (req: AuthenticatedRequest
 });
 
 // POST /api/v1/live/:id/invite — host re-notifies their followers about the live (e.g. for latecomers)
-router.post("/:id/invite", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+router.post("/:id/invite", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const stream = await LiveStream.findOne({ _id: req.params.id, host: req.user!.userId }).populate("host", "name");
     if (!stream) return res.status(404).json({ error: "Stream not found" });
@@ -141,7 +142,7 @@ router.post("/:id/invite", authenticateConsumer, async (req: AuthenticatedReques
 });
 
 // POST /api/v1/live/:id/end — host ends their own stream
-router.post("/:id/end", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+router.post("/:id/end", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const stream = await LiveStream.findOne({ _id: req.params.id, host: req.user!.userId });
     if (!stream) return res.status(404).json({ error: "Stream not found" });
@@ -202,7 +203,7 @@ router.get("/:id/chat", optionalAuth, async (req: AuthenticatedRequest, res: Res
 });
 
 // GET /api/v1/live/:id/earnings — host-only: gift earnings for this stream
-router.get("/:id/earnings", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+router.get("/:id/earnings", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const stream = await LiveStream.findById(req.params.id);
     if (!stream) return res.status(404).json({ error: "Stream not found" });
@@ -253,7 +254,7 @@ function isHost(stream: any, userId: string) {
   return String(stream.host) === userId;
 }
 
-router.post("/:id/moderators", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+router.post("/:id/moderators", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { username } = req.body;
     const stream = await LiveStream.findById(req.params.id);
@@ -272,7 +273,7 @@ router.post("/:id/moderators", authenticateConsumer, async (req: AuthenticatedRe
   }
 });
 
-router.delete("/:id/moderators/:userId", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+router.delete("/:id/moderators/:userId", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const stream = await LiveStream.findById(req.params.id);
     if (!stream) return res.status(404).json({ error: "Stream not found" });
@@ -285,7 +286,7 @@ router.delete("/:id/moderators/:userId", authenticateConsumer, async (req: Authe
   }
 });
 
-router.post("/:id/viewers/:userId/mute", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+router.post("/:id/viewers/:userId/mute", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const stream = await LiveStream.findById(req.params.id);
     if (!stream) return res.status(404).json({ error: "Stream not found" });
@@ -303,7 +304,7 @@ router.post("/:id/viewers/:userId/mute", authenticateConsumer, async (req: Authe
   }
 });
 
-router.post("/:id/viewers/:userId/ban", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+router.post("/:id/viewers/:userId/ban", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const stream = await LiveStream.findById(req.params.id);
     if (!stream) return res.status(404).json({ error: "Stream not found" });

@@ -12,4 +12,13 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Deploy target: this app is deployed on Vercel. The default nitro preset
+  // is "cloudflare-module" (from @lovable.dev/vite-tanstack-config), which
+  // does not run on Vercel's build output — so it's explicitly overridden
+  // to Vercel's Nitro preset here. process.env.VERCEL is set automatically
+  // by Vercel's build environment; locally/elsewhere this falls back to the
+  // "node-server" preset, so `npm run build` + `npm run preview` still work.
+  nitro: {
+    preset: process.env.VERCEL ? "vercel" : "node-server",
+  },
 });
