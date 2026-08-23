@@ -1,5 +1,22 @@
 import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
+// ─── Resend (HTTP API — preferred) ──────────────────────────────────────────
+// Render's free tier (and several other hosts) block outbound SMTP ports
+// (25/465/587) entirely, which makes nodemailer/Gmail time out no matter how
+// correct the credentials are. Resend sends over plain HTTPS (port 443,
+// never blocked), so when RESEND_API_KEY is set we use it instead of SMTP.
+const resendApiKey = process.env.RESEND_API_KEY?.trim();
+const resend = resendApiKey ? new Resend(resendApiKey) : null;
+
+// Resend requires the "from" address to be on a domain you've verified in
+// the Resend dashboard (https://resend.com/domains). Until a domain is
+// verified, Resend only allows sending from "onboarding@resend.dev" (and
+// only to your own account's email). Set RESEND_FROM_EMAIL once you've
+// verified a domain to send from your own address instead.
+const resendFromEmail = process.env.RESEND_FROM_EMAIL?.trim() || "onboarding@resend.dev";
+
+// ─── SMTP (nodemailer — fallback) ───────────────────────────────────────────
 // Trim env vars defensively — a stray trailing space/newline in a
 // platform's env var editor (very common with copy-pasted Gmail app
 // passwords, which contain spaces) is enough to make Gmail's SMTP server
@@ -14,13 +31,15 @@ const user = process.env.EMAIL_USER?.trim();
 // spaces if the value wasn't quoted correctly. Stripping spaces here makes
 // the value robust regardless of how it was pasted into the platform.
 const pass = process.env.EMAIL_PASS?.trim().replace(/\s+/g, "");
+
 // Gmail's SMTP requires the From header's address to match (or be an
 // authorized alias of) the authenticated account, or it silently
 // rejects/spam-folders the message. If EMAIL_FROM is just a display name
 // with no "<email>" part (e.g. `EMAIL_FROM="Gihanga Updates"`), build a
 // correct one from EMAIL_USER instead of sending an invalid/mismatched From.
 const fromDisplayName = (process.env.EMAIL_FROM || "Gihanga Updates").replace(/\s*<.*>\s*$/, "").trim();
-const from = user ? `${fromDisplayName} <${user}>` : process.env.EMAIL_FROM || "Gihanga Updates <no-reply@gihanga.rw>";
+const smtpFrom = user ? `${fromDisplayName} <${user}>` : process.env.EMAIL_FROM || "Gihanga Updates <no-reply@gihanga.rw>";
+const resendFrom = `${fromDisplayName} <${resendFromEmail}>`;
 
 export interface EmailMessage {
   to: string;
@@ -51,75 +70,147 @@ const transporter = host && port && user && pass
     })
   : null;
 
-export async function sendEmail(message: EmailMessage) {
+async function sendViaResend(message: EmailMessage) {
+  const { data, error } = await resend!.emails.send({
+    from: resendFrom,
+    to: message.to,
+    subject: message.subject,
+    text: message.text,
+    html: message.html,
+  });
+
+  if (error) {
+    // Resend's most common early-stage failure: the "from" domain isn't
+    // verified yet, so it only allows onboarding@resend.dev, and only to
+    // the email address you signed up to Resend with.
+    if (/domain is not verified|You can only send testing emails/i.test(error.message || "")) {
+      console.error(
+        "[Mailer/Resend] Domain not verified. Until you verify a domain at https://resend.com/domains, " +
+          "Resend only allows sending FROM onboarding@resend.dev and only TO the email address you " +
+          "signed up with. Verify a domain and set RESEND_FROM_EMAIL to send to any recipient.",
+        error,
+      );
+    } else {
+      console.error("[Mailer/Resend] Failed to send email:", error);
+    }
+    throw new Error(error.message || "Resend failed to send the email");
+  }
+
+  console.log(`[Mailer/Resend] Email sent to ${message.to} (id: ${data?.id})`);
+  return data;
+}
+
+async function sendViaSmtp(message: EmailMessage) {
   if (!transporter) {
-    console.warn("[Mailer] SMTP not configured. Skipping email send.", message);
     throw new Error("SMTP is not configured (missing EMAIL_HOST/EMAIL_PORT/EMAIL_USER/EMAIL_PASS)");
   }
 
   try {
     const info = await transporter.sendMail({
-      from,
+      from: smtpFrom,
       to: message.to,
       subject: message.subject,
       text: message.text,
       html: message.html,
     });
-    console.log(`[Mailer] Email sent to ${message.to} (messageId: ${info.messageId})`);
+    console.log(`[Mailer/SMTP] Email sent to ${message.to} (messageId: ${info.messageId})`);
     return info;
   } catch (err: any) {
     // Surface a clearer message for the most common Gmail SMTP failure
     // modes so logs point straight at the fix instead of a generic error.
     if (err?.code === "EAUTH") {
       console.error(
-        "[Mailer] SMTP authentication failed. For Gmail, EMAIL_USER must be a full Gmail address and " +
+        "[Mailer/SMTP] Authentication failed. For Gmail, EMAIL_USER must be a full Gmail address and " +
           "EMAIL_PASS must be a 16-character App Password (not your regular Gmail password) generated " +
           "at https://myaccount.google.com/apppasswords — this requires 2-Step Verification to be enabled.",
         err.response || err.message,
       );
     } else if (err?.code === "ETIMEDOUT" || err?.code === "ESOCKET" || err?.code === "ECONNECTION") {
       console.error(
-        "[Mailer] Could not reach SMTP server. Check EMAIL_HOST/EMAIL_PORT and that outbound traffic on " +
-          "that port isn't blocked by the hosting provider.",
+        "[Mailer/SMTP] Could not reach SMTP server. Many hosts (e.g. Render's free tier) block outbound " +
+          "SMTP ports entirely — set RESEND_API_KEY to send over HTTPS instead, which is never blocked.",
         err.message,
       );
     } else {
-      console.error("[Mailer] Failed to send email:", err);
+      console.error("[Mailer/SMTP] Failed to send email:", err);
     }
     throw err;
   }
 }
 
 /**
- * Verifies the SMTP connection/credentials without sending an email.
- * Call this once at startup so misconfiguration shows up immediately in
- * the server logs instead of only surfacing when a real user hits
- * register/resend/forgot-password.
+ * Sends an email, preferring Resend (HTTP API, works on hosts that block
+ * outbound SMTP) when RESEND_API_KEY is set, and falling back to SMTP
+ * otherwise. Throws if the email could not be sent — callers decide how to
+ * handle/report that (see consumerAuth.ts).
+ */
+export async function sendEmail(message: EmailMessage) {
+  if (resend) {
+    return sendViaResend(message);
+  }
+  if (transporter) {
+    return sendViaSmtp(message);
+  }
+  console.warn("[Mailer] No email provider configured. Skipping email send.", message);
+  throw new Error("No email provider configured (set RESEND_API_KEY, or EMAIL_HOST/EMAIL_PORT/EMAIL_USER/EMAIL_PASS for SMTP)");
+}
+
+/**
+ * Checks that an email provider is configured and reachable, without
+ * sending a real email. Call this once at startup so misconfiguration
+ * shows up immediately in the server logs instead of only surfacing when a
+ * real user hits register/resend/forgot-password.
  */
 export async function verifyMailer() {
-  if (!transporter) {
-    console.warn(
-      "[Mailer] SMTP not configured — EMAIL_HOST, EMAIL_PORT, EMAIL_USER and EMAIL_PASS must all be set. " +
-        "Verification/reset emails will fail until this is fixed.",
-    );
-    return false;
+  if (resend) {
+    // Resend has no lightweight "ping" endpoint; listing domains is a cheap
+    // authenticated call that confirms the API key itself is valid.
+    try {
+      const { error } = await resend.domains.list();
+      if (error) {
+        console.error("[Mailer/Resend] API key check failed:", error);
+        return false;
+      }
+      console.log(
+        `[Mailer/Resend] API key verified. Sending from "${resendFrom}". ` +
+          (resendFromEmail === "onboarding@resend.dev"
+            ? "Using Resend's shared test address — verify your own domain at " +
+              "https://resend.com/domains and set RESEND_FROM_EMAIL to send to any recipient."
+            : "Ready to send emails."),
+      );
+      return true;
+    } catch (err: any) {
+      console.error("[Mailer/Resend] API key check failed:", err.message || err);
+      return false;
+    }
   }
 
-  try {
-    await transporter.verify();
-    console.log(`[Mailer] SMTP connection verified (${host}:${port}, user: ${user}). Ready to send emails.`);
-    return true;
-  } catch (err: any) {
-    if (err?.code === "EAUTH") {
-      console.error(
-        "[Mailer] SMTP verification failed: authentication rejected. For Gmail, make sure EMAIL_USER is the " +
-          "full Gmail address, EMAIL_PASS is a Google App Password (16 chars, no spaces needed), and that " +
-          "2-Step Verification is enabled on the account (App Passwords require it).",
-        err.response || err.message,
-      );
-    } else {
-      console.error("[Mailer] SMTP verification failed:", err.message || err);
+  if (transporter) {
+    try {
+      await transporter.verify();
+      console.log(`[Mailer/SMTP] Connection verified (${host}:${port}, user: ${user}). Ready to send emails.`);
+      return true;
+    } catch (err: any) {
+      if (err?.code === "EAUTH") {
+        console.error(
+          "[Mailer/SMTP] Verification failed: authentication rejected. For Gmail, make sure EMAIL_USER is " +
+            "the full Gmail address, EMAIL_PASS is a Google App Password, and 2-Step Verification is enabled.",
+          err.response || err.message,
+        );
+      } else {
+        console.error(
+          "[Mailer/SMTP] Verification failed:",
+          err.message || err,
+          "— many hosts block outbound SMTP; consider setting RESEND_API_KEY instead.",
+        );
+      }
+      return false;
     }
-    return false;
   }
+
+  console.warn(
+    "[Mailer] No email provider configured — set RESEND_API_KEY (recommended, works on Render) or " +
+      "EMAIL_HOST/EMAIL_PORT/EMAIL_USER/EMAIL_PASS for SMTP. Verification/reset emails will fail until fixed.",
+  );
+  return false;
 }
