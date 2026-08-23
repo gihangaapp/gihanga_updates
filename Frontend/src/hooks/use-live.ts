@@ -1,0 +1,208 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api, PostAuthor } from "@/lib/api-client";
+
+export interface LiveStreamData {
+  _id: string;
+  host: PostAuthor & { followersCount: number };
+  title: string;
+  subsOnly: boolean;
+  giftsEnabled: boolean;
+  viewerCount: number;
+  peakViewers: number;
+  totalGifts: number;
+  status: "pending" | "live" | "ended" | "force_ended";
+  startedAt?: string;
+  endedAt?: string;
+  endReason?: string;
+  createdAt: string;
+}
+
+export interface LiveChatEntry {
+  _id: string;
+  stream: string;
+  sender: PostAuthor;
+  body: string;
+  isGift: boolean;
+  giftAmount?: number;
+  pinned?: boolean;
+  createdAt: string;
+}
+
+export function useLiveStreams() {
+  return useQuery({
+    queryKey: ["live", "list"],
+    queryFn: () => api.get<{ streams: LiveStreamData[] }>("/live"),
+    refetchInterval: 15_000,
+  });
+}
+
+export function useLiveStream(id: string) {
+  return useQuery({
+    queryKey: ["live", "detail", id],
+    queryFn: () => api.get<{ stream: LiveStreamData }>(`/live/${id}`),
+    enabled: Boolean(id),
+    refetchInterval: 10_000,
+  });
+}
+
+export function useLiveChatHistory(id: string) {
+  return useQuery({
+    queryKey: ["live", "chat-history", id],
+    queryFn: () => api.get<{ messages: LiveChatEntry[]; pinned: LiveChatEntry | null }>(`/live/${id}/chat`),
+    enabled: Boolean(id),
+  });
+}
+
+export function useStartLive() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { title: string; description?: string | undefined; subsOnly?: boolean | undefined; giftsEnabled?: boolean | undefined }) =>
+      api.post<{ stream: LiveStreamData; livekitToken: string | null; livekitUrl: string }>("/live/start", input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["live"] }),
+  });
+}
+
+export function useEndLive() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.post<{ stream: LiveStreamData }>(`/live/${id}/end`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["live"] }),
+  });
+}
+
+export const GIFT_CATALOG = [
+  { id: "heart", label: "Heart", cost: 10, emoji: "\u2764\uFE0F" },
+  { id: "fire", label: "Fire", cost: 50, emoji: "\uD83D\uDD25" },
+  { id: "crown", label: "Crown", cost: 200, emoji: "\uD83D\uDC51" },
+  { id: "rocket", label: "Rocket", cost: 500, emoji: "\uD83D\uDE80" },
+] as const;
+
+export function useSendGift(streamId: string) {
+  return useMutation({
+    mutationFn: (giftId: (typeof GIFT_CATALOG)[number]["id"]) =>
+      api.post<{ sent: boolean; amount: number; remainingPoints: number }>(`/live/${streamId}/gift`, { giftId }),
+  });
+}
+
+export function useMyWallet() {
+  return useQuery({
+    queryKey: ["wallet", "me"],
+    queryFn: () =>
+      api.get<{ wallet: { available: number; pending: number; kingdomPoints: number; frozen: boolean } }>(
+        "/wallet/me",
+      ),
+  });
+}
+
+// ── LiveKit config/token ─────────────────────────────────────────────────────
+
+export function useLiveKitConfig() {
+  return useQuery({
+    queryKey: ["live", "config"],
+    queryFn: () => api.get<{ liveKitConfigured: boolean; liveKitUrl: string }>("/live/config"),
+    staleTime: Infinity,
+  });
+}
+
+export function useLiveKitToken(streamId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["live", "token", streamId],
+    queryFn: () => api.post<{ livekitToken: string; livekitUrl: string }>(`/live/${streamId}/token`),
+    enabled: enabled && Boolean(streamId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+}
+
+// ── Moderation, earnings, reporting ─────────────────────────────────────────
+
+export function useAddModerator(streamId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (username: string) => api.post(`/live/${streamId}/moderators`, { username }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["live", "detail", streamId] }),
+  });
+}
+
+export function useMuteViewer(streamId: string) {
+  return useMutation({
+    mutationFn: (userId: string) => api.post<{ muted: boolean }>(`/live/${streamId}/viewers/${userId}/mute`),
+  });
+}
+
+export function useBanViewer(streamId: string) {
+  return useMutation({
+    mutationFn: (userId: string) => api.post<{ banned: boolean }>(`/live/${streamId}/viewers/${userId}/ban`),
+  });
+}
+
+export function useLiveEarnings(streamId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["live", "earnings", streamId],
+    queryFn: () => api.get<{ totalPoints: number; giftCount: number }>(`/live/${streamId}/earnings`),
+    enabled,
+  });
+}
+
+export function useUpdateLiveSettings(streamId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { giftsEnabled?: boolean; subsOnly?: boolean }) =>
+      api.patch<{ stream: LiveStreamData }>(`/live/${streamId}/settings`, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["live", "detail", streamId] }),
+  });
+}
+
+export function useInviteFollowers(streamId: string) {
+  return useMutation({
+    mutationFn: () => api.post<{ invited: number }>(`/live/${streamId}/invite`),
+  });
+}
+
+export function useReportLive(streamId: string) {
+  return useMutation({
+    mutationFn: (input: { reason: string; excerpt?: string }) => api.post(`/live/${streamId}/report`, input),
+  });
+}
+
+// ── Staff (moderator) ────────────────────────────────────────────────────────
+
+export function useStaffLiveStreams() {
+  return useQuery({
+    queryKey: ["staff", "live", "list"],
+    queryFn: () => api.get<{ streams: LiveStreamData[] }>("/system/live", true),
+    refetchInterval: 15_000,
+    retry: 1,
+  });
+}
+
+export function useForceEndLive() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      api.post<{ stream: LiveStreamData }>(`/system/live/${id}/force-end`, { reason }, true),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff", "live"] }),
+  });
+}
+
+export function useLiveAlerts() {
+  return useQuery({
+    queryKey: ["staff", "live", "alerts"],
+    queryFn: () => api.get<{ alerts: any[] }>("/system/live/alerts", true),
+  });
+}
+
+export function useLiveKeywords() {
+  return useQuery({
+    queryKey: ["staff", "live", "keywords"],
+    queryFn: () => api.get<{ keywords: string[] }>("/system/live/keywords", true),
+  });
+}
+
+export function useSaveLiveKeywords() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (keywords: string[]) => api.put<{ keywords: string[] }>("/system/live/keywords", { keywords }, true),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff", "live", "keywords"] }),
+  });
+}

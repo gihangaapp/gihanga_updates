@@ -1,0 +1,24 @@
+networks:
+  gihanga_local: {}
+
+services:
+  # LiveKit's own local dev server — ships with fixed devkey/secret credentials
+  # baked in (see backend/.env), so no signup is needed for local/LAN testing.
+  # Docs: https://docs.livekit.io/home/self-hosting/local/
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --dev --bind 0.0.0.0
+    network_mode: host # host networking so it's reachable at <your-LAN-IP>:7880 from your phone
+    restart: unless-stopped
+
+  # Backs live-viewer presence and reaction counters (see backend/src/lib/redis.ts).
+  # Optional — the backend falls back to an in-memory store without this, but that
+  # doesn't survive a restart and won't work if you ever run more than one backend
+  # instance, so it's included here for anyone testing that side seriously.
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - gihanga_local
+    restart: unless-stopped
