@@ -60,7 +60,9 @@ function RegisterPage() {
   };
   const [errors, setErrors] = useState<FieldErrors>({});
 
-  const [availability, setAvailability] = useState<"idle" | "checking" | "invalid" | "taken" | "free">("idle");
+  const [availability, setAvailability] = useState<"idle" | "checking" | "invalid" | "taken" | "free" | "error">(
+    "idle"
+  );
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -80,7 +82,10 @@ function RegisterPage() {
           `/auth/check-username?username=${encodeURIComponent(clean)}`
         )
         .then((data) => setAvailability(data.status))
-        .catch(() => setAvailability("idle"));
+        // Network/server failure — distinct from "idle" so we don't silently
+        // block the user with a misleading "pick an available handle" message
+        // when their username was actually fine and the check just failed.
+        .catch(() => setAvailability("error"));
     }, 500);
     return () => window.clearTimeout(t);
   }, [username]);
@@ -93,7 +98,9 @@ function RegisterPage() {
       if (passwordScore(password) < 2) e.password = "Choose a stronger password.";
     }
     if (step === 2) {
-      if (availability !== "free") e.username = "Pick an available handle (3–20 letters, numbers or _).";
+      if (availability === "error")
+        e.username = "Couldn't check that handle — check your connection and try again.";
+      else if (availability !== "free") e.username = "Pick an available handle (3–20 letters, numbers or _).";
       if (!dob) e.dob = "Add your date of birth.";
       else if (new Date(dob) > new Date(Date.now() - 13 * 365.25 * 864e5))
         e.dob = "You must be at least 13 years old.";
@@ -232,6 +239,10 @@ function RegisterPage() {
                         </span>
                       ) : availability === "invalid" ? (
                         "3–20 characters: letters, numbers or underscores."
+                      ) : availability === "error" ? (
+                        <span className="flex items-center gap-1.5 text-danger">
+                          <X className="size-3" /> Couldn't check availability — retype to try again.
+                        </span>
                       ) : (
                         "This is how people will find and mention you."
                       )
