@@ -130,7 +130,10 @@ router.post("/register", async (req: Request, res: Response) => {
       kingdomPoints: 100,
     });
 
-    await sendVerificationEmail(user, verificationCode).catch((err) => {
+    // Fire-and-forget: don't make the client wait on Gmail's SMTP roundtrip
+    // before they can move to the "enter your code" screen. Errors are still
+    // logged; sendEmail's own timeouts (see mailer.ts) keep this from lingering.
+    sendVerificationEmail(user, verificationCode).catch((err) => {
       console.error("[Mailer] Verification email failed:", err);
     });
 
@@ -323,7 +326,7 @@ router.post("/resend-verification", authenticateConsumer, async (req: Authentica
     user.emailVerifyExpiry = new Date(Date.now() + 15 * 60 * 1000);
     await user.save();
 
-    await sendVerificationEmail(user, verificationCode).catch((err) => {
+    sendVerificationEmail(user, verificationCode).catch((err) => {
       console.error("[Mailer] Resend verification email failed:", err);
     });
 
@@ -348,7 +351,7 @@ router.post("/forgot-password", async (req: Request, res: Response) => {
       user.passwordResetToken = await bcrypt.hash(resetToken, 10);
       user.passwordResetExpiry = new Date(Date.now() + 30 * 60 * 1000);
       await user.save();
-      await sendPasswordResetEmail(user, resetToken).catch((err) => {
+      sendPasswordResetEmail(user, resetToken).catch((err) => {
         console.error("[Mailer] Password reset email failed:", err);
       });
     }
