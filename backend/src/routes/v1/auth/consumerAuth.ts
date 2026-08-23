@@ -130,12 +130,19 @@ router.post("/register", async (req: Request, res: Response) => {
       kingdomPoints: 100,
     });
 
-    // Fire-and-forget: don't make the client wait on Gmail's SMTP roundtrip
-    // before they can move to the "enter your code" screen. Errors are still
-    // logged; sendEmail's own timeouts (see mailer.ts) keep this from lingering.
-    sendVerificationEmail(user, verificationCode).catch((err) => {
+    // Await the send (mailer.ts has its own connect/greeting/socket timeouts
+    // so this can't hang indefinitely) so we know whether it actually went
+    // out before telling the client a code was sent. Registration itself
+    // still succeeds either way — the account exists and the user can use
+    // "resend code" — but the response now honestly reflects email status
+    // instead of always claiming success.
+    let emailSent = true;
+    try {
+      await sendVerificationEmail(user, verificationCode);
+    } catch (err) {
+      emailSent = false;
       console.error("[Mailer] Verification email failed:", err);
-    });
+    }
 
     const tokens = signConsumerTokens(user);
     const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
@@ -143,7 +150,10 @@ router.post("/register", async (req: Request, res: Response) => {
     await user.save();
 
     return res.status(201).json({
-      message: "Account created successfully",
+      message: emailSent
+        ? "Account created successfully"
+        : "Account created, but we couldn't send the verification email. Use \"Resend code\" to try again.",
+      emailSent,
       user: serializeUser(user),
       tokens,
     });
@@ -326,9 +336,14 @@ router.post("/resend-verification", authenticateConsumer, async (req: Authentica
     user.emailVerifyExpiry = new Date(Date.now() + 15 * 60 * 1000);
     await user.save();
 
-    sendVerificationEmail(user, verificationCode).catch((err) => {
+    try {
+      await sendVerificationEmail(user, verificationCode);
+    } catch (err) {
       console.error("[Mailer] Resend verification email failed:", err);
-    });
+      return res.status(502).json({
+        error: "Could not send the verification email. Please try again in a moment.",
+      });
+    }
 
     return res.json({ message: "Verification code resent" });
   } catch (error: any) {
@@ -351,9 +366,14 @@ router.post("/forgot-password", async (req: Request, res: Response) => {
       user.passwordResetToken = await bcrypt.hash(resetToken, 10);
       user.passwordResetExpiry = new Date(Date.now() + 30 * 60 * 1000);
       await user.save();
-      sendPasswordResetEmail(user, resetToken).catch((err) => {
+      // Awaited (not fire-and-forget) purely so failures are logged reliably;
+      // the response message stays generic either way to avoid leaking
+      // whether an account exists for this email.
+      try {
+        await sendPasswordResetEmail(user, resetToken);
+      } catch (err) {
         console.error("[Mailer] Password reset email failed:", err);
-      });
+      }
     }
 
     return res.json({ message: "If an account exists with that email, a password reset link has been sent." });

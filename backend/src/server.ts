@@ -8,11 +8,17 @@ import { connectDB } from "./config/db";
 import { verifyConsumerAccessToken, verifyStaffAccessToken } from "./lib/jwt";
 import { setIO } from "./lib/socket";
 import { attachLiveHandlers } from "./lib/liveSignaling";
+import { verifyMailer } from "./lib/mailer";
 
 const PORT = process.env.PORT || 4000;
 
 async function startServer() {
   await connectDB();
+
+  // Fire-and-forget: check SMTP creds at boot so a misconfiguration shows
+  // up immediately in the server logs instead of only when a real user
+  // tries to register/resend/reset. Does not block server startup.
+  verifyMailer().catch(() => {});
 
   const app = createApp();
   const server = http.createServer(app);

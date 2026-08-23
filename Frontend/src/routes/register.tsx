@@ -129,7 +129,13 @@ function RegisterPage() {
       .then((data) => {
         signInConsumer(data.tokens, data.user);
         setBusy(false);
-        toast.success("Account created", { description: "Check your email for a verification code." });
+        if (data.emailSent === false) {
+          toast.warning("Account created", {
+            description: "We couldn't send the verification email right now — use \"Resend code\" on the next screen.",
+          });
+        } else {
+          toast.success("Account created", { description: "Check your email for a verification code." });
+        }
         navigate({ to: "/verify" });
       })
       .catch((err: any) => {
