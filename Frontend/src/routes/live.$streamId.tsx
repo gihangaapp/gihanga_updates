@@ -294,12 +294,21 @@ function LiveRoomPage() {
     setReactionCount(stream?.reactionsCount ?? 0);
   }, [stream?.viewerCount, stream?.reactionsCount]);
 
+  // heartbeat.mutate is read through a ref rather than a direct effect
+  // dependency: mutate's identity isn't guaranteed stable across renders,
+  // and this component re-renders often (stream/chat polling). Depending on
+  // it directly re-ran this effect on unrelated re-renders, which fired the
+  // cleanup below and sent a real "live:end" — silently ending the host's
+  // broadcast (camera going off) even though they never left the page.
+  const heartbeatMutateRef = useRef(heartbeat.mutate);
+  heartbeatMutateRef.current = heartbeat.mutate;
+
   useEffect(() => {
     if (!isHost || isOver) return;
 
     const keepAlive = () => {
       getLiveSocket()?.emit("live:heartbeat", { streamId });
-      heartbeat.mutate(undefined, {
+      heartbeatMutateRef.current(undefined, {
         onError: (error: any) => {
           if (String(error?.message || "").toLowerCase().includes("ended")) {
             setEnded("This stream has ended");
@@ -315,7 +324,7 @@ function LiveRoomPage() {
       window.clearInterval(timer);
       if (document.visibilityState !== "hidden") stopBroadcast();
     };
-  }, [heartbeat.mutate, isHost, isOver, streamId]);
+  }, [isHost, isOver, streamId]);
 
   useEffect(() => {
     const socket = getLiveSocket();

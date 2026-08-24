@@ -54,7 +54,17 @@ function toDisplayUser(host: LiveStreamData["host"]) {
   };
 }
 
-function LiveVideoPreview({ stream, enabled, asStaff }: { stream: LiveStreamData; enabled: boolean; asStaff: boolean }) {
+function LiveVideoPreview({
+  stream,
+  enabled,
+  asStaff,
+  isOwnStream,
+}: {
+  stream: LiveStreamData;
+  enabled: boolean;
+  asStaff: boolean;
+  isOwnStream: boolean;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const { data: kitConfig } = useLiveKitConfig();
   const { data: tokenData, isLoading: tokenLoading, error: tokenError } = useLiveKitToken(
@@ -84,17 +94,19 @@ function LiveVideoPreview({ stream, enabled, asStaff }: { stream: LiveStreamData
   }, [enabled, stream._id, tokenData?.livekitToken]);
 
   const hasVideo = Boolean(remoteStream?.getVideoTracks().length);
-  const status = !enabled
-    ? "Sign in to watch this live video"
-    : !kitConfig?.liveKitConfigured
-      ? "Live video is not configured on the server"
-      : tokenError || roomError
-        ? `Live video unavailable: ${(tokenError as any)?.message || roomError || "connection failed"}`
-        : tokenLoading || !connected
-          ? "Connecting to the live camera…"
-          : !hasVideo
-            ? "Waiting for the host's video…"
-            : "";
+  const status = isOwnStream
+    ? "This is your live — open it to manage and preview your broadcast"
+    : !enabled
+      ? "Sign in to watch this live video"
+      : !kitConfig?.liveKitConfigured
+        ? "Live video is not configured on the server"
+        : tokenError || roomError
+          ? `Live video unavailable: ${(tokenError as any)?.message || roomError || "connection failed"}`
+          : tokenLoading || !connected
+            ? "Connecting to the live camera…"
+            : !hasVideo
+              ? "Waiting for the host's video…"
+              : "";
 
   return (
     <>
@@ -330,6 +342,7 @@ function LiveDiscoveryPage() {
                 stream={featured}
                 enabled={Boolean(activeIdentity) && !featuredIsOwnStream}
                 asStaff={asStaff}
+                isOwnStream={featuredIsOwnStream}
               />
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
               <div className="absolute top-3 left-3 flex items-center gap-2">
