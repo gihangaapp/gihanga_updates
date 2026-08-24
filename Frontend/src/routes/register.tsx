@@ -129,7 +129,15 @@ function RegisterPage() {
       .then((data) => {
         signInConsumer(data.tokens, data.user);
         setBusy(false);
-        if (data.emailSent === false) {
+        // Email verification is temporarily skipped on account creation (see
+        // backend consumerAuth.ts), so `data.user.emailVerified` is true
+        // right away — show a normal welcome toast instead of asking the
+        // user to check their email for a code. The /verify page still
+        // exists and will auto-redirect onward since the account is already
+        // verified, so no navigation changes are needed here.
+        if (data.user?.emailVerified) {
+          toast.success("Account created", { description: "Welcome to Gihanga Updates!" });
+        } else if (data.emailSent === false) {
           toast.warning("Account created", {
             description: "We couldn't send the verification email right now — use \"Resend code\" on the next screen.",
           });

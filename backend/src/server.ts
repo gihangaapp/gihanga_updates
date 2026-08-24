@@ -15,10 +15,11 @@ const PORT = process.env.PORT || 4000;
 async function startServer() {
   await connectDB();
 
-  // Fire-and-forget: check SMTP creds at boot so a misconfiguration shows
-  // up immediately in the server logs instead of only when a real user
-  // tries to register/resend/reset. Does not block server startup.
-  verifyMailer().catch(() => {});
+  // Mail sending is temporarily disabled across the app (see notes in
+  // consumerAuth.ts) since free-tier hosting is currently failing to send
+  // mail. Skipping this startup check avoids noisy "no email provider
+  // configured" warnings in the logs. To restore: uncomment the line below.
+  // verifyMailer().catch(() => {});
 
   const app = createApp();
   const server = http.createServer(app);

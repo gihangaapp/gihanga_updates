@@ -99,9 +99,17 @@ router.post("/register", async (req: Request, res: Response) => {
       : null;
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const verificationCode = generateVerificationCode();
-    const emailVerifyToken = await bcrypt.hash(verificationCode, 10);
-    const emailVerifyExpiry = new Date(Date.now() + 15 * 60 * 1000);
+    // ─── MAIL SENDING TEMPORARILY DISABLED ─────────────────────────────────
+    // Free-tier hosting (Render/InfinityFree) is currently failing to send
+    // verification emails, so email verification is skipped for now and
+    // accounts are created as already verified. To restore the original
+    // "verify by code" flow: uncomment the verificationCode/emailVerifyToken/
+    // emailVerifyExpiry lines below, set emailVerified/verified back to
+    // false, restore emailVerifyToken/emailVerifyExpiry in User.create, and
+    // uncomment the sendVerificationEmail block further down.
+    // const verificationCode = generateVerificationCode();
+    // const emailVerifyToken = await bcrypt.hash(verificationCode, 10);
+    // const emailVerifyExpiry = new Date(Date.now() + 15 * 60 * 1000);
 
     const user = await User.create({
       name: name.trim(),
@@ -112,10 +120,12 @@ router.post("/register", async (req: Request, res: Response) => {
       bio: bio ? bio.trim() : "",
       role: "user",
       isCreator: Boolean(isCreator),
-      emailVerified: false,
-      verified: false,
-      emailVerifyToken,
-      emailVerifyExpiry,
+      // Skipping email verification for now (see note above) — accounts are
+      // marked verified immediately so users can use the app right away.
+      emailVerified: true,
+      verified: true,
+      // emailVerifyToken,
+      // emailVerifyExpiry,
       interests: [],
       onboarded: false,
       referralCode: cleanUsername,
@@ -130,19 +140,17 @@ router.post("/register", async (req: Request, res: Response) => {
       kingdomPoints: 100,
     });
 
-    // Await the send (mailer.ts has its own connect/greeting/socket timeouts
-    // so this can't hang indefinitely) so we know whether it actually went
-    // out before telling the client a code was sent. Registration itself
-    // still succeeds either way — the account exists and the user can use
-    // "resend code" — but the response now honestly reflects email status
-    // instead of always claiming success.
+    // Mail sending is temporarily disabled (see note above) — skip sending
+    // the verification email and treat the account as already set up. To
+    // restore: uncomment the block below and remove the hardcoded
+    // `emailSent = true`.
     let emailSent = true;
-    try {
-      await sendVerificationEmail(user, verificationCode);
-    } catch (err) {
-      emailSent = false;
-      console.error("[Mailer] Verification email failed:", err);
-    }
+    // try {
+    //   await sendVerificationEmail(user, verificationCode);
+    // } catch (err) {
+    //   emailSent = false;
+    //   console.error("[Mailer] Verification email failed:", err);
+    // }
 
     const tokens = signConsumerTokens(user);
     const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
@@ -150,9 +158,7 @@ router.post("/register", async (req: Request, res: Response) => {
     await user.save();
 
     return res.status(201).json({
-      message: emailSent
-        ? "Account created successfully"
-        : "Account created, but we couldn't send the verification email. Use \"Resend code\" to try again.",
+      message: "Account created successfully",
       emailSent,
       user: serializeUser(user),
       tokens,
@@ -331,21 +337,33 @@ router.post("/resend-verification", authenticateConsumer, async (req: Authentica
       return res.status(400).json({ error: "Account is already verified" });
     }
 
-    const verificationCode = generateVerificationCode();
-    user.emailVerifyToken = await bcrypt.hash(verificationCode, 10);
-    user.emailVerifyExpiry = new Date(Date.now() + 15 * 60 * 1000);
+    // Mail sending is temporarily disabled (see note near /register above).
+    // Since accounts are now verified automatically at registration, this
+    // endpoint should rarely be hit, but it's kept working (as a no-op
+    // success) instead of erroring out for any pre-existing unverified
+    // accounts. To restore real sending: uncomment the block below.
+    // const verificationCode = generateVerificationCode();
+    // user.emailVerifyToken = await bcrypt.hash(verificationCode, 10);
+    // user.emailVerifyExpiry = new Date(Date.now() + 15 * 60 * 1000);
+    // await user.save();
+    //
+    // try {
+    //   await sendVerificationEmail(user, verificationCode);
+    // } catch (err) {
+    //   console.error("[Mailer] Resend verification email failed:", err);
+    //   return res.status(502).json({
+    //     error: "Could not send the verification email. Please try again in a moment.",
+    //   });
+    // }
+
+    // Auto-verify instead of sending a code, since mail sending is disabled.
+    user.emailVerified = true;
+    user.verified = true;
+    user.emailVerifyToken = undefined;
+    user.emailVerifyExpiry = undefined;
     await user.save();
 
-    try {
-      await sendVerificationEmail(user, verificationCode);
-    } catch (err) {
-      console.error("[Mailer] Resend verification email failed:", err);
-      return res.status(502).json({
-        error: "Could not send the verification email. Please try again in a moment.",
-      });
-    }
-
-    return res.json({ message: "Verification code resent" });
+    return res.json({ message: "Your account is already verified — you're all set." });
   } catch (error: any) {
     return res.status(500).json({ error: "Could not resend verification code", details: error.message });
   }
@@ -366,14 +384,16 @@ router.post("/forgot-password", async (req: Request, res: Response) => {
       user.passwordResetToken = await bcrypt.hash(resetToken, 10);
       user.passwordResetExpiry = new Date(Date.now() + 30 * 60 * 1000);
       await user.save();
-      // Awaited (not fire-and-forget) purely so failures are logged reliably;
-      // the response message stays generic either way to avoid leaking
-      // whether an account exists for this email.
-      try {
-        await sendPasswordResetEmail(user, resetToken);
-      } catch (err) {
-        console.error("[Mailer] Password reset email failed:", err);
-      }
+      // Mail sending is temporarily disabled (see note near /register
+      // above) — free-tier hosting is currently failing to send emails, so
+      // the reset email is skipped for now. The response message stays
+      // generic either way to avoid leaking whether an account exists for
+      // this email. To restore: uncomment the block below.
+      // try {
+      //   await sendPasswordResetEmail(user, resetToken);
+      // } catch (err) {
+      //   console.error("[Mailer] Password reset email failed:", err);
+      // }
     }
 
     return res.json({ message: "If an account exists with that email, a password reset link has been sent." });
