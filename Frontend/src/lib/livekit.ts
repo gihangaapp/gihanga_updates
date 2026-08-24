@@ -8,6 +8,7 @@ import {
   RemoteTrack,
   createLocalTracks,
   facingModeFromLocalTrack,
+  type VideoCaptureOptions,
 } from "livekit-client";
 
 interface UseLiveKitOptions {
@@ -97,11 +98,30 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
 
         if (publish) {
           let tracks;
-          let preferredVideo: { deviceId?: { exact: string }; facingMode?: string } = { facingMode: "user" };
+          let preferredVideo: VideoCaptureOptions = { facingMode: "user" };
           try {
             const savedPreference = JSON.parse(sessionStorage.getItem("gihanga_live_camera_preference") || "null");
-            if (savedPreference?.deviceId) preferredVideo = { deviceId: { exact: savedPreference.deviceId } };
-            else if (savedPreference?.facingMode) preferredVideo = { facingMode: savedPreference.facingMode };
+            // A saved deviceId can point at a camera that belonged to a
+            // different browser/machine (or was unplugged) — validate it's
+            // still present before pinning to it, otherwise
+            // { deviceId: { exact } } throws OverconstrainedError and we'd
+            // rely purely on the catch-fallback below to recover.
+            let savedDeviceStillPresent = false;
+            if (savedPreference?.deviceId && navigator.mediaDevices?.enumerateDevices) {
+              try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                savedDeviceStillPresent = devices.some(
+                  (d) => d.kind === "videoinput" && d.deviceId === savedPreference.deviceId,
+                );
+              } catch {
+                // Enumeration can fail before permission is granted; fall through safely.
+              }
+            }
+            if (savedPreference?.deviceId && savedDeviceStillPresent) {
+              preferredVideo = { deviceId: { exact: savedPreference.deviceId } };
+            } else if (savedPreference?.facingMode) {
+              preferredVideo = { facingMode: savedPreference.facingMode };
+            }
           } catch {
             // Ignore an unavailable or malformed browser session preference.
           }
@@ -137,7 +157,13 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
         if (cancelled) return;
         const message = err?.message || "Couldn't connect to the stream";
         setError(message);
-        if (!roomConnected && retryCountRef.current < 4) {
+        // Retry regardless of whether the room itself connected — a
+        // publish-step failure (camera busy, permission race, transient
+        // getUserMedia error) previously left the host silently connected
+        // as a subscriber with no outgoing video, since this guard only
+        // retried pre-connection failures. Cap retries either way so a hard
+        // permission denial doesn't loop forever.
+        if (retryCountRef.current < 4) {
           retryCountRef.current += 1;
           retryTimer = window.setTimeout(() => {
             if (!cancelled) setRetryTick((tick) => tick + 1);

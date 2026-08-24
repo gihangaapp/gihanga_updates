@@ -90,9 +90,11 @@ function LiveVideoPreview({ stream, enabled, asStaff }: { stream: LiveStreamData
       ? "Live video is not configured on the server"
       : tokenError || roomError
         ? `Live video unavailable: ${(tokenError as any)?.message || roomError || "connection failed"}`
-        : tokenLoading || !connected || !hasVideo
+        : tokenLoading || !connected
           ? "Connecting to the live camera…"
-          : "";
+          : !hasVideo
+            ? "Waiting for the host's video…"
+            : "";
 
   return (
     <>
