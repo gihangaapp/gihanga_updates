@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Room,
   RoomEvent,
+  DefaultReconnectPolicy,
   Track,
   LocalVideoTrack,
   RemoteTrack,
@@ -30,14 +31,28 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
   const [error, setError] = useState<string | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
+  const [retryTick, setRetryTick] = useState(0);
   const roomRef = useRef<Room | null>(null);
   const localTracksRef = useRef<Array<{ stop: () => void }>>([]);
+  const retryCountRef = useRef(0);
+  const connectionKeyRef = useRef("");
 
   useEffect(() => {
     if (!enabled || !url || !token) return;
     let cancelled = false;
+    const connectionKey = `${url}|${token}|${publish}`;
+    if (connectionKeyRef.current !== connectionKey) {
+      connectionKeyRef.current = connectionKey;
+      retryCountRef.current = 0;
+    }
+    let roomConnected = false;
+    let retryTimer: number | undefined;
     setError(null);
-    const r = new Room({ adaptiveStream: true, dynacast: true });
+    const r = new Room({
+      adaptiveStream: true,
+      dynacast: true,
+      reconnectPolicy: new DefaultReconnectPolicy([0, 1000, 3000, 10000, 30000]),
+    });
     roomRef.current = r;
 
     r.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
@@ -58,25 +73,42 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
         return next.getTracks().length > 0 ? next : null;
       });
     });
+    r.on(RoomEvent.Reconnecting, () => setConnected(false));
+    r.on(RoomEvent.Reconnected, () => {
+      setConnected(true);
+      setError(null);
+    });
     r.on(RoomEvent.Disconnected, () => {
       setConnected(false);
       setRemoteStream(null);
       setLocalStream(null);
     });
 
-    r.connect(url, token)
+    r.connect(url, token, {
+      maxRetries: 3,
+      websocketTimeout: 15_000,
+      peerConnectionTimeout: 20_000,
+    })
       .then(async () => {
         if (cancelled) return;
         setConnected(true);
         setRoom(r);
+        roomConnected = true;
 
         if (publish) {
           let tracks;
+          let preferredVideo: { deviceId?: { exact: string }; facingMode?: string } = { facingMode: "user" };
           try {
-            // Some desktop browsers reject facingMode even though a camera is
-            // available. Try the requested mobile-friendly constraint first,
-            // then fall back to the browser's default input device.
-            tracks = await createLocalTracks({ audio: true, video: { facingMode: "user" } });
+            const savedPreference = JSON.parse(sessionStorage.getItem("gihanga_live_camera_preference") || "null");
+            if (savedPreference?.deviceId) preferredVideo = { deviceId: { exact: savedPreference.deviceId } };
+            else if (savedPreference?.facingMode) preferredVideo = { facingMode: savedPreference.facingMode };
+          } catch {
+            // Ignore an unavailable or malformed browser session preference.
+          }
+          try {
+            // Try the creator's selected camera first, then fall back to a
+            // browser-friendly default if that device was disconnected.
+            tracks = await createLocalTracks({ audio: true, video: preferredVideo });
           } catch {
             try {
               tracks = await createLocalTracks({ audio: true, video: true });
@@ -101,10 +133,21 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
           setLocalStream(ms);
         }
       })
-      .catch((err) => setError(err?.message || "Couldn't connect to the stream"));
+      .catch((err) => {
+        if (cancelled) return;
+        const message = err?.message || "Couldn't connect to the stream";
+        setError(message);
+        if (!roomConnected && retryCountRef.current < 4) {
+          retryCountRef.current += 1;
+          retryTimer = window.setTimeout(() => {
+            if (!cancelled) setRetryTick((tick) => tick + 1);
+          }, 4000);
+        }
+      });
 
     return () => {
       cancelled = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
       r.disconnect();
       localTracksRef.current.forEach((track) => track.stop());
       localTracksRef.current = [];
@@ -116,7 +159,13 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
       setMicOn(true);
       setCamOn(true);
     };
-  }, [url, token, publish, enabled]);
+  }, [url, token, publish, enabled, retryTick]);
+
+  function retryConnection() {
+    retryCountRef.current = 0;
+    setError(null);
+    setRetryTick((tick) => tick + 1);
+  }
 
   function toggleMic() {
     const r = roomRef.current;
@@ -161,7 +210,19 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
     await track.restartTrack({ facingMode: current === "user" ? "environment" : "user" });
   }
 
-  return { room, connected, error, localStream, remoteStream, micOn, camOn, toggleMic, toggleCamera, switchCamera };
+  return {
+    room,
+    connected,
+    error,
+    localStream,
+    remoteStream,
+    micOn,
+    camOn,
+    retryConnection,
+    toggleMic,
+    toggleCamera,
+    switchCamera,
+  };
 }
 
 /**
@@ -242,5 +303,19 @@ export function useCameraPreview(enabled: boolean) {
     setFacing((f) => (f === "user" ? "environment" : "user"));
   }
 
-  return { stream, error, micOn, camOn, toggleMic, toggleCam, flipCamera };
+  const activeVideoTrack = stream?.getVideoTracks()[0];
+  const activeCameraDeviceId = activeVideoTrack?.getSettings().deviceId ?? cameraDeviceId;
+  const activeFacingMode = activeVideoTrack?.getSettings().facingMode ?? facing;
+
+  return {
+    stream,
+    error,
+    micOn,
+    camOn,
+    cameraDeviceId: activeCameraDeviceId,
+    facing: activeFacingMode,
+    toggleMic,
+    toggleCam,
+    flipCamera,
+  };
 }

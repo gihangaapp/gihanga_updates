@@ -16,7 +16,9 @@ import { clearLiveViewers } from "../../../lib/redis";
 
 const router = Router();
 const HOST_FIELDS = "name username avatarHue avatarUrl isCreator verified followersCount";
-const LIVE_HEARTBEAT_TIMEOUT_MS = 90_000;
+// Mobile browsers can suspend background timers for more than 90 seconds.
+// Keep enough grace for the host to resume while still cleaning abandoned lives.
+const LIVE_HEARTBEAT_TIMEOUT_MS = 5 * 60_000;
 
 async function clearHostLiveFlagIfNeeded(hostId: unknown) {
   const anotherLiveStream = await LiveStream.exists({ host: hostId, status: "live" });

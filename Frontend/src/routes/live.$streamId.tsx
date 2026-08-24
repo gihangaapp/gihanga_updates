@@ -240,7 +240,12 @@ function LiveRoomPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const stream = data?.stream as any;
-  const isHost = Boolean(activeIdentity && stream && stream.host.username === activeIdentity.username);
+  const isHost = Boolean(
+    activeIdentity &&
+      stream &&
+      (stream.host._id === activeIdentity.id ||
+        stream.host.username.trim().toLowerCase() === activeIdentity.username.trim().toLowerCase()),
+  );
   const isMod = Boolean(
     activeIdentity && stream?.moderators?.some((m: Author) => m.username === activeIdentity.username),
   );
@@ -254,8 +259,18 @@ function LiveRoomPage() {
     asStaff,
   );
 
-  const { localStream, remoteStream, connected, error: kitError, micOn, camOn, toggleMic, toggleCamera, switchCamera } =
-    useLiveKitRoom({
+  const {
+    localStream,
+    remoteStream,
+    connected,
+    error: kitError,
+    micOn,
+    camOn,
+    retryConnection,
+    toggleMic,
+    toggleCamera,
+    switchCamera,
+  } = useLiveKitRoom({
       url: tokenData?.livekitUrl ?? null,
       token: tokenData?.livekitToken ?? null,
       publish: isHost,
@@ -280,9 +295,10 @@ function LiveRoomPage() {
   }, [stream?.viewerCount, stream?.reactionsCount]);
 
   useEffect(() => {
-    if (!isHost || isOver || !connected || !localStream) return;
+    if (!isHost || isOver) return;
 
     const keepAlive = () => {
+      getLiveSocket()?.emit("live:heartbeat", { streamId });
       heartbeat.mutate(undefined, {
         onError: (error: any) => {
           if (String(error?.message || "").toLowerCase().includes("ended")) {
@@ -295,13 +311,11 @@ function LiveRoomPage() {
 
     keepAlive();
     const timer = window.setInterval(keepAlive, 20_000);
-    window.addEventListener("pagehide", stopBroadcast);
     return () => {
       window.clearInterval(timer);
-      window.removeEventListener("pagehide", stopBroadcast);
       if (document.visibilityState !== "hidden") stopBroadcast();
     };
-  }, [connected, heartbeat.mutate, isHost, isOver, localStream, streamId]);
+  }, [heartbeat.mutate, isHost, isOver, streamId]);
 
   useEffect(() => {
     const socket = getLiveSocket();
@@ -475,10 +489,13 @@ function LiveRoomPage() {
                 <Video className="size-8 animate-pulse" />
                 <p className="text-sm">Setting up video…</p>
               </div>
-            ) : kitError ? (
+              ) : kitError ? (
               <div className="flex size-full flex-col items-center justify-center gap-2 p-6 text-center text-white/70">
                 <VideoOff className="size-8 text-danger" />
                 <p className="text-sm">{kitError}</p>
+                <Button variant="outline" size="sm" className="mt-1 border-white/30 text-white" onClick={retryConnection}>
+                  Retry video connection
+                </Button>
               </div>
             ) : (
               <>

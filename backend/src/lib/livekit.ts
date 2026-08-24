@@ -1,14 +1,22 @@
 import { AccessToken } from "livekit-server-sdk";
 
-const LIVEKIT_URL_ENV = process.env.LIVEKIT_URL || "";
-const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY || "";
-const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET || "";
+const LIVEKIT_URL_ENV =
+  process.env.LIVEKIT_URL === undefined ? "wss://gihanga-updates-v9t64obx.livekit.cloud" : process.env.LIVEKIT_URL.trim();
+const LIVEKIT_API_KEY = (process.env.LIVEKIT_API_KEY || "").trim();
+const LIVEKIT_API_SECRET = (process.env.LIVEKIT_API_SECRET || "").trim();
 
-// Only the key/secret are strictly required — the URL can be derived
-// automatically per-request for local/self-hosted dev (see resolveLiveKitUrl
-// below), so a phone on the same network reaches the right host without any
-// manual .env editing every time the LAN IP changes.
-export const isLiveKitConfigured = Boolean(LIVEKIT_API_KEY && LIVEKIT_API_SECRET);
+// In production, a LiveKit URL is required because the Render service is not
+// itself a LiveKit media server. The project’s LiveKit Cloud endpoint is a safe
+// non-secret fallback, while LIVEKIT_URL can override it for another project.
+// Local development may still derive localhost or LAN URLs for a self-hosted
+// LiveKit dev server when the fallback is explicitly cleared.
+
+// The URL can be derived automatically per-request for local/self-hosted dev
+// (see resolveLiveKitUrl below), so a phone on the same network reaches the
+// right host without any manual .env editing every time the LAN IP changes.
+export const isLiveKitConfigured = Boolean(
+  LIVEKIT_API_KEY && LIVEKIT_API_SECRET && (LIVEKIT_URL_ENV || process.env.NODE_ENV !== "production"),
+);
 
 /**
  * Works out which LiveKit server URL to hand back to a client.
@@ -19,7 +27,14 @@ export const isLiveKitConfigured = Boolean(LIVEKIT_API_KEY && LIVEKIT_API_SECRET
  *    This is what makes "open on my phone via the LAN IP" work with zero config.
  */
 export function resolveLiveKitUrl(requestHostname: string, secure = false): string {
-  if (LIVEKIT_URL_ENV) return LIVEKIT_URL_ENV;
+  if (LIVEKIT_URL_ENV) {
+    const normalized = LIVEKIT_URL_ENV.replace(/\/+$/, "");
+    if (/^https?:\/\//i.test(normalized)) {
+      return normalized.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:");
+    }
+    if (/^wss?:\/\//i.test(normalized)) return normalized;
+    return `${secure ? "wss" : "ws"}://${normalized}`;
+  }
   return `${secure ? "wss" : "ws"}://${requestHostname}:7880`;
 }
 
@@ -34,7 +49,7 @@ export function resolveLiveKitUrl(requestHostname: string, secure = false): stri
 export async function mintLiveKitToken(roomName: string, identity: string, name: string, canPublish: boolean) {
   if (!isLiveKitConfigured) {
     throw new Error(
-      "LiveKit is not configured on this server — set LIVEKIT_API_KEY and LIVEKIT_API_SECRET in .env (the local dev defaults of devkey/secret work with `livekit-server --dev`)",
+      "LiveKit is not configured on this server — set LIVEKIT_URL, LIVEKIT_API_KEY, and LIVEKIT_API_SECRET (the local dev defaults of devkey/secret work with `livekit-server --dev`)",
     );
   }
 

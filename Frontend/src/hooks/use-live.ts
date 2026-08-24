@@ -124,7 +124,12 @@ export function useLiveKitToken(streamId: string, enabled: boolean, asStaff = fa
     queryFn: () => api.post<{ livekitToken: string; livekitUrl: string }>(`/live/${streamId}/token`, undefined, asStaff),
     enabled: enabled && Boolean(streamId),
     staleTime: 5 * 60_000,
-    retry: false,
+    retry: (failureCount, error: any) => {
+      if (failureCount >= 3) return false;
+      const message = String(error?.message || "").toLowerCase();
+      return !/(ended|banned|followers only|not found|forbidden|unauthorized)/.test(message);
+    },
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
   });
 }
 

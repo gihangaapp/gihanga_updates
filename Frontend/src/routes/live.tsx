@@ -87,9 +87,9 @@ function LiveVideoPreview({ stream, enabled, asStaff }: { stream: LiveStreamData
   const status = !enabled
     ? "Sign in to watch this live video"
     : !kitConfig?.liveKitConfigured
-      ? "Live video is not configured"
+      ? "Live video is not configured on the server"
       : tokenError || roomError
-        ? "Live video is temporarily unavailable"
+        ? `Live video unavailable: ${(tokenError as any)?.message || roomError || "connection failed"}`
         : tokenLoading || !connected || !hasVideo
           ? "Connecting to the live camera…"
           : "";
@@ -117,7 +117,8 @@ function GoLiveDialog({ open, onOpenChange, asStaff }: { open: boolean; onOpenCh
   const [subsOnly, setSubsOnly] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  const { stream, error, micOn, camOn, toggleMic, toggleCam, flipCamera } = useCameraPreview(step === "preview");
+  const { stream, error, micOn, camOn, cameraDeviceId, facing, toggleMic, toggleCam, flipCamera } =
+    useCameraPreview(step === "preview");
 
   useEffect(() => {
     if (videoRef.current && stream) videoRef.current.srcObject = stream;
@@ -139,6 +140,15 @@ function GoLiveDialog({ open, onOpenChange, asStaff }: { open: boolean; onOpenCh
   }
 
   function goLive() {
+    try {
+      const videoTrack = stream?.getVideoTracks()[0];
+      sessionStorage.setItem(
+        "gihanga_live_camera_preference",
+        JSON.stringify({ deviceId: cameraDeviceId, facingMode: videoTrack?.getSettings().facingMode ?? facing }),
+      );
+    } catch {
+      // Camera preference persistence is best-effort only.
+    }
     startLive.mutate(
       { title: title.trim(), description: description.trim() || undefined, subsOnly, giftsEnabled: true },
       {
@@ -259,6 +269,7 @@ function LiveDiscoveryPage() {
   );
   const featured = visible[0];
   const rest = visible.slice(1);
+  const featuredIsOwnStream = Boolean(featured && activeOwnStream?._id === featured._id);
 
   return (
     <AppShell>
@@ -313,7 +324,11 @@ function LiveDiscoveryPage() {
             className="surface-card group block cursor-pointer overflow-hidden p-0"
           >
             <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden bg-black">
-              <LiveVideoPreview stream={featured} enabled={Boolean(activeIdentity)} asStaff={asStaff} />
+              <LiveVideoPreview
+                stream={featured}
+                enabled={Boolean(activeIdentity) && !featuredIsOwnStream}
+                asStaff={asStaff}
+              />
               <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
               <div className="absolute top-3 left-3 flex items-center gap-2">
                 <span className="flex items-center gap-1.5 rounded-lg bg-danger px-2.5 py-1 text-xs font-bold text-white animate-pulse">

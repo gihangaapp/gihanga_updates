@@ -20,6 +20,15 @@ function canModerate(stream: any, userId: string) {
  * to LiveKit directly for that, per the architecture.
  */
 export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: string) {
+  // ── Host heartbeat: keep a valid broadcast lease alive even if a REST request drops ──
+  socket.on("live:heartbeat", async ({ streamId }: { streamId: string }) => {
+    if (!userId) return;
+    await LiveStream.findOneAndUpdate(
+      { _id: streamId, host: userId, status: "live" },
+      { lastHeartbeatAt: new Date() },
+    );
+  });
+
   // ── Viewer joins: Redis-backed presence count, notify the room ──
   socket.on("live:join", async ({ streamId }: { streamId: string }) => {
     if (!userId) return;
