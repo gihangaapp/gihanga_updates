@@ -33,7 +33,7 @@ export function useLiveStreams() {
   return useQuery({
     queryKey: ["live", "list"],
     queryFn: () => api.get<{ streams: LiveStreamData[] }>("/live"),
-    refetchInterval: 15_000,
+    refetchInterval: 5_000,
   });
 }
 

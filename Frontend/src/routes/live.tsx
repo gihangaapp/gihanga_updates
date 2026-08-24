@@ -9,9 +9,16 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
-import { useCameraPreview } from "@/lib/livekit";
+import { useCameraPreview, useLiveKitRoom } from "@/lib/livekit";
 import { formatCount } from "@/lib/format";
-import { useLiveStreams, useStartLive, type LiveStreamData } from "@/hooks/use-live";
+import {
+  useLiveKitConfig,
+  useLiveKitToken,
+  useLiveStreams,
+  useStartLive,
+  type LiveStreamData,
+} from "@/hooks/use-live";
+import { getLiveSocket } from "@/lib/socket-client";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/live")({
@@ -45,6 +52,60 @@ function toDisplayUser(host: LiveStreamData["host"]) {
     following: 0,
     posts: 0,
   };
+}
+
+function LiveVideoPreview({ stream, enabled, asStaff }: { stream: LiveStreamData; enabled: boolean; asStaff: boolean }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const { data: kitConfig } = useLiveKitConfig();
+  const { data: tokenData, isLoading: tokenLoading, error: tokenError } = useLiveKitToken(
+    stream._id,
+    enabled && (kitConfig?.liveKitConfigured ?? false),
+    asStaff,
+  );
+  const { remoteStream, connected, error: roomError } = useLiveKitRoom({
+    url: tokenData?.livekitUrl ?? null,
+    token: tokenData?.livekitToken ?? null,
+    publish: false,
+    enabled: Boolean(tokenData?.livekitToken),
+  });
+
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.srcObject = remoteStream ?? null;
+  }, [remoteStream]);
+
+  useEffect(() => {
+    if (!enabled || !tokenData?.livekitToken) return;
+    const socket = getLiveSocket();
+    if (!socket) return;
+    socket.emit("live:join", { streamId: stream._id });
+    return () => {
+      socket.emit("live:leave", { streamId: stream._id });
+    };
+  }, [enabled, stream._id, tokenData?.livekitToken]);
+
+  const hasVideo = Boolean(remoteStream?.getVideoTracks().length);
+  const status = !enabled
+    ? "Sign in to watch this live video"
+    : !kitConfig?.liveKitConfigured
+      ? "Live video is not configured"
+      : tokenError || roomError
+        ? "Live video is temporarily unavailable"
+        : tokenLoading || !connected || !hasVideo
+          ? "Connecting to the live camera…"
+          : "";
+
+  return (
+    <>
+      {hasVideo ? (
+        <video ref={videoRef} autoPlay muted playsInline className="size-full object-contain" />
+      ) : (
+        <div className="flex size-full flex-col items-center justify-center gap-3 text-white/80">
+          <GAvatar user={toDisplayUser(stream.host)} size="xl" />
+          <p className="text-xs font-semibold">{status}</p>
+        </div>
+      )}
+    </>
+  );
 }
 
 function GoLiveDialog({ open, onOpenChange, asStaff }: { open: boolean; onOpenChange: (v: boolean) => void; asStaff: boolean }) {
@@ -252,8 +313,8 @@ function LiveDiscoveryPage() {
             className="surface-card group block cursor-pointer overflow-hidden p-0"
           >
             <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden bg-black">
-              <GAvatar user={toDisplayUser(featured.host)} size="xl" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+              <LiveVideoPreview stream={featured} enabled={Boolean(activeIdentity)} asStaff={asStaff} />
+              <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
               <div className="absolute top-3 left-3 flex items-center gap-2">
                 <span className="flex items-center gap-1.5 rounded-lg bg-danger px-2.5 py-1 text-xs font-bold text-white animate-pulse">
                   <Radio className="size-3" /> LIVE

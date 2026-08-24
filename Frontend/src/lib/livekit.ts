@@ -43,13 +43,26 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
     r.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
       if (track.kind === Track.Kind.Video || track.kind === Track.Kind.Audio) {
         setRemoteStream((prev) => {
-          const ms = prev ?? new MediaStream();
-          ms.addTrack(track.mediaStreamTrack);
-          return ms;
+          const next = new MediaStream(prev?.getTracks() ?? []);
+          if (!next.getTracks().some((item) => item.id === track.mediaStreamTrack.id)) {
+            next.addTrack(track.mediaStreamTrack);
+          }
+          return next;
         });
       }
     });
-    r.on(RoomEvent.Disconnected, () => setConnected(false));
+    r.on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
+      setRemoteStream((prev) => {
+        if (!prev) return null;
+        const next = new MediaStream(prev.getTracks().filter((item) => item.id !== track.mediaStreamTrack.id));
+        return next.getTracks().length > 0 ? next : null;
+      });
+    });
+    r.on(RoomEvent.Disconnected, () => {
+      setConnected(false);
+      setRemoteStream(null);
+      setLocalStream(null);
+    });
 
     r.connect(url, token)
       .then(async () => {
@@ -78,6 +91,8 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
             return;
           }
           localTracksRef.current = tracks;
+          setMicOn(tracks.some((track) => track.kind === Track.Kind.Audio));
+          setCamOn(tracks.some((track) => track.kind === Track.Kind.Video));
           const ms = new MediaStream();
           for (const t of tracks) {
             await r.localParticipant.publishTrack(t);
@@ -98,6 +113,8 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
       setConnected(false);
       setRemoteStream(null);
       setLocalStream(null);
+      setMicOn(true);
+      setCamOn(true);
     };
   }, [url, token, publish, enabled]);
 
