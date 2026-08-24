@@ -38,12 +38,6 @@ services:
         value: 7d
       - key: CLOUDINARY_URL
         sync: false
-      - key: LIVEKIT_URL
-        value: wss://gihanga-updates-v9t64obx.livekit.cloud
-      - key: LIVEKIT_API_KEY
-        sync: false
-      - key: LIVEKIT_API_SECRET
-        sync: false
       - key: REDIS_URL
         sync: false
       - key: EMAIL_HOST

@@ -35,7 +35,12 @@ async function startServer() {
 
   const io = new SocketIOServer(server, {
     cors: {
-      origin: socketAllowedOrigins.length > 0 ? socketAllowedOrigins : "*",
+      origin: (origin, callback) => {
+        if (!origin || socketAllowedOrigins.includes(origin)) return callback(null, true);
+        const localDevOrigin = /^(https?):\/\/(localhost|127(?:\.\d{1,3}){3}|10(?:\.\d{1,3}){3}|192\.168(?:\.\d{1,3}){2}|172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2})(?::\d+)?$/i.test(origin);
+        if (localDevOrigin) return callback(null, true);
+        return callback(new Error(`Origin ${origin} is not allowed by Socket.IO CORS`));
+      },
       methods: ["GET", "POST"],
     },
   });
