@@ -31,10 +31,12 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const roomRef = useRef<Room | null>(null);
+  const localTracksRef = useRef<Array<{ stop: () => void }>>([]);
 
   useEffect(() => {
     if (!enabled || !url || !token) return;
     let cancelled = false;
+    setError(null);
     const r = new Room({ adaptiveStream: true, dynacast: true });
     roomRef.current = r;
 
@@ -56,11 +58,26 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
         setRoom(r);
 
         if (publish) {
-          const tracks = await createLocalTracks({ audio: true, video: { facingMode: "user" } });
+          let tracks;
+          try {
+            // Some desktop browsers reject facingMode even though a camera is
+            // available. Try the requested mobile-friendly constraint first,
+            // then fall back to the browser's default input device.
+            tracks = await createLocalTracks({ audio: true, video: { facingMode: "user" } });
+          } catch {
+            try {
+              tracks = await createLocalTracks({ audio: true, video: true });
+            } catch {
+              // Keep camera-only broadcasts usable when microphone permission
+              // is denied or the device has no microphone.
+              tracks = await createLocalTracks({ audio: false, video: true });
+            }
+          }
           if (cancelled) {
             tracks.forEach((t) => t.stop());
             return;
           }
+          localTracksRef.current = tracks;
           const ms = new MediaStream();
           for (const t of tracks) {
             await r.localParticipant.publishTrack(t);
@@ -74,6 +91,8 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
     return () => {
       cancelled = true;
       r.disconnect();
+      localTracksRef.current.forEach((track) => track.stop());
+      localTracksRef.current = [];
       roomRef.current = null;
       setRoom(null);
       setConnected(false);
@@ -104,6 +123,23 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
     const pub = Array.from(r.localParticipant.videoTrackPublications.values())[0];
     const track = pub?.track as LocalVideoTrack | undefined;
     if (!track) return;
+
+    try {
+      const cameras = (await navigator.mediaDevices?.enumerateDevices?.() ?? []).filter(
+        (device) => device.kind === "videoinput" && device.deviceId,
+      );
+      const currentDeviceId = track.mediaStreamTrack.getSettings().deviceId;
+      const currentIndex = cameras.findIndex((device) => device.deviceId === currentDeviceId);
+      const nextDevice = cameras[(currentIndex + 1) % cameras.length];
+      if (nextDevice?.deviceId && cameras.length > 1) {
+        await track.restartTrack({ deviceId: nextDevice.deviceId });
+        return;
+      }
+    } catch {
+      // Fall through to facing-mode switching for browsers that do not expose
+      // device enumeration or reject a device-specific restart.
+    }
+
     const current = facingModeFromLocalTrack(track).facingMode;
     await track.restartTrack({ facingMode: current === "user" ? "environment" : "user" });
   }
@@ -122,28 +158,50 @@ export function useCameraPreview(enabled: boolean) {
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [facing, setFacing] = useState<"user" | "environment">("user");
+  const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([]);
+  const [cameraDeviceId, setCameraDeviceId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
     let current: MediaStream | null = null;
+    setError(null);
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("Camera access is unavailable here. Open the site on HTTPS or localhost and allow camera permissions.");
+      return;
+    }
+
+    const video = cameraDeviceId ? { deviceId: { exact: cameraDeviceId } } : { facingMode: facing };
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: facing }, audio: true })
-      .then((s) => {
+      .getUserMedia({ video, audio: true })
+      .catch(() => navigator.mediaDevices.getUserMedia({ video: true, audio: true }))
+      .catch(() => navigator.mediaDevices.getUserMedia({ video: true, audio: false }))
+      .then(async (s) => {
         if (cancelled) {
           s.getTracks().forEach((t) => t.stop());
           return;
         }
         current = s;
+        setMicOn(s.getAudioTracks().length > 0);
+        setCamOn(s.getVideoTracks().length > 0);
         setStream(s);
+        try {
+          const devices = (await navigator.mediaDevices.enumerateDevices()).filter(
+            (device) => device.kind === "videoinput" && device.deviceId,
+          );
+          if (!cancelled) setCameraDevices(devices);
+        } catch {
+          // Device enumeration is optional; the active default camera still works.
+        }
       })
-      .catch(() => setError("Couldn't access your camera/microphone. Check browser permissions."));
+      .catch(() => setError("Couldn't access your camera/microphone. Check browser permissions and try again."));
 
     return () => {
       cancelled = true;
       current?.getTracks().forEach((t) => t.stop());
     };
-  }, [enabled, facing]);
+  }, [enabled, facing, cameraDeviceId]);
 
   function toggleMic() {
     stream?.getAudioTracks().forEach((t) => (t.enabled = !micOn));
@@ -154,6 +212,16 @@ export function useCameraPreview(enabled: boolean) {
     setCamOn((v) => !v);
   }
   function flipCamera() {
+    if (cameraDevices.length > 1) {
+      const activeDeviceId = stream?.getVideoTracks()[0]?.getSettings().deviceId ?? cameraDeviceId;
+      const currentIndex = cameraDevices.findIndex((device) => device.deviceId === activeDeviceId);
+      const next = cameraDevices[(currentIndex + 1) % cameraDevices.length];
+      if (next?.deviceId) {
+        setCameraDeviceId(next.deviceId);
+        return;
+      }
+    }
+    setCameraDeviceId(null);
     setFacing((f) => (f === "user" ? "environment" : "user"));
   }
 

@@ -7,6 +7,7 @@ import { authenticateStaff, requirePermission, AuthenticatedRequest } from "../.
 import { getIO } from "../../../../lib/socket";
 import { broadcastForceEnd } from "../../../../lib/liveSignaling";
 import { notify } from "../../../../lib/notify";
+import { clearLiveViewers } from "../../../../lib/redis";
 
 const router = Router();
 const HOST_FIELDS = "name username avatarHue avatarUrl isCreator verified";
@@ -32,7 +33,9 @@ router.post("/:id/force-end", authenticateStaff, requirePermission("live.forceEn
     stream.endedAt = new Date();
     stream.endedBy = req.staffUser!.userId as any;
     stream.endReason = reason?.trim() || "Ended by moderator";
+    stream.viewerCount = 0;
     await stream.save();
+    await clearLiveViewers(String(stream._id));
     await User.findByIdAndUpdate(stream.host, { isLive: false });
 
     const io = getIO();

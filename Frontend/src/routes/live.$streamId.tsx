@@ -42,6 +42,7 @@ import {
   useLiveStream,
   useLiveChatHistory,
   useEndLive,
+  useLiveHeartbeat,
   useSendGift,
   useMyWallet,
   useLiveKitConfig,
@@ -214,6 +215,7 @@ function LiveRoomPage() {
   const activeIdentity = user ?? staffUser;
   const asStaff = !user && Boolean(staffUser);
   const endLive = useEndLive(asStaff);
+  const heartbeat = useLiveHeartbeat(streamId, asStaff);
   const sendGift = useSendGift(streamId);
   const { data: walletData } = useMyWallet();
   const { data: kitConfig } = useLiveKitConfig();
@@ -228,6 +230,7 @@ function LiveRoomPage() {
   const [pinned, setPinned] = useState<LiveChatEntry | null>(null);
   const [draft, setDraft] = useState("");
   const [viewerCount, setViewerCount] = useState(0);
+  const [reactionCount, setReactionCount] = useState(0);
   const [ended, setEnded] = useState<string | null>(null);
   const [giftPickerOpen, setGiftPickerOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -273,7 +276,32 @@ function LiveRoomPage() {
   }, [chatHistory]);
   useEffect(() => {
     setViewerCount(stream?.viewerCount ?? 0);
-  }, [stream?.viewerCount]);
+    setReactionCount(stream?.reactionsCount ?? 0);
+  }, [stream?.viewerCount, stream?.reactionsCount]);
+
+  useEffect(() => {
+    if (!isHost || isOver || !connected || !localStream) return;
+
+    const keepAlive = () => {
+      heartbeat.mutate(undefined, {
+        onError: (error: any) => {
+          if (String(error?.message || "").toLowerCase().includes("ended")) {
+            setEnded("This stream has ended");
+          }
+        },
+      });
+    };
+    const stopBroadcast = () => getLiveSocket()?.emit("live:end", { streamId });
+
+    keepAlive();
+    const timer = window.setInterval(keepAlive, 20_000);
+    window.addEventListener("pagehide", stopBroadcast);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("pagehide", stopBroadcast);
+      if (document.visibilityState !== "hidden") stopBroadcast();
+    };
+  }, [connected, heartbeat.mutate, isHost, isOver, localStream, streamId]);
 
   useEffect(() => {
     const socket = getLiveSocket();
@@ -291,7 +319,11 @@ function LiveRoomPage() {
       if (p.streamId !== streamId) return;
       setEnded(p.forced ? `Ended by a moderator: ${p.reason}` : p.reason || "Stream ended");
     };
-    const onReaction = () => setHeartBurst((n) => n + 1);
+    const onReaction = (p: { streamId: string; total?: number }) => {
+      if (p.streamId !== streamId) return;
+      setReactionCount((current) => (p.total == null ? current + 1 : Math.max(current, p.total)));
+      setHeartBurst((n) => n + 1);
+    };
     const onPinned = (p: { streamId: string; message: LiveChatEntry }) => {
       if (p.streamId === streamId) setPinned(p.message);
     };
@@ -354,7 +386,9 @@ function LiveRoomPage() {
   }
 
   function sendReaction() {
+    if (isOver) return;
     getLiveSocket()?.emit("live:react", { streamId, kind: "heart" });
+    setReactionCount((n) => n + 1);
     setHeartBurst((n) => n + 1);
   }
 
@@ -364,6 +398,7 @@ function LiveRoomPage() {
         toast.success("Stream ended");
         navigate({ to: "/live" });
       },
+      onError: (error: any) => toast.error(error.message || "Couldn't end the stream"),
     });
   }
 
@@ -479,6 +514,9 @@ function LiveRoomPage() {
                 <span className="flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1 text-xs font-bold text-white">
                   <Users className="size-3" /> {formatCount(viewerCount)}
                 </span>
+                <span className="flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1 text-xs font-bold text-white">
+                  <Heart className="size-3 fill-danger text-danger" /> {formatCount(reactionCount)}
+                </span>
                 {stream.totalGifts > 0 && (
                   <span className="flex items-center gap-1 rounded-lg bg-amber-500/90 px-2.5 py-1 text-xs font-bold text-black">
                     <Gift className="size-3" /> {formatCount(stream.totalGifts)} pts
@@ -499,7 +537,7 @@ function LiveRoomPage() {
                   <SwitchCamera className="size-4" />
                 </Button>
                 <Button variant="destructive" size="sm" onClick={handleEnd} disabled={endLive.isPending}>
-                  <X className="size-4" /> End
+                  <X className="size-4" /> {endLive.isPending ? "Ending…" : "End stream"}
                 </Button>
               </div>
             )}

@@ -131,20 +131,22 @@ function RegisterPage() {
         setBusy(false);
         // Email verification is temporarily skipped on account creation (see
         // backend consumerAuth.ts), so `data.user.emailVerified` is true
-        // right away — show a normal welcome toast instead of asking the
-        // user to check their email for a code. The /verify page still
-        // exists and will auto-redirect onward since the account is already
-        // verified, so no navigation changes are needed here.
+        // right away. Navigate straight into the app instead of routing
+        // through /verify — going there first (even though it auto-redirects
+        // once mounted) causes a visible flash of the verify-code screen
+        // before bouncing onward, which we don't want users to see.
         if (data.user?.emailVerified) {
           toast.success("Account created", { description: "Welcome to Gihanga Updates!" });
+          navigate({ to: data.user.onboarded ? "/" : "/interests" });
         } else if (data.emailSent === false) {
           toast.warning("Account created", {
             description: "We couldn't send the verification email right now — use \"Resend code\" on the next screen.",
           });
+          navigate({ to: "/verify" });
         } else {
           toast.success("Account created", { description: "Check your email for a verification code." });
+          navigate({ to: "/verify" });
         }
-        navigate({ to: "/verify" });
       })
       .catch((err: any) => {
         setBusy(false);

@@ -178,6 +178,7 @@ function GoLiveDialog({ open, onOpenChange, asStaff }: { open: boolean; onOpenCh
 
 function LiveDiscoveryPage() {
   const { user, staffUser } = useAuth();
+  const navigate = useNavigate();
   // A moderator/admin/superadmin can go live too — even with only their
   // staff session open, no consumer login needed.
   const canGoLive = Boolean(user?.isCreator || staffUser);
@@ -187,6 +188,8 @@ function LiveDiscoveryPage() {
   const { data, isLoading } = useLiveStreams();
 
   const streams = data?.streams ?? [];
+  const activeIdentity = user ?? staffUser;
+  const activeOwnStream = streams.find((candidate) => candidate.host.username === activeIdentity?.username);
   const visible = streams.filter(
     (s) =>
       !searchQuery ||
@@ -205,8 +208,15 @@ function LiveDiscoveryPage() {
             <p className="mt-0.5 text-sm text-muted-foreground">What's happening right now on Gihanga Updates</p>
           </div>
           {canGoLive && (
-            <Button variant="brand" onClick={() => setGoLiveOpen(true)}>
-              <Radio className="size-4" /> Go Live
+            <Button
+              variant="brand"
+              onClick={() =>
+                activeOwnStream
+                  ? navigate({ to: "/live/$streamId", params: { streamId: activeOwnStream._id } })
+                  : setGoLiveOpen(true)
+              }
+            >
+              <Radio className="size-4" /> {activeOwnStream ? "Manage live" : "Go Live"}
             </Button>
           )}
         </header>
@@ -218,8 +228,16 @@ function LiveDiscoveryPage() {
             <Radio className="size-8 text-muted-foreground" />
             <p className="font-bold text-muted-foreground">No one is live right now</p>
             {canGoLive ? (
-              <Button variant="brand" size="sm" onClick={() => setGoLiveOpen(true)}>
-                Be the first to go live
+              <Button
+                variant="brand"
+                size="sm"
+                onClick={() =>
+                  activeOwnStream
+                    ? navigate({ to: "/live/$streamId", params: { streamId: activeOwnStream._id } })
+                    : setGoLiveOpen(true)
+                }
+              >
+                {activeOwnStream ? "Manage your live stream" : "Be the first to go live"}
               </Button>
             ) : (
               <p className="text-sm text-muted-foreground">Check back soon, or follow creators to get notified.</p>
@@ -332,8 +350,16 @@ function LiveDiscoveryPage() {
               <p className="font-bold">Ready to go live?</p>
               <p className="text-sm text-muted-foreground">Share your moment with your followers in real time.</p>
             </div>
-            <Button variant="brand" size="sm" onClick={() => setGoLiveOpen(true)}>
-              <Radio className="size-4" /> Go Live
+            <Button
+              variant="brand"
+              size="sm"
+              onClick={() =>
+                activeOwnStream
+                  ? navigate({ to: "/live/$streamId", params: { streamId: activeOwnStream._id } })
+                  : setGoLiveOpen(true)
+              }
+            >
+              <Radio className="size-4" /> {activeOwnStream ? "Manage live" : "Go Live"}
             </Button>
           </div>
         )}

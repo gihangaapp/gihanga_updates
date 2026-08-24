@@ -12,13 +12,56 @@ import { applyLedgerEntry } from "../../../lib/wallet";
 import { notify } from "../../../lib/notify";
 import { mintLiveKitToken, resolveLiveKitUrl, isLiveKitConfigured } from "../../../lib/livekit";
 import { notifyStaff } from "../../../lib/staffNotify";
+import { clearLiveViewers } from "../../../lib/redis";
 
 const router = Router();
 const HOST_FIELDS = "name username avatarHue avatarUrl isCreator verified followersCount";
+const LIVE_HEARTBEAT_TIMEOUT_MS = 90_000;
+
+async function clearHostLiveFlagIfNeeded(hostId: unknown) {
+  const anotherLiveStream = await LiveStream.exists({ host: hostId, status: "live" });
+  if (!anotherLiveStream) await User.findByIdAndUpdate(hostId, { isLive: false });
+}
+
+/**
+ * A browser can disappear without sending a final request (tab close, phone
+ * sleep, lost network, or a server restart). Reconcile those records before
+ * exposing the live list or allowing a new broadcast.
+ */
+async function reconcileStaleLiveStreams() {
+  const cutoff = new Date(Date.now() - LIVE_HEARTBEAT_TIMEOUT_MS);
+  const stale = await LiveStream.find({
+    status: "live",
+    $or: [
+      { lastHeartbeatAt: { $lt: cutoff } },
+      { lastHeartbeatAt: { $exists: false }, startedAt: { $lt: cutoff } },
+    ],
+  });
+
+  for (const stream of stale) {
+    const ended = await LiveStream.findOneAndUpdate(
+      { _id: stream._id, status: "live" },
+      {
+        status: "ended",
+        endedAt: new Date(),
+        endReason: "Broadcast disconnected",
+        viewerCount: 0,
+      },
+      { new: true },
+    );
+    if (!ended) continue;
+    await clearHostLiveFlagIfNeeded(ended.host);
+    getIO()?.to(`live:${ended._id}`).emit("live:ended", {
+      streamId: String(ended._id),
+      reason: "Broadcast disconnected",
+    });
+  }
+}
 
 // GET /api/v1/live/config — tells the client whether LiveKit is wired up yet
 router.get("/config", (req, res: Response) => {
-  return res.json({ liveKitConfigured: isLiveKitConfigured, liveKitUrl: resolveLiveKitUrl(req.hostname) });
+  const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
+  return res.json({ liveKitConfigured: isLiveKitConfigured, liveKitUrl: resolveLiveKitUrl(req.hostname, secure) });
 });
 
 // PATCH /api/v1/live/:id/settings — host adjusts gifts/subsOnly while live
@@ -41,6 +84,7 @@ router.patch("/:id/settings", authenticateConsumerOrStaff, async (req: Authentic
 // POST /api/v1/live/start — a creator, moderator, admin, or superadmin goes live
 router.post("/start", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
+    await reconcileStaleLiveStreams();
     const user = await User.findById(req.user!.userId);
     if (!user) return res.status(404).json({ error: "Account not found" });
     if (!user.isCreator && user.role === "user") {
@@ -63,6 +107,7 @@ router.post("/start", authenticateConsumerOrStaff, async (req: AuthenticatedRequ
       giftsEnabled: giftsEnabled !== false,
       status: "live",
       startedAt: new Date(),
+      lastHeartbeatAt: new Date(),
     });
 
     await user.updateOne({ isLive: true });
@@ -86,17 +131,36 @@ router.post("/start", authenticateConsumerOrStaff, async (req: AuthenticatedRequ
       ? await mintLiveKitToken(roomName, String(user._id), user.name, true)
       : null;
 
-    return res.status(201).json({ stream: populated, livekitToken, livekitUrl: resolveLiveKitUrl(req.hostname) });
+    const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
+    return res.status(201).json({ stream: populated, livekitToken, livekitUrl: resolveLiveKitUrl(req.hostname, secure) });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to start live stream", details: error.message });
+  }
+});
+
+// POST /api/v1/live/:id/heartbeat — host proves that the browser is still broadcasting
+router.post("/:id/heartbeat", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const stream = await LiveStream.findOne({ _id: req.params.id, host: req.user!.userId });
+    if (!stream) return res.status(404).json({ error: "Stream not found" });
+    if (stream.status !== "live") return res.status(409).json({ error: "Stream has ended" });
+
+    stream.lastHeartbeatAt = new Date();
+    await stream.save();
+    await User.findByIdAndUpdate(req.user!.userId, { isLive: true });
+    return res.json({ ok: true, lastHeartbeatAt: stream.lastHeartbeatAt });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to update stream heartbeat", details: error.message });
   }
 });
 
 // POST /api/v1/live/:id/token — a viewer (or the returning host, including staff hosts) requests a LiveKit room token
 router.post("/:id/token", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
+    await reconcileStaleLiveStreams();
     const stream = await LiveStream.findById(req.params.id);
     if (!stream) return res.status(404).json({ error: "Stream not found" });
+    if (stream.status !== "live") return res.status(410).json({ error: "Stream has ended" });
     if (stream.bannedUsers.some((b) => String(b) === req.user!.userId)) {
       return res.status(403).json({ error: "You've been banned from this stream" });
     }
@@ -109,7 +173,8 @@ router.post("/:id/token", authenticateConsumerOrStaff, async (req: Authenticated
     const user = await User.findById(req.user!.userId).select("name username");
     const canPublish = String(stream.host) === req.user!.userId;
     const token = await mintLiveKitToken(String(stream._id), req.user!.userId, user?.name || "Viewer", canPublish);
-    return res.json({ livekitToken: token, livekitUrl: resolveLiveKitUrl(req.hostname) });
+    const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
+    return res.json({ livekitToken: token, livekitUrl: resolveLiveKitUrl(req.hostname, secure) });
   } catch (error: any) {
     return res.status(400).json({ error: error.message || "Failed to issue stream token" });
   }
@@ -146,13 +211,17 @@ router.post("/:id/end", authenticateConsumerOrStaff, async (req: AuthenticatedRe
   try {
     const stream = await LiveStream.findOne({ _id: req.params.id, host: req.user!.userId });
     if (!stream) return res.status(404).json({ error: "Stream not found" });
-    if (stream.status === "live") {
+    const wasLive = stream.status === "live";
+    if (wasLive) {
       stream.status = "ended";
       stream.endedAt = new Date();
+      stream.endReason = "Host ended the stream";
+      stream.viewerCount = 0;
       await stream.save();
+      await clearLiveViewers(String(stream._id));
+      getIO()?.to(`live:${stream._id}`).emit("live:ended", { streamId: String(stream._id), reason: "Host ended the stream" });
     }
-    await User.findByIdAndUpdate(req.user!.userId, { isLive: false });
-    getIO()?.to(`live:${stream._id}`).emit("live:ended", { streamId: String(stream._id), reason: "Host ended the stream" });
+    await clearHostLiveFlagIfNeeded(req.user!.userId);
     return res.json({ stream });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to end stream", details: error.message });
@@ -162,6 +231,7 @@ router.post("/:id/end", authenticateConsumerOrStaff, async (req: AuthenticatedRe
 // GET /api/v1/live — currently live streams
 router.get("/", optionalAuth, async (_req: AuthenticatedRequest, res: Response) => {
   try {
+    await reconcileStaleLiveStreams();
     const streams = await LiveStream.find({ status: "live" }).sort({ viewerCount: -1 }).populate("host", HOST_FIELDS);
     return res.json({ streams });
   } catch (error: any) {
@@ -172,6 +242,7 @@ router.get("/", optionalAuth, async (_req: AuthenticatedRequest, res: Response) 
 // GET /api/v1/live/:id — a single stream's detail (live or ended — stats persist after ending)
 router.get("/:id", optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
+    await reconcileStaleLiveStreams();
     const stream = await LiveStream.findById(req.params.id)
       .populate("host", HOST_FIELDS)
       .populate("moderators", "name username avatarHue avatarUrl");

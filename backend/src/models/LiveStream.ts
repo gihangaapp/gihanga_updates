@@ -17,6 +17,7 @@ export interface ILiveStream extends Document {
   bannedUsers: Types.ObjectId[];
   status: LiveStreamStatus;
   startedAt?: Date;
+  lastHeartbeatAt?: Date;
   endedAt?: Date;
   endedBy?: Types.ObjectId;
   endReason?: string;
@@ -45,6 +46,7 @@ const LiveStreamSchema = new Schema<ILiveStream>(
       default: "pending",
     },
     startedAt: { type: Date },
+    lastHeartbeatAt: { type: Date },
     endedAt: { type: Date },
     endedBy: { type: Schema.Types.ObjectId, ref: "User" },
     endReason: { type: String },

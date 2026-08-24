@@ -10,6 +10,7 @@ export interface LiveStreamData {
   viewerCount: number;
   peakViewers: number;
   totalGifts: number;
+  reactionsCount: number;
   status: "pending" | "live" | "ended" | "force_ended";
   startedAt?: string;
   endedAt?: string;
@@ -73,6 +74,13 @@ export function useEndLive(asStaff = false) {
   return useMutation({
     mutationFn: (id: string) => api.post<{ stream: LiveStreamData }>(`/live/${id}/end`, undefined, asStaff),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["live"] }),
+  });
+}
+
+export function useLiveHeartbeat(streamId: string, asStaff = false) {
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ ok: boolean; lastHeartbeatAt: string }>(`/live/${streamId}/heartbeat`, undefined, asStaff),
   });
 }
 

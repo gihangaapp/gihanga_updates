@@ -18,9 +18,9 @@ export const isLiveKitConfigured = Boolean(LIVEKIT_API_KEY && LIVEKIT_API_SECRET
  *    reach US (localhost, a LAN IP, etc.) on LiveKit's default dev port 7880.
  *    This is what makes "open on my phone via the LAN IP" work with zero config.
  */
-export function resolveLiveKitUrl(requestHostname: string): string {
+export function resolveLiveKitUrl(requestHostname: string, secure = false): string {
   if (LIVEKIT_URL_ENV) return LIVEKIT_URL_ENV;
-  return `ws://${requestHostname}:7880`;
+  return `${secure ? "wss" : "ws"}://${requestHostname}:7880`;
 }
 
 /**

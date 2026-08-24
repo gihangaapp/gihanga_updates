@@ -2,7 +2,7 @@ import { Socket, Server as SocketIOServer } from "socket.io";
 import { LiveStream, LiveChatMessage } from "../models/LiveStream";
 import { ModerationRule } from "../models/ModerationRule";
 import { User } from "../models/User";
-import { addLiveViewer, removeLiveViewer, incrLiveReactions } from "./redis";
+import { addLiveViewer, removeLiveViewer, clearLiveViewers, incrLiveReactions } from "./redis";
 
 async function getFlaggedKeywords(): Promise<string[]> {
   const rule = await ModerationRule.findOne({ key: "live_chat_keywords" });
@@ -24,7 +24,7 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
   socket.on("live:join", async ({ streamId }: { streamId: string }) => {
     if (!userId) return;
     const stream = await LiveStream.findById(streamId);
-    if (!stream) return;
+    if (!stream || stream.status !== "live") return;
     if (stream.bannedUsers.some((b) => String(b) === userId)) {
       socket.emit("live:banned", { streamId });
       return;
@@ -42,8 +42,11 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
   socket.on("live:leave", async ({ streamId }: { streamId: string }) => {
     socket.leave(`live:${streamId}`);
     const count = await removeLiveViewer(streamId, socket.id);
-    await LiveStream.findByIdAndUpdate(streamId, { viewerCount: count });
-    io.to(`live:${streamId}`).emit("live:viewer-count", { streamId, viewerCount: count });
+    const liveStream = await LiveStream.findOneAndUpdate(
+      { _id: streamId, status: "live" },
+      { viewerCount: count },
+    );
+    if (liveStream) io.to(`live:${streamId}`).emit("live:viewer-count", { streamId, viewerCount: count });
   });
 
   // ── Live chat — blocked for muted/banned users, checked against the keyword list ──
@@ -84,10 +87,13 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
     }
   });
 
-  // ── Reactions — high-frequency, counted in Redis, not persisted per-tap ──
+  // ── Reactions — counted in Redis for the current room and persisted in DB ──
   socket.on("live:react", async ({ streamId, kind }: { streamId: string; kind?: string }) => {
     if (!userId) return;
+    const stream = await LiveStream.findOne({ _id: streamId, status: "live" });
+    if (!stream) return;
     const total = await incrLiveReactions(streamId, 1);
+    await LiveStream.findByIdAndUpdate(streamId, { $inc: { reactionsCount: 1 } });
     io.to(`live:${streamId}`).emit("live:reaction", { streamId, kind: kind || "heart", total, from: userId });
   });
 
@@ -135,17 +141,31 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
     if (!userId) return;
     const stream = await LiveStream.findOne({ _id: streamId, host: userId });
     if (!stream) return;
-    stream.status = "ended";
-    stream.endedAt = new Date();
-    await stream.save();
-    io.to(`live:${streamId}`).emit("live:ended", { streamId, reason: "Host ended the stream" });
+    const wasLive = stream.status === "live";
+    if (wasLive) {
+      stream.status = "ended";
+      stream.endedAt = new Date();
+      stream.endReason = "Host ended the stream";
+      stream.viewerCount = 0;
+      await stream.save();
+      await clearLiveViewers(streamId);
+      io.to(`live:${streamId}`).emit("live:ended", { streamId, reason: "Host ended the stream" });
+      io.to(`live:${streamId}`).emit("live:viewer-count", { streamId, viewerCount: 0 });
+    }
+    const anotherLiveStream = await LiveStream.exists({ host: userId, status: "live" });
+    if (!anotherLiveStream) await User.findByIdAndUpdate(userId, { isLive: false });
   });
 
   socket.on("disconnect", async () => {
     const streamId = socket.data?.streamId as string | undefined;
     if (streamId) {
       const count = await removeLiveViewer(streamId, socket.id);
-      io.to(`live:${streamId}`).emit("live:viewer-count", { streamId, viewerCount: count });
+      socket.data.streamId = undefined;
+      const liveStream = await LiveStream.findOneAndUpdate(
+        { _id: streamId, status: "live" },
+        { viewerCount: count },
+      );
+      if (liveStream) io.to(`live:${streamId}`).emit("live:viewer-count", { streamId, viewerCount: count });
     }
   });
 }
