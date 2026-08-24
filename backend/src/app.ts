@@ -38,6 +38,11 @@ import studioRoutes from "./routes/v1/studio/studio";
 export function createApp(): Express {
   const app = express();
 
+  // Render terminates TLS and forwards requests through one trusted proxy.
+  // Trusting that hop lets express-rate-limit safely use X-Forwarded-For
+  // instead of treating every request as coming from the proxy itself.
+  app.set("trust proxy", 1);
+
   // Security & Headers
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 
