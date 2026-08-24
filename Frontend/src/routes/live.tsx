@@ -64,25 +64,23 @@ function LiveVideoPreview({
   isOwnStream: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const { remoteStream, connected, error: roomError } = useBrowserLiveRoom({
+  const { localStream, remoteStream, connected, error: roomError } = useBrowserLiveRoom({
     streamId: stream._id,
-    publish: false,
+    publish: isOwnStream,
     enabled,
   });
+  const previewStream = isOwnStream ? localStream : remoteStream;
 
-  // Callback ref (not just the effect below) so srcObject is applied the
-  // instant the <video> node mounts — it only renders once hasVideo flips
-  // true, and relying solely on an effect risked a freshly mounted node
-  // never receiving the already-available stream. See the matching fix in
-  // live.$streamId.tsx for the full explanation.
+  // Attach the current stream as soon as the preview video mounts.
   const setVideoRef = (node: HTMLVideoElement | null) => {
     videoRef.current = node;
-    if (node) node.srcObject = remoteStream ?? null;
+    if (node) node.srcObject = previewStream ?? null;
   };
 
   useEffect(() => {
-    if (videoRef.current) videoRef.current.srcObject = remoteStream ?? null;
-  }, [remoteStream]);
+    if (videoRef.current) videoRef.current.srcObject = previewStream ?? null;
+    if (previewStream) void videoRef.current?.play().catch(() => {});
+  }, [previewStream]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -94,7 +92,7 @@ function LiveVideoPreview({
     };
   }, [enabled, stream._id]);
 
-  const hasVideo = Boolean(remoteStream?.getVideoTracks().length);
+  const hasVideo = Boolean(previewStream?.getVideoTracks().length);
   const status = isOwnStream
     ? "This is your live — open it to manage and preview your broadcast"
     : !enabled
@@ -348,7 +346,7 @@ function LiveDiscoveryPage() {
             <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden bg-black">
               <LiveVideoPreview
                 stream={featured}
-                enabled={Boolean(activeIdentity) && !featuredIsOwnStream}
+                enabled={Boolean(activeIdentity)}
                 asStaff={asStaff}
                 isOwnStream={featuredIsOwnStream}
               />
