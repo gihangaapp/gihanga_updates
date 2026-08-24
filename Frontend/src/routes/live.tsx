@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
-import { useCameraPreview, useLiveKitRoom, attachStreamToVideo } from "@/lib/livekit";
+import { useCameraPreview, useLiveKitRoom } from "@/lib/livekit";
 import { formatCount } from "@/lib/format";
 import {
   useLiveKitConfig,
@@ -86,13 +86,20 @@ function LiveVideoPreview({
   // live.$streamId.tsx for the full explanation.
   const setVideoRef = (node: HTMLVideoElement | null) => {
     videoRef.current = node;
-    attachStreamToVideo(node, remoteStream ?? null, { muted: true });
+    if (node) node.srcObject = remoteStream ?? null;
   };
 
   useEffect(() => {
-    attachStreamToVideo(videoRef.current, remoteStream ?? null, { muted: true });
+    const video = videoRef.current;
+    if (!video) return;
+    video.srcObject = remoteStream ?? null;
+    if (remoteStream) void video.play().catch(() => {
+      // The preview is intentionally muted, so retrying after attachment is
+      // safe and avoids a black frame when autoplay races track subscription.
+      video.muted = true;
+      void video.play().catch(() => {});
+    });
   }, [remoteStream]);
-
 
   useEffect(() => {
     if (!enabled || !tokenData?.livekitToken) return;
@@ -151,11 +158,17 @@ function GoLiveDialog({ open, onOpenChange, asStaff }: { open: boolean; onOpenCh
   // LiveKit video elements above.
   const setVideoRef = (node: HTMLVideoElement | null) => {
     videoRef.current = node;
-    if (node && stream) attachStreamToVideo(node, stream, { muted: true });
+    if (node && stream) node.srcObject = stream;
   };
 
   useEffect(() => {
-    if (videoRef.current && stream) attachStreamToVideo(videoRef.current, stream, { muted: true });
+    const video = videoRef.current;
+    if (!video || !stream) return;
+    video.srcObject = stream;
+    void video.play().catch(() => {
+      video.muted = true;
+      void video.play().catch(() => {});
+    });
   }, [stream]);
 
   function reset() {

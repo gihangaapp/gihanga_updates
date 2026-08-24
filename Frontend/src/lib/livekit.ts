@@ -20,54 +20,6 @@ interface UseLiveKitOptions {
 }
 
 /**
- * Attaches a MediaStream to a <video> element and actually starts playback.
- *
- * The `autoPlay` attribute alone is not enough: Chrome/Safari block autoplay
- * of a stream that carries *unmuted* audio, the play() promise rejects, no
- * frames are ever decoded and the viewer just sees a black rectangle even
- * though media is flowing. So we always start muted, kick off play()
- * ourselves, and only then restore the requested audio state — falling back
- * to muted playback if the browser still refuses.
- */
-export function attachStreamToVideo(
-  video: HTMLVideoElement | null,
-  stream: MediaStream | null,
-  options: { muted?: boolean } = {},
-) {
-  if (!video) return;
-  if (video.srcObject !== stream) video.srcObject = stream;
-  if (!stream) return;
-  video.playsInline = true;
-  video.autoplay = true;
-  const wantMuted = options.muted ?? false;
-  // Start muted so autoplay is always permitted, then unmute if allowed.
-  video.muted = true;
-  const start = video.play();
-  const finish = () => {
-    if (!wantMuted) {
-      video.muted = false;
-      const retry = video.play();
-      if (retry && typeof retry.catch === "function") {
-        retry.catch(() => {
-          // Browser refused unmuted playback — keep the picture and let the
-          // user unmute with a gesture instead of showing a black screen.
-          video.muted = true;
-          void video.play().catch(() => undefined);
-        });
-      }
-    }
-  };
-  if (start && typeof start.then === "function") {
-    start.then(finish).catch(() => {
-      video.muted = true;
-      void video.play().catch(() => undefined);
-    });
-  } else {
-    finish();
-  }
-}
-
-/**
  * Thin wrapper around the LiveKit client SDK. The browser connects directly
  * to the LiveKit media server (SFU) over WebRTC — none of this rides our
  * Express/Socket.IO server, which only ever issued the join token.
@@ -98,13 +50,7 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
     let retryTimer: number | undefined;
     setError(null);
     const r = new Room({
-      // adaptiveStream MUST stay off here: it decides whether a remote video
-      // track is visible by inspecting the elements the SDK itself attached
-      // via track.attach(). We render media by assigning a MediaStream to our
-      // own <video srcObject>, so the SDK sees zero attached elements, treats
-      // the track as invisible and pauses it — the viewer gets audio and a
-      // permanently black picture.
-      adaptiveStream: false,
+      adaptiveStream: true,
       dynacast: true,
       reconnectPolicy: new DefaultReconnectPolicy([0, 1000, 3000, 10000, 30000]),
     });
@@ -132,17 +78,7 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
     r.on(RoomEvent.Reconnected, () => {
       setConnected(true);
       setError(null);
-      syncLocalStream();
     });
-    // The host's own preview must always mirror the tracks LiveKit is really
-    // publishing. Toggling the camera or flipping to the front/back lens
-    // replaces the underlying MediaStreamTrack, so a preview built once at
-    // publish time ends up holding a stopped track — a black self-view while
-    // viewers still see video. Re-derive it from the live publications.
-    r.on(RoomEvent.LocalTrackPublished, () => syncLocalStream());
-    r.on(RoomEvent.LocalTrackUnpublished, () => syncLocalStream());
-    r.on(RoomEvent.TrackMuted, () => syncLocalStream());
-    r.on(RoomEvent.TrackUnmuted, () => syncLocalStream());
     r.on(RoomEvent.Disconnected, () => {
       setConnected(false);
       setRemoteStream(null);
@@ -209,10 +145,12 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
           localTracksRef.current = tracks;
           setMicOn(tracks.some((track) => track.kind === Track.Kind.Audio));
           setCamOn(tracks.some((track) => track.kind === Track.Kind.Video));
+          const ms = new MediaStream();
           for (const t of tracks) {
             await r.localParticipant.publishTrack(t);
+            ms.addTrack(t.mediaStreamTrack);
           }
-          syncLocalStream();
+          setLocalStream(ms);
         }
       })
       .catch((err) => {
@@ -255,51 +193,20 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
     setRetryTick((tick) => tick + 1);
   }
 
-  /**
-   * Rebuilds the host's self-preview MediaStream from whatever the local
-   * participant is publishing right now (function declaration so the connect
-   * effect above can call it — declarations hoist).
-   */
-  function syncLocalStream() {
-    const r = roomRef.current;
-    if (!r) {
-      setLocalStream(null);
-      return;
-    }
-    const ms = new MediaStream();
-    r.localParticipant.trackPublications.forEach((pub) => {
-      const mediaTrack = pub.track?.mediaStreamTrack;
-      if (mediaTrack && mediaTrack.readyState === "live") ms.addTrack(mediaTrack);
-    });
-    setLocalStream(ms.getTracks().length > 0 ? ms : null);
-  }
-
-  async function toggleMic() {
+  function toggleMic() {
     const r = roomRef.current;
     if (!r) return;
     const next = !micOn;
+    r.localParticipant.setMicrophoneEnabled(next);
     setMicOn(next);
-    try {
-      await r.localParticipant.setMicrophoneEnabled(next);
-    } catch {
-      setMicOn(!next);
-    }
-    syncLocalStream();
   }
 
-  async function toggleCamera() {
+  function toggleCamera() {
     const r = roomRef.current;
     if (!r) return;
     const next = !camOn;
+    r.localParticipant.setCameraEnabled(next);
     setCamOn(next);
-    try {
-      await r.localParticipant.setCameraEnabled(next);
-    } catch {
-      setCamOn(!next);
-    }
-    // Re-enabling the camera creates a brand new track: without this the
-    // preview would keep pointing at the stopped one and stay black.
-    syncLocalStream();
   }
 
   async function switchCamera() {
@@ -318,7 +225,6 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
       const nextDevice = cameras[(currentIndex + 1) % cameras.length];
       if (nextDevice?.deviceId && cameras.length > 1) {
         await track.restartTrack({ deviceId: nextDevice.deviceId });
-        syncLocalStream();
         return;
       }
     } catch {
@@ -328,7 +234,6 @@ export function useLiveKitRoom({ url, token, publish, enabled }: UseLiveKitOptio
 
     const current = facingModeFromLocalTrack(track).facingMode;
     await track.restartTrack({ facingMode: current === "user" ? "environment" : "user" });
-    syncLocalStream();
   }
 
   return {

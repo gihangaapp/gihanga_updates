@@ -59,7 +59,7 @@ import {
 } from "@/hooks/use-live";
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { useToggleBlock, useBlockedSet } from "@/hooks/use-blocks";
-import { useLiveKitRoom, attachStreamToVideo } from "@/lib/livekit";
+import { useLiveKitRoom } from "@/lib/livekit";
 import { getLiveSocket } from "@/lib/socket-client";
 import { cn } from "@/lib/utils";
 
@@ -204,7 +204,7 @@ function AddModeratorDialog({ streamId, asStaff, open, onOpenChange }: { streamI
 
 function LiveRoomPage() {
   const { streamId } = Route.useParams();
-  const { user, staffUser, loading: authLoading } = useAuth();
+  const { user, staffUser } = useAuth();
   const navigate = useNavigate();
   const { data, isLoading } = useLiveStream(streamId);
   const { data: chatHistory } = useLiveChatHistory(streamId);
@@ -236,9 +236,6 @@ function LiveRoomPage() {
   const [reportOpen, setReportOpen] = useState(false);
   const [addModOpen, setAddModOpen] = useState(false);
   const [heartBurst, setHeartBurst] = useState(0);
-  // Viewers start muted (browsers block unmuted autoplay outright) and unmute
-  // with a tap on the overlay button below.
-  const [viewerUnmuted, setViewerUnmuted] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -252,6 +249,7 @@ function LiveRoomPage() {
   const isMod = Boolean(
     activeIdentity && stream?.moderators?.some((m: Author) => m.username === activeIdentity.username),
   );
+  const [videoMuted, setVideoMuted] = useState(!isHost);
   const canModerate = isHost || isMod;
   const isOver = stream ? stream.status !== "live" || Boolean(ended) : false;
 
@@ -277,12 +275,7 @@ function LiveRoomPage() {
       url: tokenData?.livekitUrl ?? null,
       token: tokenData?.livekitToken ?? null,
       publish: isHost,
-      // Wait until the session is resolved before joining. While auth is
-      // still loading isHost is false, so the host used to join as a
-      // subscriber first and then reconnect with the same identity the moment
-      // isHost flipped — LiveKit rejects that duplicate identity, leaving the
-      // creator connected with no published camera and a black screen.
-      enabled: Boolean(tokenData?.livekitToken) && !isOver && !authLoading,
+      enabled: Boolean(tokenData?.livekitToken) && !isOver,
     });
   const updateSettings = useUpdateLiveSettings(streamId, asStaff);
   const inviteFollowers = useInviteFollowers(streamId, asStaff);
@@ -300,17 +293,37 @@ function LiveRoomPage() {
   // stream the instant the node mounts, independent of effect timing, on
   // top of (not instead of) the effect below which keeps it in sync as the
   // stream itself changes while already mounted.
-  // attachStreamToVideo also starts playback explicitly: a viewer's <video>
-  // carrying unmuted audio is blocked by browser autoplay policy, which
-  // renders zero frames (black) until play() is called on a muted element.
   const setVideoRef = (node: HTMLVideoElement | null) => {
     videoRef.current = node;
-    attachStreamToVideo(node, activeMediaStream ?? null, { muted: true });
+    if (node) node.srcObject = activeMediaStream ?? null;
   };
 
   useEffect(() => {
-    attachStreamToVideo(videoRef.current, activeMediaStream ?? null, { muted: isHost || !viewerUnmuted });
-  }, [activeMediaStream, isHost, viewerUnmuted]);
+    const video = videoRef.current;
+    if (!video) return;
+    video.srcObject = activeMediaStream ?? null;
+    if (!activeMediaStream) return;
+
+    // autoplay with sound is commonly blocked for viewers; start muted so the
+    // first frame is still visible, then let the viewer enable audio explicitly.
+    void video.play().catch(() => {
+      if (!isHost) {
+        video.muted = true;
+        setVideoMuted(true);
+        void video.play().catch(() => {});
+      }
+    });
+  }, [activeMediaStream, isHost]);
+
+  function enableVideoSound() {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = false;
+    void video.play().then(() => setVideoMuted(false)).catch(() => {
+      video.muted = true;
+      setVideoMuted(true);
+    });
+  }
 
   useEffect(() => {
     if (chatHistory) {
@@ -537,23 +550,17 @@ function LiveRoomPage() {
               </div>
             ) : (
               <>
-                <video
-                  ref={setVideoRef}
-                  autoPlay
-                  muted={isHost || !viewerUnmuted}
-                  playsInline
-                  className="size-full object-contain"
-                />
-                {!isHost && remoteStream && !viewerUnmuted && (
-                  <button
-                    type="button"
-                    onClick={() => setViewerUnmuted(true)}
-                    className="absolute bottom-3 left-3 z-10 flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1.5 text-xs font-bold text-white backdrop-blur"
+                <video ref={setVideoRef} autoPlay muted={isHost || videoMuted} playsInline className="size-full object-contain" />
+                {!isHost && connected && remoteStream && videoMuted && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="absolute right-3 bottom-3 z-10 bg-black/70 text-white hover:bg-black/85"
+                    onClick={enableVideoSound}
                   >
-                    <MicOff className="size-3.5" /> Tap for sound
-                  </button>
+                    Enable sound
+                  </Button>
                 )}
-
                 {isHost && !connected && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white/80">
                     <Video className="size-8 animate-pulse" />
