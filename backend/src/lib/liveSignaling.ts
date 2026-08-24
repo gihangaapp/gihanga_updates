@@ -15,9 +15,8 @@ function canModerate(stream: any, userId: string) {
 }
 
 /**
- * Everything here is real-time *interaction* data — chat, presence, reactions,
- * moderation events. Video/audio never rides this socket; the client connects
- * to LiveKit directly for that, per the architecture.
+ * Everything here is real-time interaction data plus WebRTC signaling. Video/audio
+ * itself never rides this socket; browsers connect directly peer-to-peer.
  */
 export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: string) {
   // ── Host heartbeat: keep a valid broadcast lease alive even if a REST request drops ──
@@ -56,6 +55,30 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
       { viewerCount: count },
     );
     if (liveStream) io.to(`live:${streamId}`).emit("live:viewer-count", { streamId, viewerCount: count });
+  });
+
+  // ── Browser-native WebRTC signaling: Socket.IO carries SDP/ICE only ──
+  socket.on("live:webrtc:ready", async ({ streamId }: { streamId: string }) => {
+    if (!userId) return;
+    const stream = await LiveStream.findOne({ _id: streamId, status: "live" });
+    if (!stream || String(stream.host) === userId) return;
+    socket.join(`live:${streamId}`);
+    socket.to(`live:${streamId}`).emit("live:webrtc:viewer-ready", { streamId });
+  });
+
+  socket.on("live:webrtc:offer", ({ streamId, description }: { streamId: string; description: Record<string, unknown> }) => {
+    if (!userId || !description) return;
+    socket.to(`live:${streamId}`).emit("live:webrtc:offer", { streamId, description });
+  });
+
+  socket.on("live:webrtc:answer", ({ streamId, description }: { streamId: string; description: Record<string, unknown> }) => {
+    if (!userId || !description) return;
+    socket.to(`live:${streamId}`).emit("live:webrtc:answer", { streamId, description });
+  });
+
+  socket.on("live:webrtc:ice", ({ streamId, candidate }: { streamId: string; candidate: Record<string, unknown> }) => {
+    if (!userId || !candidate) return;
+    socket.to(`live:${streamId}`).emit("live:webrtc:ice", { streamId, candidate });
   });
 
   // ── Live chat — blocked for muted/banned users, checked against the keyword list ──

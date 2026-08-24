@@ -45,8 +45,6 @@ import {
   useLiveHeartbeat,
   useSendGift,
   useMyWallet,
-  useLiveKitConfig,
-  useLiveKitToken,
   useAddModerator,
   useMuteViewer,
   useBanViewer,
@@ -59,7 +57,7 @@ import {
 } from "@/hooks/use-live";
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { useToggleBlock, useBlockedSet } from "@/hooks/use-blocks";
-import { useLiveKitRoom } from "@/lib/livekit";
+import { useBrowserLiveRoom } from "@/lib/browser-live";
 import { getLiveSocket } from "@/lib/socket-client";
 import { cn } from "@/lib/utils";
 
@@ -218,7 +216,6 @@ function LiveRoomPage() {
   const heartbeat = useLiveHeartbeat(streamId, asStaff);
   const sendGift = useSendGift(streamId);
   const { data: walletData } = useMyWallet();
-  const { data: kitConfig } = useLiveKitConfig();
   const followUser = useFollowUser();
   const { data: followingSet } = useFollowingSet();
   const toggleBlock = useToggleBlock();
@@ -249,81 +246,37 @@ function LiveRoomPage() {
   const isMod = Boolean(
     activeIdentity && stream?.moderators?.some((m: Author) => m.username === activeIdentity.username),
   );
-  const [videoMuted, setVideoMuted] = useState(!isHost);
   const canModerate = isHost || isMod;
   const isOver = stream ? stream.status !== "live" || Boolean(ended) : false;
-
-  const kitConfigured = kitConfig?.liveKitConfigured ?? false;
-  const { data: tokenData, isLoading: tokenLoading, error: tokenError } = useLiveKitToken(
-    streamId,
-    kitConfigured && !isOver && Boolean(stream),
-    asStaff,
-  );
 
   const {
     localStream,
     remoteStream,
     connected,
-    error: kitError,
+    error: browserError,
     micOn,
     camOn,
-    retryConnection,
     toggleMic,
     toggleCamera,
     switchCamera,
-  } = useLiveKitRoom({
-      url: tokenData?.livekitUrl ?? null,
-      token: tokenData?.livekitToken ?? null,
-      publish: isHost,
-      enabled: Boolean(tokenData?.livekitToken) && !isOver,
-    });
+  } = useBrowserLiveRoom({
+    streamId,
+    publish: isHost,
+    enabled: Boolean(stream) && !isOver,
+  });
   const updateSettings = useUpdateLiveSettings(streamId, asStaff);
   const inviteFollowers = useInviteFollowers(streamId, asStaff);
 
   const activeMediaStream = isHost ? localStream : remoteStream;
-  // A plain ref only (re-)applies srcObject when this effect's own
-  // dependencies change — but the <video> element itself only exists in the
-  // DOM once the surrounding branch (isOver/kitConfigured/tokenLoading/
-  // kitError, etc.) settles into the "connected" render path below. If
-  // localStream/remoteStream were already set *before* that branch switch
-  // — a common race once the LiveKit connection resolves quickly — the
-  // effect never re-fires again, so the freshly mounted <video> node's
-  // srcObject is never assigned and the picture stays black even though
-  // media is flowing. Assigning it via a callback ref applies the current
-  // stream the instant the node mounts, independent of effect timing, on
-  // top of (not instead of) the effect below which keeps it in sync as the
-  // stream itself changes while already mounted.
+  // Callback ref attaches the current stream as soon as the video node mounts.
   const setVideoRef = (node: HTMLVideoElement | null) => {
     videoRef.current = node;
     if (node) node.srcObject = activeMediaStream ?? null;
   };
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.srcObject = activeMediaStream ?? null;
-    if (!activeMediaStream) return;
-
-    // autoplay with sound is commonly blocked for viewers; start muted so the
-    // first frame is still visible, then let the viewer enable audio explicitly.
-    void video.play().catch(() => {
-      if (!isHost) {
-        video.muted = true;
-        setVideoMuted(true);
-        void video.play().catch(() => {});
-      }
-    });
-  }, [activeMediaStream, isHost]);
-
-  function enableVideoSound() {
-    const video = videoRef.current;
-    if (!video) return;
-    video.muted = false;
-    void video.play().then(() => setVideoMuted(false)).catch(() => {
-      video.muted = true;
-      setVideoMuted(true);
-    });
-  }
+    if (videoRef.current) videoRef.current.srcObject = activeMediaStream ?? null;
+  }, [activeMediaStream]);
 
   useEffect(() => {
     if (chatHistory) {
@@ -522,55 +475,18 @@ function LiveRoomPage() {
                   <Link to="/live">Browse other streams</Link>
                 </Button>
               </div>
-            ) : !kitConfigured ? (
-              <div className="flex size-full flex-col items-center justify-center gap-2 p-6 text-center text-white/70">
-                <Video className="size-8" />
-                <p className="text-sm">
-                  Live video isn't configured on this server yet (LiveKit credentials missing). Chat, gifts and
-                  moderation below still work in the meantime.
-                </p>
-              </div>
-            ) : tokenError ? (
+            ) : browserError ? (
               <div className="flex size-full flex-col items-center justify-center gap-2 p-6 text-center text-white/70">
                 <VideoOff className="size-8 text-danger" />
-                <p className="text-sm">{(tokenError as any)?.message || "Couldn't connect to the live video."}</p>
-              </div>
-            ) : tokenLoading ? (
-              <div className="flex size-full flex-col items-center justify-center gap-2 text-white/70">
-                <Video className="size-8 animate-pulse" />
-                <p className="text-sm">Setting up video…</p>
-              </div>
-              ) : kitError ? (
-              <div className="flex size-full flex-col items-center justify-center gap-2 p-6 text-center text-white/70">
-                <VideoOff className="size-8 text-danger" />
-                <p className="text-sm">{kitError}</p>
-                <Button variant="outline" size="sm" className="mt-1 border-white/30 text-white" onClick={retryConnection}>
-                  Retry video connection
-                </Button>
+                <p className="text-sm">{browserError}</p>
               </div>
             ) : (
               <>
-                <video ref={setVideoRef} autoPlay muted={isHost || videoMuted} playsInline className="size-full object-contain" />
-                {!isHost && connected && remoteStream && videoMuted && (
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="absolute right-3 bottom-3 z-10 bg-black/70 text-white hover:bg-black/85"
-                    onClick={enableVideoSound}
-                  >
-                    Enable sound
-                  </Button>
-                )}
-                {isHost && !connected && (
+                <video ref={setVideoRef} autoPlay muted={isHost} playsInline className="size-full object-contain" />
+                {!connected && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white/80">
                     <Video className="size-8 animate-pulse" />
-                    <p className="text-sm">Connecting to LiveKit…</p>
-                  </div>
-                )}
-                {!isHost && !connected && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white/80">
-                    <Video className="size-8 animate-pulse" />
-                    <p className="text-sm">Connecting to the stream…</p>
+                    <p className="text-sm">{isHost ? "Starting your camera…" : "Connecting to the stream…"}</p>
                   </div>
                 )}
                 {!isHost && connected && !remoteStream && (
@@ -711,8 +627,6 @@ function LiveRoomPage() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-
-          {kitError && <p className="border-t border-border px-4 py-3 text-sm text-danger">{kitError}</p>}
 
           {isHost && (
             <HostEarnings streamId={streamId} isOver={isOver} asStaff={asStaff} />

@@ -9,11 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
-import { useCameraPreview, useLiveKitRoom } from "@/lib/livekit";
+import { useCameraPreview, useBrowserLiveRoom } from "@/lib/browser-live";
 import { formatCount } from "@/lib/format";
 import {
-  useLiveKitConfig,
-  useLiveKitToken,
   useLiveStreams,
   useStartLive,
   type LiveStreamData,
@@ -66,17 +64,10 @@ function LiveVideoPreview({
   isOwnStream: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const { data: kitConfig } = useLiveKitConfig();
-  const { data: tokenData, isLoading: tokenLoading, error: tokenError } = useLiveKitToken(
-    stream._id,
-    enabled && (kitConfig?.liveKitConfigured ?? false),
-    asStaff,
-  );
-  const { remoteStream, connected, error: roomError } = useLiveKitRoom({
-    url: tokenData?.livekitUrl ?? null,
-    token: tokenData?.livekitToken ?? null,
+  const { remoteStream, connected, error: roomError } = useBrowserLiveRoom({
+    streamId: stream._id,
     publish: false,
-    enabled: Boolean(tokenData?.livekitToken),
+    enabled,
   });
 
   // Callback ref (not just the effect below) so srcObject is applied the
@@ -90,37 +81,27 @@ function LiveVideoPreview({
   };
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.srcObject = remoteStream ?? null;
-    if (remoteStream) void video.play().catch(() => {
-      // The preview is intentionally muted, so retrying after attachment is
-      // safe and avoids a black frame when autoplay races track subscription.
-      video.muted = true;
-      void video.play().catch(() => {});
-    });
+    if (videoRef.current) videoRef.current.srcObject = remoteStream ?? null;
   }, [remoteStream]);
 
   useEffect(() => {
-    if (!enabled || !tokenData?.livekitToken) return;
+    if (!enabled) return;
     const socket = getLiveSocket();
     if (!socket) return;
     socket.emit("live:join", { streamId: stream._id });
     return () => {
       socket.emit("live:leave", { streamId: stream._id });
     };
-  }, [enabled, stream._id, tokenData?.livekitToken]);
+  }, [enabled, stream._id]);
 
   const hasVideo = Boolean(remoteStream?.getVideoTracks().length);
   const status = isOwnStream
     ? "This is your live — open it to manage and preview your broadcast"
     : !enabled
       ? "Sign in to watch this live video"
-      : !kitConfig?.liveKitConfigured
-        ? "Live video is not configured on the server"
-        : tokenError || roomError
-          ? `Live video unavailable: ${(tokenError as any)?.message || roomError || "connection failed"}`
-          : tokenLoading || !connected
+        : roomError
+          ? `Live video unavailable: ${roomError}`
+          : !connected
             ? "Connecting to the live camera…"
             : !hasVideo
               ? "Waiting for the host's video…"
@@ -155,20 +136,14 @@ function GoLiveDialog({ open, onOpenChange, asStaff }: { open: boolean; onOpenCh
   // Callback ref so the preview stream is applied the instant the <video>
   // node mounts (it's conditionally rendered behind `error`), not only
   // when this effect's dependency changes — same class of fix as the two
-  // LiveKit video elements above.
+  // Live video elements above.
   const setVideoRef = (node: HTMLVideoElement | null) => {
     videoRef.current = node;
     if (node && stream) node.srcObject = stream;
   };
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !stream) return;
-    video.srcObject = stream;
-    void video.play().catch(() => {
-      video.muted = true;
-      void video.play().catch(() => {});
-    });
+    if (videoRef.current && stream) videoRef.current.srcObject = stream;
   }, [stream]);
 
   function reset() {

@@ -64,7 +64,7 @@ export function useStartLive(asStaff = false) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { title: string; description?: string | undefined; subsOnly?: boolean | undefined; giftsEnabled?: boolean | undefined }) =>
-      api.post<{ stream: LiveStreamData; livekitToken: string | null; livekitUrl: string }>("/live/start", input, asStaff),
+      api.post<{ stream: LiveStreamData }>("/live/start", input, asStaff),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["live"] }),
   });
 }
@@ -105,31 +105,6 @@ export function useMyWallet() {
       api.get<{ wallet: { available: number; pending: number; kingdomPoints: number; frozen: boolean } }>(
         "/wallet/me",
       ),
-  });
-}
-
-// ── LiveKit config/token ─────────────────────────────────────────────────────
-
-export function useLiveKitConfig() {
-  return useQuery({
-    queryKey: ["live", "config"],
-    queryFn: () => api.get<{ liveKitConfigured: boolean; liveKitUrl: string }>("/live/config"),
-    staleTime: Infinity,
-  });
-}
-
-export function useLiveKitToken(streamId: string, enabled: boolean, asStaff = false) {
-  return useQuery({
-    queryKey: ["live", "token", streamId, asStaff],
-    queryFn: () => api.post<{ livekitToken: string; livekitUrl: string }>(`/live/${streamId}/token`, undefined, asStaff),
-    enabled: enabled && Boolean(streamId),
-    staleTime: 5 * 60_000,
-    retry: (failureCount, error: any) => {
-      if (failureCount >= 3) return false;
-      const message = String(error?.message || "").toLowerCase();
-      return !/(ended|banned|followers only|not found|forbidden|unauthorized)/.test(message);
-    },
-    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
   });
 }
 

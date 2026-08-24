@@ -10,7 +10,6 @@ import { optionalAuth } from "../../../middleware/optionalAuth";
 import { getIO } from "../../../lib/socket";
 import { applyLedgerEntry } from "../../../lib/wallet";
 import { notify } from "../../../lib/notify";
-import { mintLiveKitToken, resolveLiveKitUrl, isLiveKitConfigured } from "../../../lib/livekit";
 import { notifyStaff } from "../../../lib/staffNotify";
 import { clearLiveViewers } from "../../../lib/redis";
 
@@ -59,12 +58,6 @@ async function reconcileStaleLiveStreams() {
     });
   }
 }
-
-// GET /api/v1/live/config — tells the client whether LiveKit is wired up yet
-router.get("/config", (req, res: Response) => {
-  const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
-  return res.json({ liveKitConfigured: isLiveKitConfigured, liveKitUrl: resolveLiveKitUrl(req.hostname, secure) });
-});
 
 // PATCH /api/v1/live/:id/settings — host adjusts gifts/subsOnly while live
 router.patch("/:id/settings", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
@@ -128,13 +121,7 @@ router.post("/start", authenticateConsumerOrStaff, async (req: AuthenticatedRequ
     );
 
     const populated = await stream.populate("host", HOST_FIELDS);
-    const roomName = String(stream._id);
-    const livekitToken = isLiveKitConfigured
-      ? await mintLiveKitToken(roomName, String(user._id), user.name, true)
-      : null;
-
-    const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
-    return res.status(201).json({ stream: populated, livekitToken, livekitUrl: resolveLiveKitUrl(req.hostname, secure) });
+    return res.status(201).json({ stream: populated });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to start live stream", details: error.message });
   }
@@ -153,32 +140,6 @@ router.post("/:id/heartbeat", authenticateConsumerOrStaff, async (req: Authentic
     return res.json({ ok: true, lastHeartbeatAt: stream.lastHeartbeatAt });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to update stream heartbeat", details: error.message });
-  }
-});
-
-// POST /api/v1/live/:id/token — a viewer (or the returning host, including staff hosts) requests a LiveKit room token
-router.post("/:id/token", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    await reconcileStaleLiveStreams();
-    const stream = await LiveStream.findById(req.params.id);
-    if (!stream) return res.status(404).json({ error: "Stream not found" });
-    if (stream.status !== "live") return res.status(410).json({ error: "Stream has ended" });
-    if (stream.bannedUsers.some((b) => String(b) === req.user!.userId)) {
-      return res.status(403).json({ error: "You've been banned from this stream" });
-    }
-    if (stream.subsOnly) {
-      const isHost = String(stream.host) === req.user!.userId;
-      const follows = isHost || (await Follow.exists({ follower: req.user!.userId, following: stream.host }));
-      if (!follows) return res.status(403).json({ error: "This stream is for followers only" });
-    }
-
-    const user = await User.findById(req.user!.userId).select("name username");
-    const canPublish = String(stream.host) === req.user!.userId;
-    const token = await mintLiveKitToken(String(stream._id), req.user!.userId, user?.name || "Viewer", canPublish);
-    const secure = req.secure || req.headers["x-forwarded-proto"] === "https";
-    return res.json({ livekitToken: token, livekitUrl: resolveLiveKitUrl(req.hostname, secure) });
-  } catch (error: any) {
-    return res.status(400).json({ error: error.message || "Failed to issue stream token" });
   }
 });
 
