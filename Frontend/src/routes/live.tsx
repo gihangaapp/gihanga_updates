@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
-import { useCameraPreview, useLiveKitRoom } from "@/lib/livekit";
+import { useCameraPreview, useLiveKitRoom, attachStreamToVideo } from "@/lib/livekit";
 import { formatCount } from "@/lib/format";
 import {
   useLiveKitConfig,
@@ -86,12 +86,13 @@ function LiveVideoPreview({
   // live.$streamId.tsx for the full explanation.
   const setVideoRef = (node: HTMLVideoElement | null) => {
     videoRef.current = node;
-    if (node) node.srcObject = remoteStream ?? null;
+    attachStreamToVideo(node, remoteStream ?? null, { muted: true });
   };
 
   useEffect(() => {
-    if (videoRef.current) videoRef.current.srcObject = remoteStream ?? null;
+    attachStreamToVideo(videoRef.current, remoteStream ?? null, { muted: true });
   }, [remoteStream]);
+
 
   useEffect(() => {
     if (!enabled || !tokenData?.livekitToken) return;
@@ -150,11 +151,11 @@ function GoLiveDialog({ open, onOpenChange, asStaff }: { open: boolean; onOpenCh
   // LiveKit video elements above.
   const setVideoRef = (node: HTMLVideoElement | null) => {
     videoRef.current = node;
-    if (node && stream) node.srcObject = stream;
+    if (node && stream) attachStreamToVideo(node, stream, { muted: true });
   };
 
   useEffect(() => {
-    if (videoRef.current && stream) videoRef.current.srcObject = stream;
+    if (videoRef.current && stream) attachStreamToVideo(videoRef.current, stream, { muted: true });
   }, [stream]);
 
   function reset() {

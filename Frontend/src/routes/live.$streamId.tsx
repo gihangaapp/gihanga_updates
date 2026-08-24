@@ -59,7 +59,7 @@ import {
 } from "@/hooks/use-live";
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { useToggleBlock, useBlockedSet } from "@/hooks/use-blocks";
-import { useLiveKitRoom } from "@/lib/livekit";
+import { useLiveKitRoom, attachStreamToVideo } from "@/lib/livekit";
 import { getLiveSocket } from "@/lib/socket-client";
 import { cn } from "@/lib/utils";
 
@@ -204,7 +204,7 @@ function AddModeratorDialog({ streamId, asStaff, open, onOpenChange }: { streamI
 
 function LiveRoomPage() {
   const { streamId } = Route.useParams();
-  const { user, staffUser } = useAuth();
+  const { user, staffUser, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { data, isLoading } = useLiveStream(streamId);
   const { data: chatHistory } = useLiveChatHistory(streamId);
@@ -236,6 +236,9 @@ function LiveRoomPage() {
   const [reportOpen, setReportOpen] = useState(false);
   const [addModOpen, setAddModOpen] = useState(false);
   const [heartBurst, setHeartBurst] = useState(0);
+  // Viewers start muted (browsers block unmuted autoplay outright) and unmute
+  // with a tap on the overlay button below.
+  const [viewerUnmuted, setViewerUnmuted] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -274,7 +277,12 @@ function LiveRoomPage() {
       url: tokenData?.livekitUrl ?? null,
       token: tokenData?.livekitToken ?? null,
       publish: isHost,
-      enabled: Boolean(tokenData?.livekitToken) && !isOver,
+      // Wait until the session is resolved before joining. While auth is
+      // still loading isHost is false, so the host used to join as a
+      // subscriber first and then reconnect with the same identity the moment
+      // isHost flipped — LiveKit rejects that duplicate identity, leaving the
+      // creator connected with no published camera and a black screen.
+      enabled: Boolean(tokenData?.livekitToken) && !isOver && !authLoading,
     });
   const updateSettings = useUpdateLiveSettings(streamId, asStaff);
   const inviteFollowers = useInviteFollowers(streamId, asStaff);
@@ -292,14 +300,17 @@ function LiveRoomPage() {
   // stream the instant the node mounts, independent of effect timing, on
   // top of (not instead of) the effect below which keeps it in sync as the
   // stream itself changes while already mounted.
+  // attachStreamToVideo also starts playback explicitly: a viewer's <video>
+  // carrying unmuted audio is blocked by browser autoplay policy, which
+  // renders zero frames (black) until play() is called on a muted element.
   const setVideoRef = (node: HTMLVideoElement | null) => {
     videoRef.current = node;
-    if (node) node.srcObject = activeMediaStream ?? null;
+    attachStreamToVideo(node, activeMediaStream ?? null, { muted: true });
   };
 
   useEffect(() => {
-    if (videoRef.current) videoRef.current.srcObject = activeMediaStream ?? null;
-  }, [activeMediaStream]);
+    attachStreamToVideo(videoRef.current, activeMediaStream ?? null, { muted: isHost || !viewerUnmuted });
+  }, [activeMediaStream, isHost, viewerUnmuted]);
 
   useEffect(() => {
     if (chatHistory) {
@@ -526,7 +537,23 @@ function LiveRoomPage() {
               </div>
             ) : (
               <>
-                <video ref={setVideoRef} autoPlay muted={isHost} playsInline className="size-full object-contain" />
+                <video
+                  ref={setVideoRef}
+                  autoPlay
+                  muted={isHost || !viewerUnmuted}
+                  playsInline
+                  className="size-full object-contain"
+                />
+                {!isHost && remoteStream && !viewerUnmuted && (
+                  <button
+                    type="button"
+                    onClick={() => setViewerUnmuted(true)}
+                    className="absolute bottom-3 left-3 z-10 flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1.5 text-xs font-bold text-white backdrop-blur"
+                  >
+                    <MicOff className="size-3.5" /> Tap for sound
+                  </button>
+                )}
+
                 {isHost && !connected && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white/80">
                     <Video className="size-8 animate-pulse" />
