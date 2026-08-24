@@ -65,7 +65,7 @@ function LiveVideoPreview({
   asStaff: boolean;
   isOwnStream: boolean;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const { data: kitConfig } = useLiveKitConfig();
   const { data: tokenData, isLoading: tokenLoading, error: tokenError } = useLiveKitToken(
     stream._id,
@@ -78,6 +78,16 @@ function LiveVideoPreview({
     publish: false,
     enabled: Boolean(tokenData?.livekitToken),
   });
+
+  // Callback ref (not just the effect below) so srcObject is applied the
+  // instant the <video> node mounts — it only renders once hasVideo flips
+  // true, and relying solely on an effect risked a freshly mounted node
+  // never receiving the already-available stream. See the matching fix in
+  // live.$streamId.tsx for the full explanation.
+  const setVideoRef = (node: HTMLVideoElement | null) => {
+    videoRef.current = node;
+    if (node) node.srcObject = remoteStream ?? null;
+  };
 
   useEffect(() => {
     if (videoRef.current) videoRef.current.srcObject = remoteStream ?? null;
@@ -111,7 +121,7 @@ function LiveVideoPreview({
   return (
     <>
       {hasVideo ? (
-        <video ref={videoRef} autoPlay muted playsInline className="size-full object-contain" />
+        <video ref={setVideoRef} autoPlay muted playsInline className="size-full object-contain" />
       ) : (
         <div className="flex size-full flex-col items-center justify-center gap-3 text-white/80">
           <GAvatar user={toDisplayUser(stream.host)} size="xl" />
@@ -129,10 +139,19 @@ function GoLiveDialog({ open, onOpenChange, asStaff }: { open: boolean; onOpenCh
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [subsOnly, setSubsOnly] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const { stream, error, micOn, camOn, cameraDeviceId, facing, toggleMic, toggleCam, flipCamera } =
     useCameraPreview(step === "preview");
+
+  // Callback ref so the preview stream is applied the instant the <video>
+  // node mounts (it's conditionally rendered behind `error`), not only
+  // when this effect's dependency changes — same class of fix as the two
+  // LiveKit video elements above.
+  const setVideoRef = (node: HTMLVideoElement | null) => {
+    videoRef.current = node;
+    if (node && stream) node.srcObject = stream;
+  };
 
   useEffect(() => {
     if (videoRef.current && stream) videoRef.current.srcObject = stream;
@@ -228,7 +247,7 @@ function GoLiveDialog({ open, onOpenChange, asStaff }: { open: boolean; onOpenCh
                   {error}
                 </div>
               ) : (
-                <video ref={videoRef} autoPlay muted playsInline className="size-full object-contain" />
+                <video ref={setVideoRef} autoPlay muted playsInline className="size-full object-contain" />
               )}
               <div className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-2">
                 <Button size="icon" variant={micOn ? "secondary" : "destructive"} onClick={toggleMic} className="rounded-full">
@@ -366,7 +385,7 @@ function LiveDiscoveryPage() {
                   </div>
                 </div>
                 <Button size="sm" className="gap-1.5 bg-white font-bold text-black hover:bg-white/90">
-                  <Play className="size-3.5 fill-black" /> Watch Live
+                  <Play className="size-3.5 fill-black" /> {featuredIsOwnStream ? "Manage live" : "Watch Live"}
                 </Button>
               </div>
             </div>

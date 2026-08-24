@@ -237,7 +237,7 @@ function LiveRoomPage() {
   const [addModOpen, setAddModOpen] = useState(false);
   const [heartBurst, setHeartBurst] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const stream = data?.stream as any;
   const isHost = Boolean(
@@ -279,9 +279,27 @@ function LiveRoomPage() {
   const updateSettings = useUpdateLiveSettings(streamId, asStaff);
   const inviteFollowers = useInviteFollowers(streamId, asStaff);
 
+  const activeMediaStream = isHost ? localStream : remoteStream;
+  // A plain ref only (re-)applies srcObject when this effect's own
+  // dependencies change — but the <video> element itself only exists in the
+  // DOM once the surrounding branch (isOver/kitConfigured/tokenLoading/
+  // kitError, etc.) settles into the "connected" render path below. If
+  // localStream/remoteStream were already set *before* that branch switch
+  // — a common race once the LiveKit connection resolves quickly — the
+  // effect never re-fires again, so the freshly mounted <video> node's
+  // srcObject is never assigned and the picture stays black even though
+  // media is flowing. Assigning it via a callback ref applies the current
+  // stream the instant the node mounts, independent of effect timing, on
+  // top of (not instead of) the effect below which keeps it in sync as the
+  // stream itself changes while already mounted.
+  const setVideoRef = (node: HTMLVideoElement | null) => {
+    videoRef.current = node;
+    if (node) node.srcObject = activeMediaStream ?? null;
+  };
+
   useEffect(() => {
-    if (videoRef.current) videoRef.current.srcObject = (isHost ? localStream : remoteStream) ?? null;
-  }, [isHost, localStream, remoteStream]);
+    if (videoRef.current) videoRef.current.srcObject = activeMediaStream ?? null;
+  }, [activeMediaStream]);
 
   useEffect(() => {
     if (chatHistory) {
@@ -508,7 +526,7 @@ function LiveRoomPage() {
               </div>
             ) : (
               <>
-                <video ref={videoRef} autoPlay muted={isHost} playsInline className="size-full object-contain" />
+                <video ref={setVideoRef} autoPlay muted={isHost} playsInline className="size-full object-contain" />
                 {isHost && !connected && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white/80">
                     <Video className="size-8 animate-pulse" />
