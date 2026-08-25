@@ -38,6 +38,9 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
     }
 
     let cancelled = false;
+    // Join before announcing readiness; otherwise a fast viewer can emit
+    // viewer-ready before the server has placed its socket in the live room.
+    socket.emit("live:join", { streamId });
     const peer = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
     });
@@ -138,6 +141,7 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
     socket.on("live:webrtc:answer", handleAnswer);
     socket.on("live:webrtc:ice", handleCandidate);
     const handleSocketConnect = () => {
+      socket.emit("live:join", { streamId });
       if (!publish) socket.emit("live:webrtc:ready", { streamId });
       else waitingViewerIds.current.forEach((viewerId) => void handleReady({ viewerId }));
     };

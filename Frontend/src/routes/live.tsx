@@ -66,11 +66,10 @@ function LiveVideoPreview({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const { localStream, remoteStream, connected, error: roomError } = useBrowserLiveRoom({
     streamId: stream._id,
-    publish: false,
-    enabled: enabled && !isOwnStream,
+    publish: isOwnStream,
+    enabled,
   });
-  const { stream: ownPreviewStream, error: ownPreviewError } = useCameraPreview(enabled && isOwnStream);
-  const previewStream = isOwnStream ? ownPreviewStream : remoteStream;
+  const previewStream = isOwnStream ? localStream : remoteStream;
 
   // Attach the current stream as soon as the preview video mounts.
   const setVideoRef = (node: HTMLVideoElement | null) => {
@@ -95,7 +94,7 @@ function LiveVideoPreview({
 
   const hasVideo = Boolean(previewStream?.getVideoTracks().length);
   const status = isOwnStream
-    ? ownPreviewError || "This is your live — open it to manage your broadcast"
+    ? "This is your live — open it to manage your broadcast"
     : !enabled
       ? "Sign in to watch this live video"
         : roomError
