@@ -146,6 +146,7 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
     if (!userId) return;
     const stream = await LiveStream.findOne({ _id: streamId, status: "live" });
     if (!stream) return;
+    if (stream.bannedUsers.some((b) => String(b) === userId)) return;
     const total = await incrLiveReactions(streamId, 1);
     await LiveStream.findByIdAndUpdate(streamId, { $inc: { reactionsCount: 1 } });
     io.to(`live:${streamId}`).emit("live:reaction", { streamId, kind: kind || "heart", total, from: userId });

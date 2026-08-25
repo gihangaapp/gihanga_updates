@@ -286,7 +286,16 @@ function LiveRoomPage() {
     videoRef.current.srcObject = activeMediaStream ?? null;
     videoRef.current.muted = isHost || !soundOn;
     videoRef.current.volume = 1;
-    if (activeMediaStream && soundOn && !isHost) void videoRef.current.play().catch(() => {});
+    if (activeMediaStream && soundOn && !isHost) {
+      videoRef.current.play().catch(() => {
+        // Some browsers still block programmatic unmuted playback even after a
+        // click if it wasn't the very same synchronous gesture (e.g. the stream
+        // attached a tick later). Surface this instead of leaving sound silently
+        // off, so the person knows to tap again rather than assume it's broken.
+        toast.error("Tap the sound button again to enable audio");
+        setSoundOn(false);
+      });
+    }
   }, [activeMediaStream, isHost, soundOn]);
 
   useEffect(() => {
@@ -454,7 +463,10 @@ function LiveRoomPage() {
     if (videoRef.current) {
       videoRef.current.muted = !next;
       videoRef.current.volume = 1;
-      if (next) void videoRef.current.play().catch(() => {});
+      if (next)
+        void videoRef.current.play().catch(() => {
+          toast.error("Couldn't enable sound — try tapping again");
+        });
     }
   }
 
