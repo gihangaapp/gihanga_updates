@@ -30,7 +30,27 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
 
   // ── Viewer joins: Redis-backed presence count, notify the room ──
   socket.on("live:join", async ({ streamId }: { streamId: string }) => {
-    if (!userId) return;
+    if (!userId || !streamId) return;
+
+    // A single authenticated socket can move from one live room to another.
+    // Remove its old presence before joining the new room so quick card clicks
+    // do not leave the viewer counted in two streams at once.
+    const previousStreamId = socket.data.streamId as string | undefined;
+    if (previousStreamId && previousStreamId !== streamId) {
+      socket.leave(`live:${previousStreamId}`);
+      const previousCount = await removeLiveViewer(previousStreamId, socket.id);
+      const previousStream = await LiveStream.findOneAndUpdate(
+        { _id: previousStreamId, status: "live" },
+        { viewerCount: previousCount },
+      );
+      if (previousStream) {
+        io.to(`live:${previousStreamId}`).emit("live:viewer-count", {
+          streamId: previousStreamId,
+          viewerCount: previousCount,
+        });
+      }
+    }
+
     const stream = await LiveStream.findById(streamId);
     if (!stream || stream.status !== "live") return;
     if (stream.bannedUsers.some((b) => String(b) === userId)) {
@@ -48,6 +68,7 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
   });
 
   socket.on("live:leave", async ({ streamId }: { streamId: string }) => {
+    if (!streamId) return;
     socket.leave(`live:${streamId}`);
     const count = await removeLiveViewer(streamId, socket.id);
     const liveStream = await LiveStream.findOneAndUpdate(
@@ -55,6 +76,7 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
       { viewerCount: count },
     );
     if (liveStream) io.to(`live:${streamId}`).emit("live:viewer-count", { streamId, viewerCount: count });
+    if (socket.data.streamId === streamId) socket.data.streamId = undefined;
   });
 
   // ── Browser-native WebRTC signaling: Socket.IO carries SDP/ICE only ──

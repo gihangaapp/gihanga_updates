@@ -133,6 +133,7 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
     socket.on("live:webrtc:answer", handleAnswer);
     socket.on("live:webrtc:ice", handleCandidate);
 
+    let announceReady: (() => void) | null = null;
     const start = async () => {
       if (publish) {
         if (!navigator.mediaDevices?.getUserMedia) {
@@ -152,6 +153,7 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
           }
           localRef.current = media;
           setLocalStream(media);
+          setConnected(true);
           setMicOn(media.getAudioTracks().length > 0);
           setCamOn(media.getVideoTracks().length > 0);
           // Each viewer gets its own host peer connection after announcing readiness.
@@ -159,13 +161,16 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
           if (!cancelled) setError(err?.message || "Allow camera access to start streaming.");
         }
       } else {
-        socket.emit("live:webrtc:ready", { streamId });
+        announceReady = () => socket.emit("live:webrtc:ready", { streamId });
+        if (socket.connected) announceReady();
+        else socket.on("connect", announceReady);
       }
     };
     void start();
 
     return () => {
       cancelled = true;
+      if (announceReady) socket.off("connect", announceReady);
       socket.off("live:webrtc:viewer-ready", handleReady);
       socket.off("live:webrtc:offer", handleOffer);
       socket.off("live:webrtc:answer", handleAnswer);

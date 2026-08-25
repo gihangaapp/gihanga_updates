@@ -371,9 +371,9 @@ function LiveDiscoveryPage() {
                     <p className="mt-0.5 text-xs text-white/70">@{featured.host.username}</p>
                   </div>
                 </div>
-                <Button size="sm" className="gap-1.5 bg-white font-bold text-black hover:bg-white/90">
+                <span className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-white px-3 text-sm font-bold text-black transition-colors group-hover:bg-white/90">
                   <Play className="size-3.5 fill-black" /> {featuredIsOwnStream ? "Manage live" : "Watch Live"}
-                </Button>
+                </span>
               </div>
             </div>
             <div className="p-4">
@@ -429,9 +429,9 @@ function LiveDiscoveryPage() {
                       <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                         <Gift className="size-3 text-amber-400" /> {formatCount(s.totalGifts)} pts
                       </span>
-                      <Button size="sm" variant="brand" className="h-7 px-3 text-[11px] font-bold">
+                      <span className="inline-flex h-7 items-center justify-center gap-1.5 rounded-md bg-primary px-3 text-[11px] font-bold text-primary-foreground transition-colors group-hover:bg-primary/90">
                         <Play className="size-3 fill-current" /> Join
-                      </Button>
+                      </span>
                     </div>
                   </div>
                 </Link>

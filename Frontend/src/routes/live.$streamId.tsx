@@ -22,6 +22,8 @@ import {
   Users,
   Video,
   VideoOff,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -233,6 +235,7 @@ function LiveRoomPage() {
   const [reportOpen, setReportOpen] = useState(false);
   const [addModOpen, setAddModOpen] = useState(false);
   const [heartBurst, setHeartBurst] = useState(0);
+  const [soundOn, setSoundOn] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -271,12 +274,29 @@ function LiveRoomPage() {
   // Callback ref attaches the current stream as soon as the video node mounts.
   const setVideoRef = (node: HTMLVideoElement | null) => {
     videoRef.current = node;
-    if (node) node.srcObject = activeMediaStream ?? null;
+    if (node) {
+      node.srcObject = activeMediaStream ?? null;
+      node.muted = isHost || !soundOn;
+      node.volume = 1;
+    }
   };
 
   useEffect(() => {
-    if (videoRef.current) videoRef.current.srcObject = activeMediaStream ?? null;
-  }, [activeMediaStream]);
+    if (!videoRef.current) return;
+    videoRef.current.srcObject = activeMediaStream ?? null;
+    videoRef.current.muted = isHost || !soundOn;
+    videoRef.current.volume = 1;
+    if (activeMediaStream && soundOn && !isHost) void videoRef.current.play().catch(() => {});
+  }, [activeMediaStream, isHost, soundOn]);
+
+  useEffect(() => {
+    setMessages([]);
+    setPinned(null);
+    setViewerCount(0);
+    setReactionCount(0);
+    setEnded(null);
+    setSoundOn(false);
+  }, [streamId]);
 
   useEffect(() => {
     if (chatHistory) {
@@ -323,7 +343,9 @@ function LiveRoomPage() {
   useEffect(() => {
     const socket = getLiveSocket();
     if (!socket) return;
-    socket.emit("live:join", { streamId });
+    const joinRoom = () => socket.emit("live:join", { streamId });
+    if (socket.connected) joinRoom();
+    else socket.once("connect", joinRoom);
 
     const onChat = (msg: LiveChatEntry) => {
       if (msg.stream !== streamId) return;
@@ -376,7 +398,8 @@ function LiveRoomPage() {
     socket.on("live:banned", onBanned);
     socket.on("live:chat-blocked", onChatBlocked);
     return () => {
-      socket.emit("live:leave", { streamId });
+      if (socket.connected) socket.emit("live:leave", { streamId });
+      socket.off("connect", joinRoom);
       socket.off("live:chat", onChat);
       socket.off("live:viewer-count", onViewerCount);
       socket.off("live:ended", onEnded);
@@ -397,16 +420,42 @@ function LiveRoomPage() {
   const visibleMessages = messages.filter((m) => !blockedSet?.has(m.sender.username));
 
   function sendChat() {
-    if (!draft.trim()) return;
-    getLiveSocket()?.emit("live:chat", { streamId, body: draft.trim() });
+    const body = draft.trim();
+    if (!body || isOver) return;
+    const socket = getLiveSocket();
+    if (!socket) {
+      toast.error("Sign in to join the live chat");
+      return;
+    }
+    const send = () => socket.emit("live:chat", { streamId, body });
+    if (socket.connected) send();
+    else socket.once("connect", send);
     setDraft("");
   }
 
   function sendReaction() {
     if (isOver) return;
-    getLiveSocket()?.emit("live:react", { streamId, kind: "heart" });
+    const socket = getLiveSocket();
+    if (!socket) {
+      toast.error("Sign in to react to this live");
+      return;
+    }
+    const react = () => socket.emit("live:react", { streamId, kind: "heart" });
+    if (socket.connected) react();
+    else socket.once("connect", react);
     setReactionCount((n) => n + 1);
     setHeartBurst((n) => n + 1);
+  }
+
+  function toggleSound() {
+    if (isHost) return;
+    const next = !soundOn;
+    setSoundOn(next);
+    if (videoRef.current) {
+      videoRef.current.muted = !next;
+      videoRef.current.volume = 1;
+      if (next) void videoRef.current.play().catch(() => {});
+    }
   }
 
   function handleEnd() {
@@ -481,7 +530,14 @@ function LiveRoomPage() {
               </div>
             ) : (
               <>
-                <video ref={setVideoRef} autoPlay muted={isHost} playsInline className="size-full object-contain" />
+                <video
+                  ref={setVideoRef}
+                  autoPlay
+                  muted={isHost || !soundOn}
+                  playsInline
+                  className="size-full object-contain"
+                  onClick={() => !isHost && !soundOn && toggleSound()}
+                />
                 {!connected && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white/80">
                     <Video className="size-8 animate-pulse" />
@@ -515,6 +571,21 @@ function LiveRoomPage() {
                     <Gift className="size-3" /> {formatCount(stream.totalGifts)} pts
                   </span>
                 )}
+              </div>
+            )}
+
+            {!isHost && !isOver && (
+              <div className="absolute top-3 right-3 flex items-center gap-2">
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  className="rounded-full"
+                  onClick={toggleSound}
+                  aria-label={soundOn ? "Mute live audio" : "Turn on live audio"}
+                  aria-pressed={soundOn}
+                >
+                  {soundOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+                </Button>
               </div>
             )}
 
