@@ -67,35 +67,6 @@ export const Route = createFileRoute("/live/$streamId")({
   head: () => ({
     meta: [{ title: "Live — Gihanga Updates" }, { name: "description", content: "Watch a live stream on Gihanga Updates." }],
   }),
-  // Without an explicit pendingComponent, a slow/failed client-side
-  // navigation into this route can render nothing for a tick — which looks
-  // like a black flash before the router reverts the URL. Showing the
-  // fullscreen black loading state immediately (no default preload delay)
-  // keeps the tap visually responsive instead of appearing to do nothing.
-  pendingComponent: () => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
-      <p className="text-sm text-white/70">Loading stream…</p>
-    </div>
-  ),
-  pendingMs: 0,
-  pendingMinMs: 0,
-  // A route-local error boundary so a render failure inside the live room
-  // (e.g. a WebRTC/camera error) shows an in-place message instead of
-  // silently failing the navigation and bouncing back to the previous page.
-  errorComponent: ({ error, reset }) => (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black px-4 text-center">
-      <h1 className="font-display text-xl font-bold text-white">This live couldn't load</h1>
-      <p className="max-w-sm text-sm text-white/70">{error instanceof Error ? error.message : "Something went wrong opening this stream."}</p>
-      <div className="flex gap-2">
-        <Button variant="brand" onClick={() => reset()}>
-          Try again
-        </Button>
-        <Button variant="outline" className="border-white/30 text-white" asChild>
-          <Link to="/live">Back to live streams</Link>
-        </Button>
-      </div>
-    </div>
-  ),
   component: LiveRoomPage,
 });
 
