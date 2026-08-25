@@ -63,22 +63,22 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
     const stream = await LiveStream.findOne({ _id: streamId, status: "live" });
     if (!stream || String(stream.host) === userId) return;
     socket.join(`live:${streamId}`);
-    socket.to(`live:${streamId}`).emit("live:webrtc:viewer-ready", { streamId });
+    socket.to(`live:${streamId}`).emit("live:webrtc:viewer-ready", { streamId, viewerId: socket.id });
   });
 
-  socket.on("live:webrtc:offer", ({ streamId, description }: { streamId: string; description: Record<string, unknown> }) => {
-    if (!userId || !description) return;
-    socket.to(`live:${streamId}`).emit("live:webrtc:offer", { streamId, description });
+  socket.on("live:webrtc:offer", ({ streamId, targetId, description }: { streamId: string; targetId?: string; description: Record<string, unknown> }) => {
+    if (!userId || !targetId || !description) return;
+    io.to(targetId).emit("live:webrtc:offer", { streamId, hostId: socket.id, description });
   });
 
-  socket.on("live:webrtc:answer", ({ streamId, description }: { streamId: string; description: Record<string, unknown> }) => {
-    if (!userId || !description) return;
-    socket.to(`live:${streamId}`).emit("live:webrtc:answer", { streamId, description });
+  socket.on("live:webrtc:answer", ({ streamId, targetId, description }: { streamId: string; targetId?: string; description: Record<string, unknown> }) => {
+    if (!userId || !targetId || !description) return;
+    io.to(targetId).emit("live:webrtc:answer", { streamId, viewerId: socket.id, description });
   });
 
-  socket.on("live:webrtc:ice", ({ streamId, candidate }: { streamId: string; candidate: Record<string, unknown> }) => {
-    if (!userId || !candidate) return;
-    socket.to(`live:${streamId}`).emit("live:webrtc:ice", { streamId, candidate });
+  socket.on("live:webrtc:ice", ({ streamId, targetId, candidate }: { streamId: string; targetId?: string; candidate: Record<string, unknown> }) => {
+    if (!userId || !targetId || !candidate) return;
+    io.to(targetId).emit("live:webrtc:ice", { streamId, senderId: socket.id, candidate });
   });
 
   // ── Live chat — blocked for muted/banned users, checked against the keyword list ──

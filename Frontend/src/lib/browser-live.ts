@@ -24,7 +24,9 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
   const [camOn, setCamOn] = useState(true);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const localRef = useRef<MediaStream | null>(null);
-  const pendingCandidates = useRef<RTCIceCandidateInit[]>([]);
+  const pendingCandidates = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
+  const targetPeerId = useRef<string | null>(null);
+  const hostPeers = useRef<Map<string, RTCPeerConnection>>(new Map());
 
   useEffect(() => {
     if (!enabled || !streamId) return;
@@ -42,54 +44,79 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
     setError(null);
     setConnected(false);
 
-    const sendOffer = async () => {
-      if (cancelled || !publish || peer.signalingState !== "stable") return;
+    const sendOffer = async (viewerId: string, negotiationPeer: RTCPeerConnection = peer) => {
+      if (cancelled || !publish || !viewerId || negotiationPeer.signalingState !== "stable") return;
+      targetPeerId.current = viewerId;
       try {
-        const offer = await peer.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
-        await peer.setLocalDescription(offer);
-        socket.emit("live:webrtc:offer", { streamId, description: peer.localDescription });
+        const offer = await negotiationPeer.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+        await negotiationPeer.setLocalDescription(offer);
+        socket.emit("live:webrtc:offer", { streamId, targetId: viewerId, description: negotiationPeer.localDescription });
       } catch (err: any) {
         if (!cancelled) setError(err?.message || "Could not start live video.");
       }
     };
 
-    const handleReady = () => void sendOffer();
-    const handleOffer = async ({ description }: DescriptionPayload) => {
+    const handleReady = ({ viewerId }: { viewerId: string }) => {
+      if (!publish || cancelled || hostPeers.current.has(viewerId)) return;
+      const hostPeer = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      hostPeers.current.set(viewerId, hostPeer);
+      localRef.current?.getTracks().forEach((track) => hostPeer.addTrack(track, localRef.current as MediaStream));
+      hostPeer.onicecandidate = ({ candidate }) => {
+        if (candidate) socket.emit("live:webrtc:ice", { streamId, targetId: viewerId, candidate });
+      };
+      hostPeer.onconnectionstatechange = () => {
+        if (["failed", "disconnected", "closed"].includes(hostPeer.connectionState)) {
+          hostPeers.current.delete(viewerId);
+          hostPeer.close();
+        }
+      };
+      void sendOffer(viewerId, hostPeer);
+    };
+    const handleOffer = async ({ description, hostId }: DescriptionPayload & { hostId: string }) => {
       if (publish || cancelled) return;
       try {
+        targetPeerId.current = hostId;
         await peer.setRemoteDescription(description);
-        for (const candidate of pendingCandidates.current.splice(0)) await peer.addIceCandidate(candidate);
+        for (const candidate of pendingCandidates.current.get(hostId) ?? []) await peer.addIceCandidate(candidate);
+        pendingCandidates.current.delete(hostId);
         const answer = await peer.createAnswer();
         await peer.setLocalDescription(answer);
-        socket.emit("live:webrtc:answer", { streamId, description: peer.localDescription });
+        socket.emit("live:webrtc:answer", { streamId, targetId: hostId, description: peer.localDescription });
       } catch (err: any) {
         if (!cancelled) setError(err?.message || "Could not join live video.");
       }
     };
-    const handleAnswer = async ({ description }: DescriptionPayload) => {
+    const handleAnswer = async ({ description, viewerId }: DescriptionPayload & { viewerId: string }) => {
       if (!publish || cancelled) return;
+      const hostPeer = hostPeers.current.get(viewerId);
+      if (!hostPeer) return;
       try {
-        await peer.setRemoteDescription(description);
-        for (const candidate of pendingCandidates.current.splice(0)) await peer.addIceCandidate(candidate);
+        await hostPeer.setRemoteDescription(description);
+        for (const candidate of pendingCandidates.current.get(viewerId) ?? []) await hostPeer.addIceCandidate(candidate);
+        pendingCandidates.current.delete(viewerId);
       } catch (err: any) {
         if (!cancelled) setError(err?.message || "Could not complete live video connection.");
       }
     };
-    const handleCandidate = async ({ candidate }: CandidatePayload) => {
+    const handleCandidate = async ({ candidate, senderId }: CandidatePayload & { senderId: string }) => {
       if (!candidate || cancelled) return;
-      if (peer.remoteDescription) {
+      const candidatePeer = publish ? hostPeers.current.get(senderId) : peer;
+      if (!candidatePeer || (!publish && targetPeerId.current && targetPeerId.current !== senderId)) return;
+      if (candidatePeer.remoteDescription) {
         try {
-          await peer.addIceCandidate(candidate);
+          await candidatePeer.addIceCandidate(candidate);
         } catch {
           // A late candidate can be safely ignored after a peer disconnects.
         }
       } else {
-        pendingCandidates.current.push(candidate);
+        const queued = pendingCandidates.current.get(senderId) ?? [];
+        queued.push(candidate);
+        pendingCandidates.current.set(senderId, queued);
       }
     };
 
     peer.onicecandidate = ({ candidate }) => {
-      if (candidate) socket.emit("live:webrtc:ice", { streamId, candidate });
+      if (candidate && targetPeerId.current) socket.emit("live:webrtc:ice", { streamId, targetId: targetPeerId.current, candidate });
     };
     peer.ontrack = ({ streams, track }) => {
       const incoming = streams[0] ?? new MediaStream([track]);
@@ -127,8 +154,7 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
           setLocalStream(media);
           setMicOn(media.getAudioTracks().length > 0);
           setCamOn(media.getVideoTracks().length > 0);
-          media.getTracks().forEach((track) => peer.addTrack(track, media));
-          await sendOffer();
+          // Each viewer gets its own host peer connection after announcing readiness.
         } catch (err: any) {
           if (!cancelled) setError(err?.message || "Allow camera access to start streaming.");
         }
@@ -145,8 +171,12 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
       socket.off("live:webrtc:answer", handleAnswer);
       socket.off("live:webrtc:ice", handleCandidate);
       peer.close();
+      hostPeers.current.forEach((hostPeer) => hostPeer.close());
+      hostPeers.current.clear();
       localRef.current?.getTracks().forEach((track) => track.stop());
       localRef.current = null;
+      targetPeerId.current = null;
+      pendingCandidates.current.clear();
       peerRef.current = null;
       setLocalStream(null);
       setRemoteStream(null);
