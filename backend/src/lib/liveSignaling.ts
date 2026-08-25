@@ -103,6 +103,103 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
     io.to(targetId).emit("live:webrtc:ice", { streamId, senderId: socket.id, candidate });
   });
 
+  // ── Co-host join-request flow (Instagram-style: viewer requests, host accepts/rejects) ──
+  socket.on("live:join-request", async ({ streamId }: { streamId: string }) => {
+    if (!userId) return;
+    const stream = await LiveStream.findById(streamId);
+    if (!stream || stream.status !== "live") return;
+    if (String(stream.host) === userId) return;
+    if (stream.coHosts.some((c) => String(c) === userId)) return;
+    if (stream.bannedUsers.some((b) => String(b) === userId)) return;
+    // Cap at 3 co-hosts (host + 3 guests)
+    if (stream.coHosts.length >= 3) {
+      socket.emit("live:join-request-rejected", { streamId, reason: "This live is full (max 3 co-hosts)" });
+      return;
+    }
+    const requestor = await User.findById(userId).select("name username avatarHue avatarUrl isCreator verified");
+    if (!requestor) return;
+    // Send the request only to the host via their user room
+    io.to(`user:${stream.host}`).emit("live:join-request", {
+      streamId,
+      requestorId: userId,
+      requestorSocketId: socket.id,
+      requestor: { _id: requestor._id, name: requestor.name, username: requestor.username, avatarHue: requestor.avatarHue, avatarUrl: requestor.avatarUrl, isCreator: requestor.isCreator, verified: requestor.verified },
+    });
+  });
+
+  socket.on("live:accept-join-request", async ({ streamId, viewerId, viewerSocketId }: { streamId: string; viewerId: string; viewerSocketId: string }) => {
+    if (!userId) return;
+    const stream = await LiveStream.findOne({ _id: streamId, host: userId, status: "live" });
+    if (!stream) return;
+    if (stream.coHosts.some((c) => String(c) === viewerId)) return;
+    if (stream.coHosts.length >= 3) return;
+    await LiveStream.findByIdAndUpdate(streamId, { $push: { coHosts: viewerId } });
+    // Notify the viewer they are accepted
+    io.to(`user:${viewerId}`).emit("live:join-request-accepted", { streamId });
+    // Broadcast to the room so everyone updates the co-host list
+    const coHostUser = await User.findById(viewerId).select("name username avatarHue avatarUrl isCreator verified");
+    io.to(`live:${streamId}`).emit("live:co-host:joined", {
+      streamId,
+      coHostId: viewerId,
+      coHost: coHostUser ? { _id: coHostUser._id, name: coHostUser.name, username: coHostUser.username, avatarHue: coHostUser.avatarHue, avatarUrl: coHostUser.avatarUrl, isCreator: coHostUser.isCreator, verified: coHostUser.verified } : null,
+    });
+  });
+
+  socket.on("live:reject-join-request", async ({ streamId, viewerId }: { streamId: string; viewerId: string }) => {
+    if (!userId) return;
+    const stream = await LiveStream.findOne({ _id: streamId, host: userId, status: "live" });
+    if (!stream) return;
+    io.to(`user:${viewerId}`).emit("live:join-request-rejected", { streamId, reason: "Host declined your request" });
+  });
+
+  socket.on("live:co-host:leave", async ({ streamId }: { streamId: string }) => {
+    if (!userId) return;
+    const stream = await LiveStream.findOneAndUpdate(
+      { _id: streamId, status: "live" },
+      { $pull: { coHosts: userId } },
+      { new: true },
+    );
+    if (!stream) return;
+    io.to(`live:${streamId}`).emit("live:co-host:left", { streamId, coHostId: userId });
+  });
+
+  // ── Co-host WebRTC mesh signaling ──
+  // When a co-host's browser has its local media ready, it announces so that
+  // all existing participants (host + other co-hosts) create a PeerConnection
+  // to it and send offers.  Each existing participant initiates exactly one
+  // peer connection to the newcomer, keeping the mesh simple.
+  socket.on("live:co-host:webrtc-ready", async ({ streamId }: { streamId: string }) => {
+    if (!userId) return;
+    const stream = await LiveStream.findOne({ _id: streamId, status: "live" });
+    if (!stream) return;
+    const isParticipant = String(stream.host) === userId || stream.coHosts.some((c) => String(c) === userId);
+    if (!isParticipant) return;
+    socket.join(`live:${streamId}`);
+    // Broadcast to everyone in the room EXCEPT the sender
+    socket.to(`live:${streamId}`).emit("live:co-host:webrtc-ready", {
+      streamId,
+      participantId: userId,
+      participantSocketId: socket.id,
+    });
+  });
+
+  // Co-host offer/answer/ice re-use the same event names as viewer signaling
+  // but carry an extra `participantId` field so the frontend can map streams.
+  socket.on("live:webrtc:co-host:offer", ({ streamId, targetId, description, participantId }: { streamId: string; targetId?: string; description: Record<string, unknown>; participantId?: string }) => {
+    if (!userId || !targetId || !description) return;
+    io.to(targetId).emit("live:webrtc:co-host:offer", { streamId, senderId: socket.id, senderParticipantId: userId, description, participantId });
+  });
+
+  socket.on("live:webrtc:co-host:answer", ({ streamId, targetId, description, participantId }: { streamId: string; targetId?: string; description: Record<string, unknown>; participantId?: string }) => {
+    if (!userId || !targetId || !description) return;
+    io.to(targetId).emit("live:webrtc:co-host:answer", { streamId, senderId: socket.id, senderParticipantId: userId, description, participantId });
+  });
+
+  socket.on("live:webrtc:co-host:ice", ({ streamId, targetId, candidate, participantId }: { streamId: string; targetId?: string; candidate: Record<string, unknown>; participantId?: string }) => {
+    if (!userId || !targetId || !candidate) return;
+    io.to(targetId).emit("live:webrtc:co-host:ice", { streamId, senderId: socket.id, senderParticipantId: userId, candidate, participantId });
+  });
+
   // ── Live chat — blocked for muted/banned users, checked against the keyword list ──
   socket.on("live:chat", async ({ streamId, body }: { streamId: string; body: string }) => {
     if (!userId || !body?.trim()) return;
@@ -202,6 +299,7 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
       stream.endedAt = new Date();
       stream.endReason = "Host ended the stream";
       stream.viewerCount = 0;
+      stream.coHosts = [];
       await stream.save();
       await clearLiveViewers(streamId);
       io.to(`live:${streamId}`).emit("live:ended", { streamId, reason: "Host ended the stream" });
@@ -213,6 +311,18 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
 
   socket.on("disconnect", async () => {
     const streamId = socket.data?.streamId as string | undefined;
+    const uid = socket.data?.userId as string | undefined;
+    if (streamId && uid) {
+      // If this was a co-host, remove them from the stream's coHosts array
+      const coHostRemoved = await LiveStream.findOneAndUpdate(
+        { _id: streamId, status: "live", coHosts: uid },
+        { $pull: { coHosts: uid } },
+        { new: true },
+      );
+      if (coHostRemoved) {
+        io.to(`live:${streamId}`).emit("live:co-host:left", { streamId, coHostId: uid });
+      }
+    }
     if (streamId) {
       const count = await removeLiveViewer(streamId, socket.id);
       socket.data.streamId = undefined;

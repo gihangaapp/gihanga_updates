@@ -11,6 +11,8 @@ export interface LiveStreamData {
   peakViewers: number;
   totalGifts: number;
   reactionsCount: number;
+  moderators?: PostAuthor[];
+  coHosts?: PostAuthor[];
   status: "pending" | "live" | "ended" | "force_ended";
   startedAt?: string;
   endedAt?: string;

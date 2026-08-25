@@ -15,6 +15,7 @@ export interface ILiveStream extends Document {
   moderators: Types.ObjectId[];
   mutedUsers: Types.ObjectId[];
   bannedUsers: Types.ObjectId[];
+  coHosts: Types.ObjectId[];
   status: LiveStreamStatus;
   startedAt?: Date;
   lastHeartbeatAt?: Date;
@@ -40,6 +41,7 @@ const LiveStreamSchema = new Schema<ILiveStream>(
     moderators: [{ type: Schema.Types.ObjectId, ref: "User" }],
     mutedUsers: [{ type: Schema.Types.ObjectId, ref: "User" }],
     bannedUsers: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    coHosts: [{ type: Schema.Types.ObjectId, ref: "User" }],
     status: {
       type: String,
       enum: ["pending", "live", "ended", "force_ended"],

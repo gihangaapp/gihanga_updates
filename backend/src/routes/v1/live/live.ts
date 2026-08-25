@@ -140,6 +140,7 @@ router.post("/:id/end", authenticateConsumerOrStaff, async (req: AuthenticatedRe
       stream.endedAt = new Date();
       stream.endReason = "Host ended the stream";
       stream.viewerCount = 0;
+      stream.coHosts = [];
       await stream.save();
       await clearLiveViewers(String(stream._id));
       getIO()?.to(`live:${stream._id}`).emit("live:ended", { streamId: String(stream._id), reason: "Host ended the stream" });
@@ -166,7 +167,8 @@ router.get("/:id", optionalAuth, async (req: AuthenticatedRequest, res: Response
   try {
     const stream = await LiveStream.findById(req.params.id)
       .populate("host", HOST_FIELDS)
-      .populate("moderators", "name username avatarHue avatarUrl");
+      .populate("moderators", "name username avatarHue avatarUrl")
+      .populate("coHosts", "name username avatarHue avatarUrl isCreator verified");
     if (!stream) return res.status(404).json({ error: "Stream not found" });
     return res.json({ stream });
   } catch {
