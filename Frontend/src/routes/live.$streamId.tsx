@@ -311,13 +311,12 @@ function LiveRoomPage() {
         },
       });
     };
-    const stopBroadcast = () => getLiveSocket()?.emit("live:end", { streamId });
-
     keepAlive();
     const timer = window.setInterval(keepAlive, 20_000);
     return () => {
       window.clearInterval(timer);
-      if (document.visibilityState !== "hidden") stopBroadcast();
+      // Leaving this route or temporarily backgrounding the browser must not
+      // end a broadcast. Only the explicit End stream action may do that.
     };
   }, [isHost, isOver, streamId]);
 
@@ -536,7 +535,7 @@ function LiveRoomPage() {
               </div>
             )}
 
-            {!isHost && !isOver && (
+            {!isOver && (
               <button
                 type="button"
                 onClick={sendReaction}

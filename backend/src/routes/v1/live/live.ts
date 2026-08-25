@@ -15,48 +15,9 @@ import { clearLiveViewers } from "../../../lib/redis";
 
 const router = Router();
 const HOST_FIELDS = "name username avatarHue avatarUrl isCreator verified followersCount";
-// Mobile browsers can suspend background timers for more than 90 seconds.
-// Keep enough grace for the host to resume while still cleaning abandoned lives.
-const LIVE_HEARTBEAT_TIMEOUT_MS = 5 * 60_000;
-
 async function clearHostLiveFlagIfNeeded(hostId: unknown) {
   const anotherLiveStream = await LiveStream.exists({ host: hostId, status: "live" });
   if (!anotherLiveStream) await User.findByIdAndUpdate(hostId, { isLive: false });
-}
-
-/**
- * A browser can disappear without sending a final request (tab close, phone
- * sleep, lost network, or a server restart). Reconcile those records before
- * exposing the live list or allowing a new broadcast.
- */
-async function reconcileStaleLiveStreams() {
-  const cutoff = new Date(Date.now() - LIVE_HEARTBEAT_TIMEOUT_MS);
-  const stale = await LiveStream.find({
-    status: "live",
-    $or: [
-      { lastHeartbeatAt: { $lt: cutoff } },
-      { lastHeartbeatAt: { $exists: false }, startedAt: { $lt: cutoff } },
-    ],
-  });
-
-  for (const stream of stale) {
-    const ended = await LiveStream.findOneAndUpdate(
-      { _id: stream._id, status: "live" },
-      {
-        status: "ended",
-        endedAt: new Date(),
-        endReason: "Broadcast disconnected",
-        viewerCount: 0,
-      },
-      { new: true },
-    );
-    if (!ended) continue;
-    await clearHostLiveFlagIfNeeded(ended.host);
-    getIO()?.to(`live:${ended._id}`).emit("live:ended", {
-      streamId: String(ended._id),
-      reason: "Broadcast disconnected",
-    });
-  }
 }
 
 // PATCH /api/v1/live/:id/settings — host adjusts gifts/subsOnly while live
@@ -79,7 +40,6 @@ router.patch("/:id/settings", authenticateConsumerOrStaff, async (req: Authentic
 // POST /api/v1/live/start — a creator, moderator, admin, or superadmin goes live
 router.post("/start", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    await reconcileStaleLiveStreams();
     const user = await User.findById(req.user!.userId);
     if (!user) return res.status(404).json({ error: "Account not found" });
     if (!user.isCreator && user.role === "user") {
@@ -194,7 +154,6 @@ router.post("/:id/end", authenticateConsumerOrStaff, async (req: AuthenticatedRe
 // GET /api/v1/live — currently live streams
 router.get("/", optionalAuth, async (_req: AuthenticatedRequest, res: Response) => {
   try {
-    await reconcileStaleLiveStreams();
     const streams = await LiveStream.find({ status: "live" }).sort({ viewerCount: -1 }).populate("host", HOST_FIELDS);
     return res.json({ streams });
   } catch (error: any) {
@@ -205,7 +164,6 @@ router.get("/", optionalAuth, async (_req: AuthenticatedRequest, res: Response) 
 // GET /api/v1/live/:id — a single stream's detail (live or ended — stats persist after ending)
 router.get("/:id", optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    await reconcileStaleLiveStreams();
     const stream = await LiveStream.findById(req.params.id)
       .populate("host", HOST_FIELDS)
       .populate("moderators", "name username avatarHue avatarUrl");
