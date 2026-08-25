@@ -175,7 +175,10 @@ function GoLiveDialog({ open, onOpenChange, asStaff }: { open: boolean; onOpenCh
         onSuccess: (data) => {
           onOpenChange(false);
           reset();
-          navigate({ to: "/live/$streamId", params: { streamId: data.stream._id } });
+          navigate({ to: "/live/$streamId", params: { streamId: data.stream._id } }).catch((err: unknown) => {
+            console.error("Failed to open live stream after starting it", err);
+            toast.error("Stream started, but couldn't open the room. Try opening it from the live list.");
+          });
         },
         onError: (err: any) => toast.error(err.message || "Couldn't start your stream"),
       },
@@ -291,6 +294,18 @@ function LiveDiscoveryPage() {
   const rest = visible.slice(1);
   const featuredIsOwnStream = Boolean(featured && activeOwnStream?._id === featured._id);
 
+  // <Link>'s built-in click handler swallows a rejected navigation and
+  // silently reverts the URL — which looks like the card "does nothing" and
+  // flashes back to this page. Opening the room explicitly here surfaces
+  // any failure instead of hiding it, and is a no-op on top of the normal
+  // <Link> navigation when nothing goes wrong.
+  function openLive(streamId: string) {
+    navigate({ to: "/live/$streamId", params: { streamId } }).catch((err: unknown) => {
+      console.error("Failed to open live stream", err);
+      toast.error("Couldn't open this live stream. Please try again.");
+    });
+  }
+
   return (
     <AppShell>
       <div className="mx-auto w-full max-w-[900px] space-y-6">
@@ -302,11 +317,7 @@ function LiveDiscoveryPage() {
           {canGoLive && (
             <Button
               variant="brand"
-              onClick={() =>
-                activeOwnStream
-                  ? navigate({ to: "/live/$streamId", params: { streamId: activeOwnStream._id } })
-                  : setGoLiveOpen(true)
-              }
+              onClick={() => (activeOwnStream ? openLive(activeOwnStream._id) : setGoLiveOpen(true))}
             >
               <Radio className="size-4" /> {activeOwnStream ? "Manage live" : "Go Live"}
             </Button>
@@ -323,11 +334,7 @@ function LiveDiscoveryPage() {
               <Button
                 variant="brand"
                 size="sm"
-                onClick={() =>
-                  activeOwnStream
-                    ? navigate({ to: "/live/$streamId", params: { streamId: activeOwnStream._id } })
-                    : setGoLiveOpen(true)
-                }
+                onClick={() => (activeOwnStream ? openLive(activeOwnStream._id) : setGoLiveOpen(true))}
               >
                 {activeOwnStream ? "Manage your live stream" : "Be the first to go live"}
               </Button>
@@ -341,6 +348,10 @@ function LiveDiscoveryPage() {
           <Link
             to="/live/$streamId"
             params={{ streamId: featured._id }}
+            onClick={(e) => {
+              e.preventDefault();
+              openLive(featured._id);
+            }}
             className="surface-card group block cursor-pointer overflow-hidden p-0"
           >
             <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden bg-black">
@@ -398,7 +409,15 @@ function LiveDiscoveryPage() {
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {rest.map((s) => (
               <li key={s._id} className="surface-card group overflow-hidden p-0">
-                <Link to="/live/$streamId" params={{ streamId: s._id }} className="block">
+                <Link
+                  to="/live/$streamId"
+                  params={{ streamId: s._id }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    openLive(s._id);
+                  }}
+                  className="block"
+                >
                   <div className="relative flex aspect-video items-center justify-center overflow-hidden bg-black">
                     <GAvatar user={toDisplayUser(s.host)} size="lg" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
@@ -450,11 +469,7 @@ function LiveDiscoveryPage() {
             <Button
               variant="brand"
               size="sm"
-              onClick={() =>
-                activeOwnStream
-                  ? navigate({ to: "/live/$streamId", params: { streamId: activeOwnStream._id } })
-                  : setGoLiveOpen(true)
-              }
+              onClick={() => (activeOwnStream ? openLive(activeOwnStream._id) : setGoLiveOpen(true))}
             >
               <Radio className="size-4" /> {activeOwnStream ? "Manage live" : "Go Live"}
             </Button>
