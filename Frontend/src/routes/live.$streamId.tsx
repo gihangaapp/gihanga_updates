@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
+  ArrowLeft,
   DollarSign,
   Flag,
   Gift,
@@ -27,7 +28,6 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { AppShell } from "@/components/layout/AppShell";
 import { GAvatar, UserName } from "@/components/common/GAvatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -502,31 +502,37 @@ function LiveRoomPage() {
 
   if (isLoading) {
     return (
-      <AppShell>
-        <p className="py-16 text-center text-sm text-muted-foreground">Loading stream…</p>
-      </AppShell>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
+        <p className="text-sm text-white/70">Loading stream…</p>
+      </div>
     );
   }
   if (!stream) {
     return (
-      <AppShell>
-        <div className="surface-card mx-auto mt-10 max-w-md p-10 text-center">
-          <h1 className="mb-2 font-display text-xl font-bold">Stream not found</h1>
-          <Button variant="brand" asChild>
-            <Link to="/live">Back to live streams</Link>
-          </Button>
-        </div>
-      </AppShell>
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black px-4 text-center">
+        <h1 className="font-display text-xl font-bold text-white">Stream not found</h1>
+        <Button variant="brand" asChild>
+          <Link to="/live">Back to live streams</Link>
+        </Button>
+      </div>
     );
   }
 
   const following = followingSet?.has(stream.host.username) ?? false;
 
   return (
-    <AppShell>
-      <div className="mx-auto grid w-full max-w-[1100px] gap-4 lg:grid-cols-[1fr_320px]">
-        <div className="surface-card overflow-hidden p-0">
-          <div className="relative aspect-video w-full bg-black">
+    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-black lg:flex-row">
+      <button
+        type="button"
+        onClick={() => navigate({ to: "/live" })}
+        aria-label="Back to live streams"
+        className="press absolute top-3 left-3 z-20 grid size-9 place-items-center rounded-full bg-black/50 text-white backdrop-blur"
+      >
+        <ArrowLeft className="size-5" />
+      </button>
+
+      <div className="relative w-full flex-1 bg-black lg:flex-none lg:basis-0 lg:grow-[3]">
+        <div className="relative size-full">
             {isOver ? (
               <div className="flex size-full flex-col items-center justify-center gap-2 text-white/70">
                 <VideoOff className="size-10" />
@@ -568,7 +574,7 @@ function LiveRoomPage() {
             <FloatingHearts burst={heartBurst} />
 
             {!isOver && (
-              <div className="absolute top-3 left-3 flex flex-wrap items-center gap-2">
+              <div className="absolute top-3 left-14 z-10 flex flex-wrap items-center gap-2">
                 <span className="flex items-center gap-1.5 rounded-lg bg-danger px-2.5 py-1 text-xs font-bold text-white animate-pulse">
                   <Radio className="size-3" /> LIVE
                 </span>
@@ -587,7 +593,7 @@ function LiveRoomPage() {
             )}
 
             {!isHost && !isOver && (
-              <div className="absolute top-3 right-3 flex items-center gap-2">
+              <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
                 <Button
                   size="icon"
                   variant="secondary"
@@ -602,7 +608,7 @@ function LiveRoomPage() {
             )}
 
             {isHost && !isOver && (
-              <div className="absolute top-3 right-3 flex items-center gap-2">
+              <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
                 <Button size="icon" variant="secondary" className="rounded-full" onClick={toggleMic}>
                   {micOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}
                 </Button>
@@ -623,20 +629,20 @@ function LiveRoomPage() {
                 type="button"
                 onClick={sendReaction}
                 aria-label="Send a like"
-                className="press absolute right-3 bottom-3 grid size-11 place-items-center rounded-full bg-white/15 text-white backdrop-blur"
+                className="press absolute right-3 bottom-3 z-20 grid size-11 place-items-center rounded-full bg-white/15 text-white backdrop-blur"
               >
                 <Heart className="size-5" />
               </button>
             )}
-          </div>
 
-          <div className="flex items-center gap-3 p-4">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/30 to-transparent pt-10">
+          <div className="pointer-events-auto flex items-center gap-3 p-4">
             <Link to="/profile/$username" params={{ username: stream.host.username }}>
               <GAvatar user={toDisplayUser(stream.host)} size="md" />
             </Link>
             <div className="min-w-0 flex-1">
-              <UserName user={toDisplayUser(stream.host)} />
-              <p className="truncate text-sm text-muted-foreground">{stream.title}</p>
+              <UserName user={toDisplayUser(stream.host)} className="text-white [&>span]:text-white" />
+              <p className="truncate text-sm text-white/70">{stream.title}</p>
             </div>
 
             {!isHost && (
@@ -657,7 +663,7 @@ function LiveRoomPage() {
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-sm" aria-label="More options">
+                <Button variant="ghost" size="icon-sm" aria-label="More options" className="text-white hover:bg-white/15 hover:text-white">
                   <MoreVertical className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -711,18 +717,20 @@ function LiveRoomPage() {
           </div>
 
           {isHost && (
-            <HostEarnings streamId={streamId} isOver={isOver} asStaff={asStaff} />
+            <div className="pointer-events-auto">
+              <HostEarnings streamId={streamId} isOver={isOver} asStaff={asStaff} />
+            </div>
           )}
 
           {giftPickerOpen && (
-            <div className="grid grid-cols-4 gap-2 border-t border-border p-4">
+            <div className="pointer-events-auto grid grid-cols-4 gap-2 bg-black/40 p-4 backdrop-blur-sm">
               {GIFT_CATALOG.map((g) => (
                 <button
                   key={g.id}
                   type="button"
                   onClick={() => handleGift(g.id)}
                   disabled={sendGift.isPending || (walletData?.wallet.kingdomPoints ?? 0) < g.cost}
-                  className="press flex flex-col items-center gap-1 rounded-xl border border-border p-3 hover:bg-muted disabled:opacity-40"
+                  className="press flex flex-col items-center gap-1 rounded-xl border border-white/20 bg-black/30 p-3 text-white hover:bg-white/10 disabled:opacity-40"
                 >
                   <span className="text-2xl">{g.emoji}</span>
                   <span className="text-xs font-bold">{g.cost} pts</span>
@@ -730,25 +738,28 @@ function LiveRoomPage() {
               ))}
             </div>
           )}
+          </div>
         </div>
+      </div>
 
-        <div className="surface-card flex max-h-[70vh] flex-col p-0 lg:max-h-[600px]">
-          <header className="border-b border-border p-3">
-            <p className="text-sm font-bold">Live chat</p>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex max-h-[45vh] flex-col lg:pointer-events-auto lg:static lg:h-full lg:max-h-none lg:w-[360px] lg:shrink-0 lg:border-l lg:border-white/10 lg:bg-black">
+        <div className="pointer-events-auto flex max-h-[45vh] flex-col rounded-t-2xl bg-black/55 backdrop-blur-md lg:h-full lg:max-h-none lg:rounded-none lg:bg-transparent lg:backdrop-blur-none">
+          <header className="hidden border-b border-white/10 p-3 lg:block">
+            <p className="text-sm font-bold text-white">Live chat</p>
           </header>
 
           {pinned && (
-            <div className="flex items-start gap-2 border-b border-border bg-primary-soft/50 p-2.5 text-xs">
+            <div className="flex items-start gap-2 border-b border-white/10 bg-primary/20 p-2.5 text-xs">
               <Pin className="mt-0.5 size-3.5 shrink-0 text-primary" />
               <p className="min-w-0 flex-1 leading-snug">
-                <span className="font-bold">{pinned.sender.username}</span>{" "}
-                <span className="text-foreground/80">{pinned.body}</span>
+                <span className="font-bold text-white">{pinned.sender.username}</span>{" "}
+                <span className="text-white/80">{pinned.body}</span>
               </p>
               {canModerate && (
                 <button
                   type="button"
                   onClick={() => getLiveSocket()?.emit("live:unpin-comment", { streamId, commentId: pinned._id })}
-                  className="shrink-0 text-muted-foreground hover:text-foreground"
+                  className="shrink-0 text-white/60 hover:text-white"
                 >
                   <X className="size-3.5" />
                 </button>
@@ -758,19 +769,19 @@ function LiveRoomPage() {
 
           <div className="flex-1 space-y-2.5 overflow-y-auto p-3">
             {visibleMessages.length === 0 && (
-              <p className="py-6 text-center text-xs text-muted-foreground">Say hello 👋</p>
+              <p className="py-6 text-center text-xs text-white/60">Say hello 👋</p>
             )}
             {visibleMessages.map((m) => (
               <div key={m._id} className="group flex items-start gap-2 text-sm">
                 <GAvatar user={toDisplayUser(m.sender)} size="xs" />
                 <p className="min-w-0 flex-1 leading-snug break-words">
-                  <span className="font-bold">{m.sender.username}</span>{" "}
+                  <span className="font-bold text-white">{m.sender.username}</span>{" "}
                   {m.isGift ? (
-                    <span className="font-semibold text-amber-500">
-                      <Heart className="inline size-3.5 fill-amber-500" /> {m.body}
+                    <span className="font-semibold text-amber-400">
+                      <Heart className="inline size-3.5 fill-amber-400" /> {m.body}
                     </span>
                   ) : (
-                    <span className="text-foreground/85">{m.body}</span>
+                    <span className="text-white/85">{m.body}</span>
                   )}
                 </p>
                 {(canModerate || m.sender.username !== activeIdentity?.username) && !m.isGift && (
@@ -779,7 +790,7 @@ function LiveRoomPage() {
                       <button
                         type="button"
                         aria-label="Message options"
-                        className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-foreground"
+                        className="shrink-0 rounded p-0.5 text-white/60 opacity-0 group-hover:opacity-100 hover:text-white"
                       >
                         <MoreVertical className="size-3.5" />
                       </button>
@@ -840,13 +851,13 @@ function LiveRoomPage() {
             <div ref={chatEndRef} />
           </div>
           {!isOver && (
-            <div className="flex items-center gap-2 border-t border-border p-3">
+            <div className="flex items-center gap-2 border-t border-white/10 p-3">
               <input
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendChat()}
                 placeholder="Send a message…"
-                className="h-10 flex-1 rounded-full border border-border bg-elevated px-3.5 text-sm outline-none focus:border-ring"
+                className="h-10 flex-1 rounded-full border border-white/20 bg-white/10 px-3.5 text-sm text-white placeholder:text-white/50 outline-none focus:border-white/40"
               />
               <Button size="icon" variant="brand" onClick={sendChat} disabled={!draft.trim()}>
                 <Send className="size-4" />
@@ -858,7 +869,7 @@ function LiveRoomPage() {
 
       <ReportDialog streamId={streamId} open={reportOpen} onOpenChange={setReportOpen} />
       <AddModeratorDialog streamId={streamId} asStaff={asStaff} open={addModOpen} onOpenChange={setAddModOpen} />
-    </AppShell>
+    </div>
   );
 }
 
