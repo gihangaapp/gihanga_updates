@@ -21,6 +21,8 @@ import {
   UserPlus,
   Users,
   Video,
+  Volume2,
+  VolumeX,
   VideoOff,
   X,
 } from "lucide-react";
@@ -228,6 +230,7 @@ function LiveRoomPage() {
   const [draft, setDraft] = useState("");
   const [viewerCount, setViewerCount] = useState(0);
   const [reactionCount, setReactionCount] = useState(0);
+  const [soundOn, setSoundOn] = useState(false);
   const [ended, setEnded] = useState<string | null>(null);
   const [giftPickerOpen, setGiftPickerOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -481,7 +484,7 @@ function LiveRoomPage() {
               </div>
             ) : (
               <>
-                <video ref={setVideoRef} autoPlay muted={isHost} playsInline className="size-full object-contain" />
+                <video ref={setVideoRef} autoPlay muted={isHost || !soundOn} playsInline className="size-full object-contain" />
                 {!connected && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white/80">
                     <Video className="size-8 animate-pulse" />
@@ -533,6 +536,20 @@ function LiveRoomPage() {
                   <X className="size-4" /> {endLive.isPending ? "Ending…" : "End stream"}
                 </Button>
               </div>
+            )}
+
+            {!isHost && !isOver && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSoundOn((value) => !value);
+                  window.setTimeout(() => void videoRef.current?.play().catch(() => {}), 0);
+                }}
+                aria-label={soundOn ? "Mute live audio" : "Enable live audio"}
+                className="press absolute right-16 bottom-3 grid size-11 place-items-center rounded-full bg-white/15 text-white backdrop-blur"
+              >
+                {soundOn ? <Volume2 className="size-5" /> : <VolumeX className="size-5" />}
+              </button>
             )}
 
             {!isOver && (

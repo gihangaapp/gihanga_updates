@@ -66,10 +66,11 @@ function LiveVideoPreview({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const { localStream, remoteStream, connected, error: roomError } = useBrowserLiveRoom({
     streamId: stream._id,
-    publish: isOwnStream,
-    enabled,
+    publish: false,
+    enabled: enabled && !isOwnStream,
   });
-  const previewStream = isOwnStream ? localStream : remoteStream;
+  const { stream: ownPreviewStream, error: ownPreviewError } = useCameraPreview(enabled && isOwnStream);
+  const previewStream = isOwnStream ? ownPreviewStream : remoteStream;
 
   // Attach the current stream as soon as the preview video mounts.
   const setVideoRef = (node: HTMLVideoElement | null) => {
@@ -94,7 +95,7 @@ function LiveVideoPreview({
 
   const hasVideo = Boolean(previewStream?.getVideoTracks().length);
   const status = isOwnStream
-    ? "This is your live — open it to manage and preview your broadcast"
+    ? ownPreviewError || "This is your live — open it to manage your broadcast"
     : !enabled
       ? "Sign in to watch this live video"
         : roomError
@@ -406,11 +407,7 @@ function LiveDiscoveryPage() {
                       <span className="flex items-center gap-1 rounded-md bg-danger px-1.5 py-0.5 text-[10px] font-bold text-white">
                         <Radio className="size-2.5 animate-pulse" /> LIVE
                       </span>
-                      {s.subsOnly && (
-                        <span className="flex items-center gap-1 rounded-md bg-amber-500/90 px-1.5 py-0.5 text-[10px] font-bold text-black">
-                          <Lock className="size-2.5" /> Followers only
-                        </span>
-                      )}
+
                     </div>
                     <span className="absolute right-2 bottom-2 flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-bold text-white">
                       <Users className="size-2.5" /> {formatCount(s.viewerCount)}
@@ -429,9 +426,9 @@ function LiveDiscoveryPage() {
                       <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
                         <Gift className="size-3 text-amber-400" /> {formatCount(s.totalGifts)} pts
                       </span>
-                      <Button size="sm" variant="brand" className="h-7 px-3 text-[11px] font-bold">
+                      <span className="inline-flex h-7 items-center gap-1 rounded-md bg-brand px-3 text-[11px] font-bold text-brand-foreground transition-opacity group-hover:opacity-90">
                         <Play className="size-3 fill-current" /> Join
-                      </Button>
+                      </span>
                     </div>
                   </div>
                 </Link>

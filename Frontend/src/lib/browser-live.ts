@@ -27,6 +27,7 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
   const pendingCandidates = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
   const targetPeerId = useRef<string | null>(null);
   const hostPeers = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const waitingViewerIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!enabled || !streamId) return;
@@ -58,6 +59,10 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
 
     const handleReady = ({ viewerId }: { viewerId: string }) => {
       if (!publish || cancelled || hostPeers.current.has(viewerId)) return;
+      if (!localRef.current) {
+        waitingViewerIds.current.add(viewerId);
+        return;
+      }
       const hostPeer = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
       hostPeers.current.set(viewerId, hostPeer);
       localRef.current?.getTracks().forEach((track) => hostPeer.addTrack(track, localRef.current as MediaStream));
@@ -132,6 +137,11 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
     socket.on("live:webrtc:offer", handleOffer);
     socket.on("live:webrtc:answer", handleAnswer);
     socket.on("live:webrtc:ice", handleCandidate);
+    const handleSocketConnect = () => {
+      if (!publish) socket.emit("live:webrtc:ready", { streamId });
+      else waitingViewerIds.current.forEach((viewerId) => void handleReady({ viewerId }));
+    };
+    socket.on("connect", handleSocketConnect);
 
     const start = async () => {
       if (publish) {
@@ -155,6 +165,10 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
           setMicOn(media.getAudioTracks().length > 0);
           setCamOn(media.getVideoTracks().length > 0);
           // Each viewer gets its own host peer connection after announcing readiness.
+          waitingViewerIds.current.forEach((viewerId) => {
+            waitingViewerIds.current.delete(viewerId);
+            handleReady({ viewerId });
+          });
         } catch (err: any) {
           if (!cancelled) setError(err?.message || "Allow camera access to start streaming.");
         }
@@ -170,6 +184,8 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
       socket.off("live:webrtc:offer", handleOffer);
       socket.off("live:webrtc:answer", handleAnswer);
       socket.off("live:webrtc:ice", handleCandidate);
+      socket.off("connect", handleSocketConnect);
+      waitingViewerIds.current.clear();
       peer.close();
       hostPeers.current.forEach((hostPeer) => hostPeer.close());
       hostPeers.current.clear();
