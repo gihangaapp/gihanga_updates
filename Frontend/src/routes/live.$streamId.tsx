@@ -22,6 +22,8 @@ import {
   Users,
   Video,
   VideoOff,
+  Volume2,
+  VolumeX,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,9 +38,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Slider } from "@/components/ui/slider";
 import { useAuth } from "@/lib/auth-context";
 import { formatCount } from "@/lib/format";
 import {
+  useLiveStreams,
   useLiveStream,
   useLiveChatHistory,
   useEndLive,
@@ -54,6 +59,7 @@ import {
   useInviteFollowers,
   GIFT_CATALOG,
   type LiveChatEntry,
+  type LiveStreamData,
 } from "@/hooks/use-live";
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { useToggleBlock, useBlockedSet } from "@/hooks/use-blocks";
@@ -109,6 +115,100 @@ function FloatingHearts({ burst }: { burst: number }) {
         />
       ))}
       <style>{`@keyframes float-up { 0% { transform: translateY(0) translateX(0); opacity: 1; } 100% { transform: translateY(-180px) translateX(${Math.random() > 0.5 ? "-" : ""}30px); opacity: 0; } }`}</style>
+    </div>
+  );
+}
+
+/**
+ * Viewer-side volume control. Autoplay policies force a viewer's <video> to
+ * start muted regardless of the `muted={isHost}` prop, so this gives viewers
+ * an explicit, always-visible way to unmute and adjust volume rather than
+ * silently having no sound with no way to turn it on.
+ */
+function VolumeControl({
+  muted,
+  volume,
+  onToggleMute,
+  onVolumeChange,
+}: {
+  muted: boolean;
+  volume: number;
+  onToggleMute: () => void;
+  onVolumeChange: (v: number) => void;
+}) {
+  return (
+    <Popover>
+      <div className="flex items-center rounded-full bg-black/50 backdrop-blur">
+        <Button
+          size="icon"
+          variant="ghost"
+          className="rounded-full text-white hover:bg-white/15 hover:text-white"
+          onClick={onToggleMute}
+          aria-label={muted ? "Unmute" : "Mute"}
+        >
+          {muted || volume === 0 ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+        </Button>
+        <PopoverTrigger asChild>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="mr-0.5 -ml-1 rounded-full text-white hover:bg-white/15 hover:text-white"
+            aria-label="Volume settings"
+          >
+            <span className="block h-3 w-3 rounded-full border border-white/70" />
+          </Button>
+        </PopoverTrigger>
+      </div>
+      <PopoverContent side="top" align="end" className="w-40 p-3">
+        <p className="mb-2 text-xs font-semibold text-muted-foreground">Volume</p>
+        <Slider
+          value={[muted ? 0 : volume]}
+          max={100}
+          step={1}
+          onValueChange={([v]) => onVolumeChange(v ?? 0)}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * Lets a viewer switch straight to another live stream without going back
+ * to /live first. Clicking a card here is a normal route navigation to
+ * /live/$streamId — useBrowserLiveRoom already tears down and reconnects
+ * on a streamId change, and the reset effect above clears this page's
+ * chat/hearts/pinned state for the newly-selected stream.
+ */
+function OtherLiveRail({ streams, currentStreamId }: { streams: LiveStreamData[]; currentStreamId: string }) {
+  const others = streams.filter((s) => s._id !== currentStreamId).slice(0, 8);
+  if (!others.length) return null;
+
+  return (
+    <div className="surface-card p-4">
+      <p className="mb-3 text-sm font-bold">Other live streams</p>
+      <div className="flex gap-3 overflow-x-auto pb-1">
+        {others.map((s) => (
+          <Link
+            key={s._id}
+            to="/live/$streamId"
+            params={{ streamId: s._id }}
+            className="group block w-32 shrink-0 overflow-hidden rounded-xl"
+          >
+            <div className="relative flex aspect-video items-center justify-center overflow-hidden bg-black">
+              <GAvatar user={toDisplayUser(s.host)} size="md" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+              <span className="absolute top-1.5 left-1.5 flex items-center gap-1 rounded-md bg-danger px-1.5 py-0.5 text-[9px] font-bold text-white">
+                <Radio className="size-2 animate-pulse" /> LIVE
+              </span>
+              <span className="absolute right-1.5 bottom-1.5 flex items-center gap-1 rounded-md bg-black/60 px-1.5 py-0.5 text-[9px] font-bold text-white">
+                <Users className="size-2.5" /> {formatCount(s.viewerCount)}
+              </span>
+            </div>
+            <p className="mt-1.5 truncate text-xs font-semibold group-hover:text-primary">{s.host.name}</p>
+            <p className="truncate text-[11px] text-muted-foreground">{s.title}</p>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
@@ -206,6 +306,9 @@ function LiveRoomPage() {
   const navigate = useNavigate();
   const { data, isLoading } = useLiveStream(streamId);
   const { data: chatHistory } = useLiveChatHistory(streamId);
+  // Other currently-live streams, for the "switch live" rail — same list the
+  // /live discovery page uses, just rendered as a compact side rail here.
+  const { data: liveList } = useLiveStreams();
   // A moderator/admin/superadmin can be the host with only a staff session
   // open (no consumer login) — fall back to staffUser for identity so
   // isHost/isMod still resolve, and route their mutations through the
@@ -233,8 +336,26 @@ function LiveRoomPage() {
   const [reportOpen, setReportOpen] = useState(false);
   const [addModOpen, setAddModOpen] = useState(false);
   const [heartBurst, setHeartBurst] = useState(0);
+  const [muted, setMuted] = useState(true);
+  const [volume, setVolume] = useState(100);
+  const [hasLiveSocket, setHasLiveSocket] = useState(true);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  // Switching to another live (via the rail below) keeps this component
+  // mounted with a new `streamId` param — reset everything that's scoped to
+  // the previous stream so the viewer doesn't briefly see the old stream's
+  // chat, pinned message, hearts, or "ended" banner while the new stream's
+  // data is still loading.
+  useEffect(() => {
+    setMessages([]);
+    setPinned(null);
+    setDraft("");
+    setEnded(null);
+    setGiftPickerOpen(false);
+    setHeartBurst(0);
+    setMuted(true);
+  }, [streamId]);
 
   const stream = data?.stream as any;
   const isHost = Boolean(
@@ -277,6 +398,25 @@ function LiveRoomPage() {
   useEffect(() => {
     if (videoRef.current) videoRef.current.srcObject = activeMediaStream ?? null;
   }, [activeMediaStream]);
+
+  // Volume/mute are set imperatively (same pattern as srcObject above) since
+  // a host's own preview stays permanently self-muted, but a viewer's video
+  // needs its mute/volume to react live to the VolumeControl without a
+  // full remount of the <video> element.
+  useEffect(() => {
+    if (!videoRef.current || isHost) return;
+    videoRef.current.muted = muted;
+    videoRef.current.volume = volume / 100;
+  }, [muted, volume, isHost, activeMediaStream]);
+
+  function toggleMute() {
+    setMuted((v) => !v);
+  }
+  function changeVolume(v: number) {
+    setVolume(v);
+    if (v > 0 && muted) setMuted(false);
+    if (v === 0 && !muted) setMuted(true);
+  }
 
   useEffect(() => {
     if (chatHistory) {
@@ -322,6 +462,12 @@ function LiveRoomPage() {
 
   useEffect(() => {
     const socket = getLiveSocket();
+    // No consumer/staff session → no authenticated socket. Chat, reactions,
+    // and live viewer-count updates all require one server-side, so make
+    // that explicit here instead of the whole join silently doing nothing
+    // — sendChat/sendReaction below check this same flag to tell the
+    // visitor why their tap didn't do anything.
+    setHasLiveSocket(Boolean(socket));
     if (!socket) return;
     socket.emit("live:join", { streamId });
 
@@ -398,13 +544,26 @@ function LiveRoomPage() {
 
   function sendChat() {
     if (!draft.trim()) return;
-    getLiveSocket()?.emit("live:chat", { streamId, body: draft.trim() });
+    const socket = getLiveSocket();
+    if (!socket) {
+      toast.error("Sign in to comment on this live stream");
+      return;
+    }
+    socket.emit("live:chat", { streamId, body: draft.trim() });
     setDraft("");
   }
 
   function sendReaction() {
     if (isOver) return;
-    getLiveSocket()?.emit("live:react", { streamId, kind: "heart" });
+    const socket = getLiveSocket();
+    if (!socket) {
+      toast.error("Sign in to react to this live stream");
+      return;
+    }
+    socket.emit("live:react", { streamId, kind: "heart" });
+    // Optimistic bump only happens once we know the emit actually went out —
+    // the real count still arrives via the "live:reaction" broadcast above,
+    // this just makes the tap feel instant for the person who sent it.
     setReactionCount((n) => n + 1);
     setHeartBurst((n) => n + 1);
   }
@@ -532,6 +691,12 @@ function LiveRoomPage() {
                 <Button variant="destructive" size="sm" onClick={handleEnd} disabled={endLive.isPending}>
                   <X className="size-4" /> {endLive.isPending ? "Ending…" : "End stream"}
                 </Button>
+              </div>
+            )}
+
+            {!isHost && !isOver && !browserError && (
+              <div className="absolute bottom-3 left-3">
+                <VolumeControl muted={muted} volume={volume} onToggleMute={toggleMute} onVolumeChange={changeVolume} />
               </div>
             )}
 
@@ -756,7 +921,7 @@ function LiveRoomPage() {
             ))}
             <div ref={chatEndRef} />
           </div>
-          {!isOver && (
+          {!isOver && hasLiveSocket && (
             <div className="flex items-center gap-2 border-t border-border p-3">
               <input
                 value={draft}
@@ -770,7 +935,19 @@ function LiveRoomPage() {
               </Button>
             </div>
           )}
+          {!isOver && !hasLiveSocket && (
+            <div className="flex items-center justify-between gap-2 border-t border-border p-3">
+              <p className="text-xs text-muted-foreground">Sign in to comment and react</p>
+              <Button size="sm" variant="brand" asChild>
+                <Link to="/welcome">Sign in</Link>
+              </Button>
+            </div>
+          )}
         </div>
+      </div>
+
+      <div className="mx-auto mt-4 w-full max-w-[1100px]">
+        <OtherLiveRail streams={liveList?.streams ?? []} currentStreamId={streamId} />
       </div>
 
       <ReportDialog streamId={streamId} open={reportOpen} onOpenChange={setReportOpen} />
