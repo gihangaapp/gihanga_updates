@@ -371,9 +371,9 @@ function LiveDiscoveryPage() {
                     <p className="mt-0.5 text-xs text-white/70">@{featured.host.username}</p>
                   </div>
                 </div>
-                <Button size="sm" className="gap-1.5 bg-white font-bold text-black hover:bg-white/90">
+                <span className="inline-flex h-9 items-center gap-1.5 rounded-md bg-white px-3 text-sm font-bold text-black transition-colors group-hover:bg-white/90">
                   <Play className="size-3.5 fill-black" /> {featuredIsOwnStream ? "Manage live" : "Watch Live"}
-                </Button>
+                </span>
               </div>
             </div>
             <div className="p-4">
