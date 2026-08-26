@@ -313,7 +313,7 @@ function CoHostVideoTile({
   }, [stream, muted]);
 
   return (
-    <div className="relative min-h-[110px] flex-1 overflow-hidden rounded-2xl bg-black lg:min-h-0">
+    <div className="relative min-h-0 overflow-hidden rounded-2xl bg-black">
       <video
         ref={videoRef}
         autoPlay
@@ -401,11 +401,12 @@ function LiveRoomPage() {
   const [heartBurst, setHeartBurst] = useState(0);
   const [soundOn, setSoundOn] = useState(false);
   const [replyingTo, setReplyingTo] = useState<LiveChatEntry | null>(null);
-  // Chat panel starts collapsed on mobile so the video isn't obstructed; the
-  // user can expand it to read/scroll comments and collapse it again. On
-  // desktop (lg+) the panel is always shown docked to the side, unaffected
-  // by this flag.
-  const [chatCollapsed, setChatCollapsed] = useState(true);
+  // Chat panel is expanded by default so comments are visible right away.
+  // It auto-collapses once a co-host joins (2+ people live) to make room
+  // for the split video grid, but the user can still expand/collapse it
+  // manually at any time afterward.
+  const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [chatAutoCollapsed, setChatAutoCollapsed] = useState(false);
   const [isCoHost, setIsCoHost] = useState(false);
   const [joinRequestPending, setJoinRequestPending] = useState(false);
   const [joinRequests, setJoinRequests] = useState<
@@ -470,6 +471,19 @@ function LiveRoomPage() {
       ? coHostRoom.coHostStreams
       : [];
   const hasCoHosts = allCoHostStreams.length > 0;
+
+  // Auto-collapse the comments panel the first time a co-host joins (2+
+  // streamers live) so the split video grid gets room; only collapse it
+  // automatically once so a user re-expanding it isn't immediately
+  // re-collapsed by this effect on the next render.
+  useEffect(() => {
+    if (hasCoHosts && !chatAutoCollapsed) {
+      setChatCollapsed(true);
+      setChatAutoCollapsed(true);
+    } else if (!hasCoHosts && chatAutoCollapsed) {
+      setChatAutoCollapsed(false);
+    }
+  }, [hasCoHosts, chatAutoCollapsed]);
 
   // The "main" video: host's local, co-host's local (self-view), or viewer's remote
   const activeMediaStream = isCoHost ? coHostRoom.localStream : isHost ? localStream : remoteStream;
@@ -863,7 +877,7 @@ function LiveRoomPage() {
         <ArrowLeft className="size-5" />
       </button>
 
-      <div className="relative w-full flex-1 bg-black lg:flex-none lg:basis-0 lg:grow-[3]">
+      <div className="relative w-full flex-1 bg-black lg:flex-none lg:basis-0 lg:grow-[3] lg:mr-1.5">
         <div className="relative size-full">
           {isOver ? (
             <div className="flex size-full flex-col items-center justify-center gap-2 text-white/70">
@@ -880,18 +894,58 @@ function LiveRoomPage() {
             </div>
           ) : (
             <>
-              {/* ── Split-screen layout when there are co-hosts ── */}
+              {/* ── Split-screen grid when there are co-hosts ──
+                  Self view always renders LAST (bottom-most slot); every
+                  other participant renders BEFORE it, so on each person's
+                  own device their own camera sits at the bottom while
+                  everyone else appears above/first — matches how the
+                  reference app lays it out.
+                  The grid itself adapts to the participant count so it
+                  never produces a tiny/unusable split:
+                    2 people → even 50/50 split (side-by-side on wide
+                      screens, stacked evenly — never shrinking — on
+                      narrow ones)
+                    3 people → 1 tile spans the full top row, the other 2
+                      split the bottom row in half
+                    4+ people → even auto-fit grid, each tile fills its
+                      cell fully (no leftover black space when someone
+                      leaves — the grid just reflows around the remaining
+                      tiles) */}
               {hasCoHosts ? (
-                <div className="flex h-full w-full flex-col gap-1.5 bg-black p-1.5 lg:flex-row">
-                  {/* Main video (host self / co-host self) */}
-                  <div className="relative flex-[2] min-h-0 overflow-hidden rounded-2xl bg-black/40">
+                <div
+                  className={cn(
+                    "grid h-full w-full gap-1.5 bg-black p-1.5",
+                    allCoHostStreams.length === 1
+                      ? "grid-cols-1 grid-rows-2 lg:grid-cols-2 lg:grid-rows-1"
+                      : allCoHostStreams.length === 2
+                        ? "grid-cols-2 grid-rows-2 [&>*:first-child]:col-span-2"
+                        : "auto-rows-fr grid-cols-2",
+                  )}
+                >
+                  {/* Every other participant, in the order they joined */}
+                  {allCoHostStreams.map((cs) => {
+                    const coHostInfo = coHostList.find((c) => c._id === cs.participantId);
+                    return (
+                      <CoHostVideoTile
+                        key={cs.participantId}
+                        stream={cs.stream}
+                        label={coHostInfo?.username}
+                        muted={false}
+                      />
+                    );
+                  })}
+                  {/* Self view — always last, so it sits in the bottom-most grid cell */}
+                  <div className="relative min-h-0 overflow-hidden rounded-2xl bg-black/40">
                     <video
                       ref={setVideoRef}
                       autoPlay
                       muted
                       playsInline
-                      className="size-full object-cover"
+                      className="absolute inset-0 size-full object-cover"
                     />
+                    <span className="absolute bottom-2 left-2 z-10 rounded-md bg-black/60 px-2 py-0.5 text-xs font-bold text-white backdrop-blur">
+                      You
+                    </span>
                     {!connected && !isCoHost && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white/80">
                         <Video className="size-8 animate-pulse" />
@@ -900,20 +954,6 @@ function LiveRoomPage() {
                         </p>
                       </div>
                     )}
-                  </div>
-                  {/* Co-host video strip */}
-                  <div className="flex min-h-0 gap-1.5 lg:w-[220px] lg:flex-col">
-                    {allCoHostStreams.map((cs) => {
-                      const coHostInfo = coHostList.find((c) => c._id === cs.participantId);
-                      return (
-                        <CoHostVideoTile
-                          key={cs.participantId}
-                          stream={cs.stream}
-                          label={coHostInfo?.username}
-                          muted={false}
-                        />
-                      );
-                    })}
                   </div>
                 </div>
               ) : (
@@ -1099,7 +1139,7 @@ function LiveRoomPage() {
             </div>
 
             {/* Gift / Join — desktop inline; mobile is handled in the input row */}
-            <div className="hidden items-center gap-1.5 lg:flex">
+            <div className="hidden items-center gap-1 lg:flex">
               {!isHost && !isOver && stream.giftsEnabled && (
                 <Button variant="brand" size="sm" onClick={() => setGiftPickerOpen((v) => !v)}>
                   <Gift className="size-4" /> Gift
@@ -1402,7 +1442,7 @@ function LiveRoomPage() {
 
           {/* ── Comment input row ── */}
           {!isOver && (
-            <div className="flex items-center gap-2 border-t border-white/10 p-2.5">
+            <div className="flex items-center gap-1.5 border-t border-white/10 p-2.5">
               {replyingTo && (
                 <div className="flex w-full items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-[11px] text-white/80">
                   <Reply className="size-3 shrink-0" />
@@ -1427,53 +1467,58 @@ function LiveRoomPage() {
                     placeholder="Send a message…"
                     className="h-9 min-w-0 flex-1 rounded-full border border-white/20 bg-white/10 px-3 text-sm text-white placeholder:text-white/50 outline-none focus:border-white/40"
                   />
-                  <Button
-                    size="icon"
-                    variant="brand"
-                    onClick={sendChat}
-                    disabled={!draft.trim()}
-                    className="shrink-0"
-                    aria-label="Send message"
-                  >
-                    <Send className="size-4" />
-                  </Button>
-                  {/* Mobile: Gift + Join buttons inline */}
-                  {!isHost && !isOver && stream.giftsEnabled && (
+                  {/* Tight cluster: Send / Gift / Join / Like — small gap between
+                      them so the input keeps as much width as possible, while
+                      still not touching each other. */}
+                  <div className="flex shrink-0 items-center gap-1">
                     <Button
-                      variant="ghost"
                       size="icon"
-                      className="shrink-0 text-white hover:bg-white/15 lg:hidden"
-                      onClick={() => setGiftPickerOpen((v) => !v)}
-                      aria-label="Send gift"
+                      variant="brand"
+                      onClick={sendChat}
+                      disabled={!draft.trim()}
+                      className="shrink-0"
+                      aria-label="Send message"
                     >
-                      <Gift className="size-4" />
+                      <Send className="size-4" />
                     </Button>
-                  )}
-                  {!isHost && !isCoHost && !isOver && activeIdentity && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="shrink-0 text-white hover:bg-white/15 lg:hidden"
-                      onClick={requestJoinLive}
-                      disabled={joinRequestPending}
-                      aria-label="Request to join live"
+                    {/* Mobile: Gift + Join buttons inline */}
+                    {!isHost && !isOver && stream.giftsEnabled && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0 text-white hover:bg-white/15 lg:hidden"
+                        onClick={() => setGiftPickerOpen((v) => !v)}
+                        aria-label="Send gift"
+                      >
+                        <Gift className="size-4" />
+                      </Button>
+                    )}
+                    {!isHost && !isCoHost && !isOver && activeIdentity && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0 text-white hover:bg-white/15 lg:hidden"
+                        onClick={requestJoinLive}
+                        disabled={joinRequestPending}
+                        aria-label="Request to join live"
+                      >
+                        {joinRequestPending ? (
+                          <Radio className="size-4 animate-pulse" />
+                        ) : (
+                          <LogIn className="size-4" />
+                        )}
+                      </Button>
+                    )}
+                    {/* Like button — visible on all screen sizes, vertically centered with other buttons */}
+                    <button
+                      type="button"
+                      onClick={sendReaction}
+                      aria-label="Send a like"
+                      className="press shrink-0 grid size-9 place-items-center rounded-full bg-white/15 text-white"
                     >
-                      {joinRequestPending ? (
-                        <Radio className="size-4 animate-pulse" />
-                      ) : (
-                        <LogIn className="size-4" />
-                      )}
-                    </Button>
-                  )}
-                  {/* Like button — visible on all screen sizes, vertically centered with other buttons */}
-                  <button
-                    type="button"
-                    onClick={sendReaction}
-                    aria-label="Send a like"
-                    className="press shrink-0 grid size-9 place-items-center rounded-full bg-white/15 text-white"
-                  >
-                    <Heart className="size-4" />
-                  </button>
+                      <Heart className="size-4" />
+                    </button>
+                  </div>
                 </>
               )}
               {replyingTo && (
