@@ -702,7 +702,7 @@ function LiveRoomPage() {
   function acceptJoinRequest(requestorId: string, requestorSocketId: string) {
     const socket = getLiveSocket();
     if (!socket) return;
-    socket.emit("live:accept-join-request", { streamId, viewerId: requestorId, viewerSocketId });
+    socket.emit("live:accept-join-request", { streamId, viewerId: requestorId, viewerSocketId: requestorSocketId });
     setJoinRequests((prev) => prev.filter((r) => r.requestorId !== requestorId));
     toast.success("Co-host accepted!");
   }
@@ -836,6 +836,15 @@ function LiveRoomPage() {
             )}
 
             <FloatingHearts burst={heartBurst} />
+
+            {/* ── Incoming co-host join requests (host only) ── */}
+            {isHost && !isOver && joinRequests[0] && (
+              <JoinRequestDialog
+                request={joinRequests[0]}
+                onAccept={acceptJoinRequest}
+                onReject={rejectJoinRequest}
+              />
+            )}
 
             {!isOver && (
               <div className="absolute top-3 left-14 z-10 flex flex-wrap items-center gap-2">
@@ -1239,6 +1248,9 @@ function LiveRoomPage() {
           )}
         </div>
       </div>
+
+      <ReportDialog streamId={streamId} open={reportOpen} onOpenChange={setReportOpen} />
+      <AddModeratorDialog streamId={streamId} asStaff={asStaff} open={addModOpen} onOpenChange={setAddModOpen} />
     </div>
   );
 }
