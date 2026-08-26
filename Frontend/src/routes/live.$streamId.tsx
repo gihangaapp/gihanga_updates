@@ -540,8 +540,11 @@ function LiveRoomPage() {
     const onJoinAccepted = (p: { streamId: string }) => {
       if (p.streamId !== streamId) return;
       setJoinRequestPending(false);
-      setIsCoHost(true);
-      toast.success("You joined the live!");
+      setIsCoHost((prev) => {
+        if (prev) return prev; // already a co-host, ignore duplicate
+        toast.success("You joined the live!");
+        return true;
+      });
     };
     const onJoinRejected = (p: { streamId: string; reason: string }) => {
       if (p.streamId !== streamId) return;
@@ -903,19 +906,23 @@ function LiveRoomPage() {
               </div>
             )}
 
-            {!isOver && (
-              <button
-                type="button"
-                onClick={sendReaction}
-                aria-label="Send a like"
-                className="press absolute right-3 bottom-3 z-20 grid size-11 place-items-center rounded-full bg-white/15 text-white backdrop-blur max-lg:hidden"
-              >
-                <Heart className="size-5" />
-              </button>
-            )}
 
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/85 via-black/30 to-transparent pt-4">
-          <div className="pointer-events-auto flex items-center gap-3 p-4">
+
+          {/* Subtle video bottom gradient for visual depth (mobile only) */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] bg-gradient-to-t from-black/40 via-black/15 to-transparent h-28 lg:hidden" />
+        </div>
+      </div>
+
+      {/* ── Chat / interaction panel ── */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex max-h-[36vh] flex-col lg:pointer-events-auto lg:static lg:h-full lg:max-h-none lg:w-[360px] lg:shrink-0 lg:border-l lg:border-white/10 lg:bg-black">
+        <div className="pointer-events-auto flex max-h-[36vh] flex-col rounded-t-2xl bg-black/55 backdrop-blur-md lg:h-full lg:max-h-none lg:rounded-none lg:bg-transparent lg:backdrop-blur-none">
+          {/* PC chat header */}
+          <header className="hidden border-b border-white/10 p-3 lg:flex lg:items-center lg:gap-2">
+            <p className="text-sm font-bold text-white">Live chat</p>
+          </header>
+
+          {/* ── Host info row (avatar, name, follow) ── */}
+          <div className="flex items-center gap-2.5 px-3 py-2">
             <Link to="/profile/$username" params={{ username: stream.host.username }}>
               <GAvatar user={toDisplayUser(stream.host)} size="md" />
             </Link>
@@ -923,7 +930,6 @@ function LiveRoomPage() {
               <UserName user={toDisplayUser(stream.host)} className="text-white [&>span]:text-white" />
               <p className="truncate text-sm text-white/70">{stream.title}</p>
             </div>
-
             {!isHost && (
               <Button
                 variant={following ? "soft" : "default"}
@@ -933,14 +939,15 @@ function LiveRoomPage() {
                 {following ? "Following" : "Follow"}
               </Button>
             )}
+          </div>
 
+          {/* ── Action buttons row (Gift, Join Live, More) — PC only here; mobile shows them in input row ── */}
+          <div className="hidden items-center gap-1.5 px-3 pb-2 lg:flex">
             {!isHost && !isOver && stream.giftsEnabled && (
               <Button variant="brand" size="sm" onClick={() => setGiftPickerOpen((v) => !v)}>
                 <Gift className="size-4" /> Gift
               </Button>
             )}
-
-            {/* ── Join Live button (viewer) ── */}
             {!isHost && !isCoHost && !isOver && activeIdentity && (
               <Button
                 variant="brand"
@@ -951,11 +958,10 @@ function LiveRoomPage() {
                 {joinRequestPending ? (
                   <><Radio className="size-4 animate-pulse" /> Requesting…</>
                 ) : (
-                  <><LogIn className="size-4" /> Join Live</>
+                  <><LogIn className="size-4" /> Join</>
                 )}
               </Button>
             )}
-
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon-sm" aria-label="More options" className="text-white hover:bg-white/15 hover:text-white">
@@ -1011,38 +1017,7 @@ function LiveRoomPage() {
             </DropdownMenu>
           </div>
 
-          {isHost && (
-            <div className="pointer-events-auto">
-              <HostEarnings streamId={streamId} isOver={isOver} asStaff={asStaff} />
-            </div>
-          )}
-
-          {giftPickerOpen && (
-            <div className="pointer-events-auto grid grid-cols-4 gap-2 bg-black/40 p-4 backdrop-blur-sm">
-              {GIFT_CATALOG.map((g) => (
-                <button
-                  key={g.id}
-                  type="button"
-                  onClick={() => handleGift(g.id)}
-                  disabled={sendGift.isPending || (walletData?.wallet.kingdomPoints ?? 0) < g.cost}
-                  className="press flex flex-col items-center gap-1 rounded-xl border border-white/20 bg-black/30 p-3 text-white hover:bg-white/10 disabled:opacity-40"
-                >
-                  <span className="text-2xl">{g.emoji}</span>
-                  <span className="text-xs font-bold">{g.cost} pts</span>
-                </button>
-              ))}
-            </div>
-          )}
-          </div>
-        </div>
-      </div>
-
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex max-h-[12vh] flex-col lg:pointer-events-auto lg:static lg:h-full lg:max-h-none lg:w-[360px] lg:shrink-0 lg:border-l lg:border-white/10 lg:bg-black">
-        <div className="pointer-events-auto flex max-h-[12vh] flex-col rounded-t-2xl bg-black/55 backdrop-blur-md pt-4 lg:h-full lg:max-h-none lg:rounded-none lg:bg-transparent lg:backdrop-blur-none lg:pt-0">
-          <header className="hidden border-b border-white/10 p-3 lg:block">
-            <p className="text-sm font-bold text-white">Live chat</p>
-          </header>
-
+          {/* Pinned comment */}
           {pinned && (
             <div className="flex items-start gap-2 border-b border-white/10 bg-primary/20 p-2.5 text-xs">
               <Pin className="mt-0.5 size-3.5 shrink-0 text-primary" />
@@ -1061,8 +1036,8 @@ function LiveRoomPage() {
               )}
             </div>
           )}
-
-          <div className="flex-1 space-y-2.5 overflow-y-auto p-3">
+          {/* Chat messages — min-h-0 + flex-1 ensures scroll when content overflows */}
+          <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3">
             {visibleMessages.length === 0 && (
               <p className="py-6 text-center text-xs text-white/60">Say hello 👋</p>
             )}
@@ -1152,6 +1127,33 @@ function LiveRoomPage() {
             ))}
             <div ref={chatEndRef} />
           </div>
+
+          {/* Gift picker */}
+          {giftPickerOpen && (
+            <div className="grid grid-cols-4 gap-2 border-t border-white/10 bg-black/40 p-3 backdrop-blur-sm">
+              {GIFT_CATALOG.map((g) => (
+                <button
+                  key={g.id}
+                  type="button"
+                  onClick={() => handleGift(g.id)}
+                  disabled={sendGift.isPending || (walletData?.wallet.kingdomPoints ?? 0) < g.cost}
+                  className="press flex flex-col items-center gap-1 rounded-xl border border-white/20 bg-black/30 p-3 text-white hover:bg-white/10 disabled:opacity-40"
+                >
+                  <span className="text-2xl">{g.emoji}</span>
+                  <span className="text-xs font-bold">{g.cost} pts</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Host earnings */}
+          {isHost && (
+            <div className="pointer-events-auto">
+              <HostEarnings streamId={streamId} isOver={isOver} asStaff={asStaff} />
+            </div>
+          )}
+
+          {/* ── Comment input row ── */}
           {!isOver && (
             <div className="flex items-center gap-2 border-t border-white/10 p-2.5">
               {replyingTo && (
@@ -1182,11 +1184,30 @@ function LiveRoomPage() {
                   >
                     <Send className="size-4" />
                   </Button>
+                  {/* Mobile: Gift + Join buttons inline */}
+                  {!isHost && !isOver && stream.giftsEnabled && (
+                    <Button variant="ghost" size="icon" className="shrink-0 text-white hover:bg-white/15 lg:hidden" onClick={() => setGiftPickerOpen((v) => !v)} aria-label="Send gift">
+                      <Gift className="size-4" />
+                    </Button>
+                  )}
+                  {!isHost && !isCoHost && !isOver && activeIdentity && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0 text-white hover:bg-white/15 lg:hidden"
+                      onClick={requestJoinLive}
+                      disabled={joinRequestPending}
+                      aria-label="Request to join live"
+                    >
+                      {joinRequestPending ? <Radio className="size-4 animate-pulse" /> : <LogIn className="size-4" />}
+                    </Button>
+                  )}
+                  {/* Like button — visible on all screen sizes, vertically centered with other buttons */}
                   <button
                     type="button"
                     onClick={sendReaction}
                     aria-label="Send a like"
-                    className="press shrink-0 grid size-9 place-items-center rounded-full bg-white/15 text-white lg:hidden"
+                    className="press shrink-0 grid size-9 place-items-center rounded-full bg-white/15 text-white"
                   >
                     <Heart className="size-4" />
                   </button>
@@ -1218,27 +1239,6 @@ function LiveRoomPage() {
           )}
         </div>
       </div>
-
-      {/* ── Join request popup (host) ── */}
-      {joinRequests.length > 0 && isHost && !isOver && (
-        <JoinRequestDialog
-          request={joinRequests[0]}
-          onAccept={acceptJoinRequest}
-          onReject={rejectJoinRequest}
-        />
-      )}
-
-      {/* ── Co-host pending indicator (viewer) ── */}
-      {joinRequestPending && !isHost && !isCoHost && !isOver && (
-        <div className="pointer-events-auto absolute bottom-24 right-3 z-20 flex items-center gap-2 rounded-xl border border-white/20 bg-black/80 px-3 py-2 text-xs text-white backdrop-blur lg:bottom-16">
-          <Radio className="size-3 animate-pulse" />
-          Waiting for host to accept…
-        </div>
-      )}
-
-      <ReportDialog streamId={streamId} open={reportOpen} onOpenChange={setReportOpen} />
-      <AddModeratorDialog streamId={streamId} asStaff={asStaff} open={addModOpen} onOpenChange={setAddModOpen} />
-    </div>
   );
 }
 

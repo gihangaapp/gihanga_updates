@@ -129,20 +129,34 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
 
   socket.on("live:accept-join-request", async ({ streamId, viewerId, viewerSocketId }: { streamId: string; viewerId: string; viewerSocketId: string }) => {
     if (!userId) return;
-    const stream = await LiveStream.findOne({ _id: streamId, host: userId, status: "live" });
-    if (!stream) return;
-    if (stream.coHosts.some((c) => String(c) === viewerId)) return;
-    if (stream.coHosts.length >= 3) return;
-    await LiveStream.findByIdAndUpdate(streamId, { $push: { coHosts: viewerId } });
-    // Notify the viewer they are accepted
-    io.to(`user:${viewerId}`).emit("live:join-request-accepted", { streamId });
-    // Broadcast to the room so everyone updates the co-host list
-    const coHostUser = await User.findById(viewerId).select("name username avatarHue avatarUrl isCreator verified");
-    io.to(`live:${streamId}`).emit("live:co-host:joined", {
-      streamId,
-      coHostId: viewerId,
-      coHost: coHostUser ? { _id: coHostUser._id, name: coHostUser.name, username: coHostUser.username, avatarHue: coHostUser.avatarHue, avatarUrl: coHostUser.avatarUrl, isCreator: coHostUser.isCreator, verified: coHostUser.verified } : null,
-    });
+    try {
+      const stream = await LiveStream.findOne({ _id: streamId, host: userId, status: "live" });
+      if (!stream) return;
+      if (stream.coHosts.some((c) => String(c) === viewerId)) return;
+      if (stream.coHosts.length >= 3) return;
+      await LiveStream.findByIdAndUpdate(streamId, { $push: { coHosts: viewerId } });
+      // Notify the viewer they are accepted — use viewerSocketId directly for
+      // reliable delivery (the user: room may not contain the target if the
+      // socket reconnected after the room was joined).
+      if (viewerSocketId) {
+        io.to(viewerSocketId).emit("live:join-request-accepted", { streamId });
+      }
+      // Also emit via user room as a fallback in case the socket ID changed
+      io.to(`user:${viewerId}`).emit("live:join-request-accepted", { streamId });
+      // Broadcast to the room so everyone updates the co-host list
+      const coHostUser = await User.findById(viewerId).select("name username avatarHue avatarUrl isCreator verified");
+      io.to(`live:${streamId}`).emit("live:co-host:joined", {
+        streamId,
+        coHostId: viewerId,
+        coHost: coHostUser ? { _id: coHostUser._id, name: coHostUser.name, username: coHostUser.username, avatarHue: coHostUser.avatarHue, avatarUrl: coHostUser.avatarUrl, isCreator: coHostUser.isCreator, verified: coHostUser.verified } : null,
+      });
+    } catch (err) {
+      console.error("[live:accept-join-request] Error:", err);
+      // Still try to notify the viewer that something went wrong
+      if (viewerSocketId) {
+        io.to(viewerSocketId).emit("live:join-request-rejected", { streamId, reason: "Something went wrong. Please try again." });
+      }
+    }
   });
 
   socket.on("live:reject-join-request", async ({ streamId, viewerId }: { streamId: string; viewerId: string }) => {
