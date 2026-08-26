@@ -1239,6 +1239,7 @@ function LiveRoomPage() {
           )}
         </div>
       </div>
+    </div>
   );
 }
 
