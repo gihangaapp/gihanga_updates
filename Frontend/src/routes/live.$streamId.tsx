@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
+  ChevronDown,
+  ChevronUp,
   DollarSign,
   Flag,
   Gift,
@@ -63,18 +65,34 @@ import {
 } from "@/hooks/use-live";
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { useToggleBlock, useBlockedSet } from "@/hooks/use-blocks";
-import { useBrowserLiveRoom, useCoHostLiveRoom, useHostCoHostMesh, type CoHostRemoteStream } from "@/lib/browser-live";
+import {
+  useBrowserLiveRoom,
+  useCoHostLiveRoom,
+  useHostCoHostMesh,
+  type CoHostRemoteStream,
+} from "@/lib/browser-live";
 import { getLiveSocket } from "@/lib/socket-client";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/live/$streamId")({
   head: () => ({
-    meta: [{ title: "Live — Gihanga Updates" }, { name: "description", content: "Watch a live stream on Gihanga Updates." }],
+    meta: [
+      { title: "Live — Gihanga Updates" },
+      { name: "description", content: "Watch a live stream on Gihanga Updates." },
+    ],
   }),
   component: LiveRoomPage,
 });
 
-type Author = { _id: string; name: string; username: string; avatarHue: number; avatarUrl: string | null; verified: boolean; isCreator: boolean };
+type Author = {
+  _id: string;
+  name: string;
+  username: string;
+  avatarHue: number;
+  avatarUrl: string | null;
+  verified: boolean;
+  isCreator: boolean;
+};
 
 function toDisplayUser(u: Author) {
   return {
@@ -119,7 +137,15 @@ function FloatingHearts({ burst }: { burst: number }) {
   );
 }
 
-function ReportDialog({ streamId, open, onOpenChange }: { streamId: string; open: boolean; onOpenChange: (v: boolean) => void }) {
+function ReportDialog({
+  streamId,
+  open,
+  onOpenChange,
+}: {
+  streamId: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
   const reportLive = useReportLive(streamId);
   const [reason, setReason] = useState("Harassment");
   const reasons = ["Harassment", "Spam", "Nudity", "Misinformation", "Violence", "Other"];
@@ -138,7 +164,9 @@ function ReportDialog({ streamId, open, onOpenChange }: { streamId: string; open
               onClick={() => setReason(r)}
               className={cn(
                 "rounded-xl border px-3.5 py-2.5 text-left text-sm font-semibold",
-                reason === r ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground",
+                reason === r
+                  ? "border-primary bg-primary-soft text-primary"
+                  : "border-border text-muted-foreground",
               )}
             >
               {r}
@@ -167,7 +195,17 @@ function ReportDialog({ streamId, open, onOpenChange }: { streamId: string; open
   );
 }
 
-function AddModeratorDialog({ streamId, asStaff, open, onOpenChange }: { streamId: string; asStaff: boolean; open: boolean; onOpenChange: (v: boolean) => void }) {
+function AddModeratorDialog({
+  streamId,
+  asStaff,
+  open,
+  onOpenChange,
+}: {
+  streamId: string;
+  asStaff: boolean;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
   const addMod = useAddModerator(streamId, asStaff);
   const [username, setUsername] = useState("");
 
@@ -243,7 +281,18 @@ function JoinRequestDialog({
   );
 }
 
-function CoHostVideoTile({ stream, label, muted, showControls, micOn, camOn, onToggleMic, onToggleCam, onFlip, onLeave }: {
+function CoHostVideoTile({
+  stream,
+  label,
+  muted,
+  showControls,
+  micOn,
+  camOn,
+  onToggleMic,
+  onToggleCam,
+  onFlip,
+  onLeave,
+}: {
   stream: MediaStream;
   label?: string;
   muted?: boolean;
@@ -264,8 +313,14 @@ function CoHostVideoTile({ stream, label, muted, showControls, micOn, camOn, onT
   }, [stream, muted]);
 
   return (
-    <div className="relative flex-1 min-h-0 overflow-hidden bg-black">
-      <video ref={videoRef} autoPlay playsInline muted={muted ?? false} className="absolute inset-0 size-full object-cover" />
+    <div className="relative min-h-[110px] flex-1 overflow-hidden rounded-2xl bg-black lg:min-h-0">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={muted ?? false}
+        className="absolute inset-0 size-full object-cover"
+      />
       {label && (
         <span className="absolute bottom-2 left-2 rounded-md bg-black/60 px-2 py-0.5 text-xs font-bold text-white backdrop-blur z-10">
           {label}
@@ -274,22 +329,34 @@ function CoHostVideoTile({ stream, label, muted, showControls, micOn, camOn, onT
       {showControls && (
         <div className="absolute bottom-2 right-2 flex items-center gap-1.5 z-10">
           {onToggleMic && (
-            <button onClick={onToggleMic} className="grid size-8 place-items-center rounded-full bg-black/50 text-white backdrop-blur">
+            <button
+              onClick={onToggleMic}
+              className="grid size-8 place-items-center rounded-full bg-black/50 text-white backdrop-blur"
+            >
               {micOn ? <Mic className="size-3.5" /> : <MicOff className="size-3.5" />}
             </button>
           )}
           {onToggleCam && (
-            <button onClick={onToggleCam} className="grid size-8 place-items-center rounded-full bg-black/50 text-white backdrop-blur">
+            <button
+              onClick={onToggleCam}
+              className="grid size-8 place-items-center rounded-full bg-black/50 text-white backdrop-blur"
+            >
               {camOn ? <Video className="size-3.5" /> : <VideoOff className="size-3.5" />}
             </button>
           )}
           {onFlip && (
-            <button onClick={onFlip} className="grid size-8 place-items-center rounded-full bg-black/50 text-white backdrop-blur">
+            <button
+              onClick={onFlip}
+              className="grid size-8 place-items-center rounded-full bg-black/50 text-white backdrop-blur"
+            >
               <SwitchCamera className="size-3.5" />
             </button>
           )}
           {onLeave && (
-            <button onClick={onLeave} className="grid size-8 place-items-center rounded-full bg-red-600/80 text-white backdrop-blur">
+            <button
+              onClick={onLeave}
+              className="grid size-8 place-items-center rounded-full bg-red-600/80 text-white backdrop-blur"
+            >
               <PhoneOff className="size-3.5" />
             </button>
           )}
@@ -334,9 +401,16 @@ function LiveRoomPage() {
   const [heartBurst, setHeartBurst] = useState(0);
   const [soundOn, setSoundOn] = useState(false);
   const [replyingTo, setReplyingTo] = useState<LiveChatEntry | null>(null);
+  // Chat panel starts collapsed on mobile so the video isn't obstructed; the
+  // user can expand it to read/scroll comments and collapse it again. On
+  // desktop (lg+) the panel is always shown docked to the side, unaffected
+  // by this flag.
+  const [chatCollapsed, setChatCollapsed] = useState(true);
   const [isCoHost, setIsCoHost] = useState(false);
   const [joinRequestPending, setJoinRequestPending] = useState(false);
-  const [joinRequests, setJoinRequests] = useState<{ requestorId: string; requestorSocketId: string; requestor: Author }[]>([]);
+  const [joinRequests, setJoinRequests] = useState<
+    { requestorId: string; requestorSocketId: string; requestor: Author }[]
+  >([]);
   const [coHostList, setCoHostList] = useState<Author[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -344,12 +418,13 @@ function LiveRoomPage() {
   const stream = data?.stream as any;
   const isHost = Boolean(
     activeIdentity &&
-      stream &&
-      (stream.host._id === activeIdentity.id ||
-        stream.host.username.trim().toLowerCase() === activeIdentity.username.trim().toLowerCase()),
+    stream &&
+    (stream.host._id === activeIdentity.id ||
+      stream.host.username.trim().toLowerCase() === activeIdentity.username.trim().toLowerCase()),
   );
   const isMod = Boolean(
-    activeIdentity && stream?.moderators?.some((m: Author) => m.username === activeIdentity.username),
+    activeIdentity &&
+    stream?.moderators?.some((m: Author) => m.username === activeIdentity.username),
   );
   const canModerate = isHost || isMod;
   const isOver = stream ? stream.status !== "live" || Boolean(ended) : false;
@@ -371,11 +446,12 @@ function LiveRoomPage() {
   });
 
   // Host-side co-host mesh: when host, connect to all accepted co-hosts
-  const { coHostStreams: hostCoHostStreams, removeCoHostStream: hostRemoveCoHost } = useHostCoHostMesh({
-    streamId,
-    hostLocalStream: localStream,
-    enabled: isHost && !isOver,
-  });
+  const { coHostStreams: hostCoHostStreams, removeCoHostStream: hostRemoveCoHost } =
+    useHostCoHostMesh({
+      streamId,
+      hostLocalStream: localStream,
+      enabled: isHost && !isOver,
+    });
 
   // Co-host mode: when viewer becomes co-host
   const coHostRoom = useCoHostLiveRoom({
@@ -388,7 +464,11 @@ function LiveRoomPage() {
   const inviteFollowers = useInviteFollowers(streamId, asStaff);
 
   // Co-host streams: host sees hostCoHostStreams, co-host sees coHostRoom.coHostStreams
-  const allCoHostStreams: CoHostRemoteStream[] = isHost ? hostCoHostStreams : isCoHost ? coHostRoom.coHostStreams : [];
+  const allCoHostStreams: CoHostRemoteStream[] = isHost
+    ? hostCoHostStreams
+    : isCoHost
+      ? coHostRoom.coHostStreams
+      : [];
   const hasCoHosts = allCoHostStreams.length > 0;
 
   // The "main" video: host's local, co-host's local (self-view), or viewer's remote
@@ -400,16 +480,19 @@ function LiveRoomPage() {
   // Callback ref attaches the current stream as soon as the video node mounts.
   // Stabilized with useCallback so React does NOT call it with null on every parent re-render
   // (which would cause a brief black flash each time chat/likes update state).
-  const setVideoRef = useCallback((node: HTMLVideoElement | null) => {
-    videoRef.current = node;
-    if (node) {
-      node.srcObject = activeMediaStream ?? null;
-      node.muted = true; // Always start muted for autoplay; sound is toggled via ref
-      node.volume = 1;
-      // Mirror self-view for host and co-host
-      node.style.transform = (isHost || isCoHost) ? "scaleX(-1)" : "";
-    }
-  }, [activeMediaStream, isHost, isCoHost]);
+  const setVideoRef = useCallback(
+    (node: HTMLVideoElement | null) => {
+      videoRef.current = node;
+      if (node) {
+        node.srcObject = activeMediaStream ?? null;
+        node.muted = true; // Always start muted for autoplay; sound is toggled via ref
+        node.volume = 1;
+        // Mirror self-view for host and co-host
+        node.style.transform = isHost || isCoHost ? "scaleX(-1)" : "";
+      }
+    },
+    [activeMediaStream, isHost, isCoHost],
+  );
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -421,7 +504,7 @@ function LiveRoomPage() {
     // Control muted via ref only (not React prop) to prevent DOM thrashing / flash
     videoRef.current.muted = isHost || isCoHost || !soundOn;
     videoRef.current.volume = 1;
-    videoRef.current.style.transform = (isHost || isCoHost) ? "scaleX(-1)" : "";
+    videoRef.current.style.transform = isHost || isCoHost ? "scaleX(-1)" : "";
     if (activeMediaStream && soundOn && !isHost && !isCoHost) {
       videoRef.current.play().catch(() => {
         toast.error("Tap the sound button again to enable audio");
@@ -470,7 +553,11 @@ function LiveRoomPage() {
       getLiveSocket()?.emit("live:heartbeat", { streamId });
       heartbeatMutateRef.current(undefined, {
         onError: (error: any) => {
-          if (String(error?.message || "").toLowerCase().includes("ended")) {
+          if (
+            String(error?.message || "")
+              .toLowerCase()
+              .includes("ended")
+          ) {
             setEnded("This stream has ended");
           }
         },
@@ -533,9 +620,21 @@ function LiveRoomPage() {
     };
 
     // ── Co-host join-request listeners ──
-    const onJoinRequest = (p: { streamId: string; requestorId: string; requestorSocketId: string; requestor: Author }) => {
+    const onJoinRequest = (p: {
+      streamId: string;
+      requestorId: string;
+      requestorSocketId: string;
+      requestor: Author;
+    }) => {
       if (p.streamId !== streamId) return;
-      setJoinRequests((prev) => [...prev, { requestorId: p.requestorId, requestorSocketId: p.requestorSocketId, requestor: p.requestor }]);
+      setJoinRequests((prev) => [
+        ...prev,
+        {
+          requestorId: p.requestorId,
+          requestorSocketId: p.requestorSocketId,
+          requestor: p.requestor,
+        },
+      ]);
     };
     const onJoinAccepted = (p: { streamId: string }) => {
       if (p.streamId !== streamId) return;
@@ -562,6 +661,13 @@ function LiveRoomPage() {
       setCoHostList((prev) => prev.filter((c) => c._id !== p.coHostId));
       if (isHost) hostRemoveCoHost(p.coHostId);
       if (isCoHost) coHostRoom.removeCoHostStream(p.coHostId);
+      // If the server actually evicted *us* (e.g. the disconnect grace period
+      // ran out because we were genuinely offline), reflect that locally too
+      // instead of leaving the UI stuck believing we're still a co-host.
+      if (activeIdentity && p.coHostId === activeIdentity.id) {
+        setIsCoHost(false);
+        setJoinRequestPending(false);
+      }
     };
 
     socket.on("live:chat", onChat);
@@ -702,7 +808,11 @@ function LiveRoomPage() {
   function acceptJoinRequest(requestorId: string, requestorSocketId: string) {
     const socket = getLiveSocket();
     if (!socket) return;
-    socket.emit("live:accept-join-request", { streamId, viewerId: requestorId, viewerSocketId: requestorSocketId });
+    socket.emit("live:accept-join-request", {
+      streamId,
+      viewerId: requestorId,
+      viewerSocketId: requestorSocketId,
+    });
     setJoinRequests((prev) => prev.filter((r) => r.requestorId !== requestorId));
     toast.success("Co-host accepted!");
   }
@@ -755,167 +865,196 @@ function LiveRoomPage() {
 
       <div className="relative w-full flex-1 bg-black lg:flex-none lg:basis-0 lg:grow-[3]">
         <div className="relative size-full">
-            {isOver ? (
-              <div className="flex size-full flex-col items-center justify-center gap-2 text-white/70">
-                <VideoOff className="size-10" />
-                <p className="font-semibold">{ended || "This stream has ended"}</p>
-                <Button variant="outline" className="mt-2 border-white/30 text-white" asChild>
-                  <Link to="/live">Browse other streams</Link>
-                </Button>
-              </div>
-            ) : browserError ? (
-              <div className="flex size-full flex-col items-center justify-center gap-2 p-6 text-center text-white/70">
-                <VideoOff className="size-8 text-danger" />
-                <p className="text-sm">{browserError}</p>
-              </div>
-            ) : (
-              <>
-                {/* ── Split-screen layout when there are co-hosts ── */}
-                {hasCoHosts ? (
-                  <div className="flex h-full w-full flex-col lg:flex-row">
-                    {/* Main video (host self / co-host self) */}
-                    <div className="relative flex-[2] min-h-0">
-                      <video
-                        ref={setVideoRef}
-                        autoPlay
-                        muted
-                        playsInline
-                        className="size-full object-cover"
-                      />
-                      {!connected && !isCoHost && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white/80">
-                          <Video className="size-8 animate-pulse" />
-                          <p className="text-sm">{isHost ? "Starting your camera…" : "Connecting…"}</p>
-                        </div>
-                      )}
-                    </div>
-                    {/* Co-host video strip */}
-                    <div className={cn(
-                      "flex min-h-0 gap-px bg-black/50 lg:flex-col",
-                      allCoHostStreams.length === 1 ? "flex-[1]" : allCoHostStreams.length === 2 ? "flex-[1]" : "flex-[1]",
-                    )}>
-                      {allCoHostStreams.map((cs) => {
-                        const coHostInfo = coHostList.find((c) => c._id === cs.participantId);
-                        return (
-                          <CoHostVideoTile
-                            key={cs.participantId}
-                            stream={cs.stream}
-                            label={coHostInfo?.username}
-                            muted={false}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : (
-                  /* ── Single video (no co-hosts) ── */
-                  <>
+          {isOver ? (
+            <div className="flex size-full flex-col items-center justify-center gap-2 text-white/70">
+              <VideoOff className="size-10" />
+              <p className="font-semibold">{ended || "This stream has ended"}</p>
+              <Button variant="outline" className="mt-2 border-white/30 text-white" asChild>
+                <Link to="/live">Browse other streams</Link>
+              </Button>
+            </div>
+          ) : browserError ? (
+            <div className="flex size-full flex-col items-center justify-center gap-2 p-6 text-center text-white/70">
+              <VideoOff className="size-8 text-danger" />
+              <p className="text-sm">{browserError}</p>
+            </div>
+          ) : (
+            <>
+              {/* ── Split-screen layout when there are co-hosts ── */}
+              {hasCoHosts ? (
+                <div className="flex h-full w-full flex-col gap-1.5 bg-black p-1.5 lg:flex-row">
+                  {/* Main video (host self / co-host self) */}
+                  <div className="relative flex-[2] min-h-0 overflow-hidden rounded-2xl bg-black/40">
                     <video
                       ref={setVideoRef}
                       autoPlay
                       muted
                       playsInline
-                      className="size-full object-contain"
-                      onClick={() => !isHost && !isCoHost && !soundOn && toggleSound()}
+                      className="size-full object-cover"
                     />
-                    {!connected && (
+                    {!connected && !isCoHost && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white/80">
                         <Video className="size-8 animate-pulse" />
-                        <p className="text-sm">{isHost ? "Starting your camera…" : "Connecting to the stream…"}</p>
+                        <p className="text-sm">
+                          {isHost ? "Starting your camera…" : "Connecting…"}
+                        </p>
                       </div>
                     )}
-                    {!isHost && !isCoHost && connected && !remoteStream && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white/80">
-                        <Video className="size-8" />
-                        <p className="text-sm">Waiting for the host's video…</p>
-                      </div>
-                    )}
-                  </>
-                )}
-              </>
-            )}
+                  </div>
+                  {/* Co-host video strip */}
+                  <div className="flex min-h-0 gap-1.5 lg:w-[220px] lg:flex-col">
+                    {allCoHostStreams.map((cs) => {
+                      const coHostInfo = coHostList.find((c) => c._id === cs.participantId);
+                      return (
+                        <CoHostVideoTile
+                          key={cs.participantId}
+                          stream={cs.stream}
+                          label={coHostInfo?.username}
+                          muted={false}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                /* ── Single video (no co-hosts) ── */
+                <>
+                  <video
+                    ref={setVideoRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className="size-full object-contain"
+                    onClick={() => !isHost && !isCoHost && !soundOn && toggleSound()}
+                  />
+                  {!connected && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white/80">
+                      <Video className="size-8 animate-pulse" />
+                      <p className="text-sm">
+                        {isHost ? "Starting your camera…" : "Connecting to the stream…"}
+                      </p>
+                    </div>
+                  )}
+                  {!isHost && !isCoHost && connected && !remoteStream && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white/80">
+                      <Video className="size-8" />
+                      <p className="text-sm">Waiting for the host's video…</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
 
-            <FloatingHearts burst={heartBurst} />
+          <FloatingHearts burst={heartBurst} />
 
-            {/* ── Incoming co-host join requests (host only) ── */}
-            {isHost && !isOver && joinRequests[0] && (
-              <JoinRequestDialog
-                request={joinRequests[0]}
-                onAccept={acceptJoinRequest}
-                onReject={rejectJoinRequest}
-              />
-            )}
+          {/* ── Incoming co-host join requests (host only) ── */}
+          {isHost && !isOver && joinRequests[0] && (
+            <JoinRequestDialog
+              request={joinRequests[0]}
+              onAccept={acceptJoinRequest}
+              onReject={rejectJoinRequest}
+            />
+          )}
 
-            {!isOver && (
-              <div className="absolute top-3 left-14 z-10 flex flex-wrap items-center gap-2">
-                <span className="flex items-center gap-1.5 rounded-lg bg-danger px-2.5 py-1 text-xs font-bold text-white animate-pulse">
-                  <Radio className="size-3" /> LIVE
+          {!isOver && (
+            <div className="absolute top-3 left-14 z-10 flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1.5 rounded-lg bg-danger px-2.5 py-1 text-xs font-bold text-white animate-pulse">
+                <Radio className="size-3" /> LIVE
+              </span>
+              <span className="flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1 text-xs font-bold text-white">
+                <Users className="size-3" /> {formatCount(viewerCount)}
+              </span>
+              <span className="flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1 text-xs font-bold text-white">
+                <Heart className="size-3 fill-danger text-danger" /> {formatCount(reactionCount)}
+              </span>
+              {stream.totalGifts > 0 && (
+                <span className="flex items-center gap-1 rounded-lg bg-amber-500/90 px-2.5 py-1 text-xs font-bold text-black">
+                  <Gift className="size-3" /> {formatCount(stream.totalGifts)} pts
                 </span>
-                <span className="flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1 text-xs font-bold text-white">
-                  <Users className="size-3" /> {formatCount(viewerCount)}
-                </span>
-                <span className="flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1 text-xs font-bold text-white">
-                  <Heart className="size-3 fill-danger text-danger" /> {formatCount(reactionCount)}
-                </span>
-                {stream.totalGifts > 0 && (
-                  <span className="flex items-center gap-1 rounded-lg bg-amber-500/90 px-2.5 py-1 text-xs font-bold text-black">
-                    <Gift className="size-3" /> {formatCount(stream.totalGifts)} pts
-                  </span>
-                )}
-              </div>
-            )}
+              )}
+            </div>
+          )}
 
-            {!isHost && !isCoHost && !isOver && (
-              <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
-                <Button
-                  size="icon"
-                  variant="secondary"
-                  className="rounded-full"
-                  onClick={toggleSound}
-                  aria-label={soundOn ? "Mute live audio" : "Turn on live audio"}
-                  aria-pressed={soundOn}
-                >
-                  {soundOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
-                </Button>
-              </div>
-            )}
+          {!isHost && !isCoHost && !isOver && (
+            <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
+              <Button
+                size="icon"
+                variant="secondary"
+                className="rounded-full"
+                onClick={toggleSound}
+                aria-label={soundOn ? "Mute live audio" : "Turn on live audio"}
+                aria-pressed={soundOn}
+              >
+                {soundOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+              </Button>
+            </div>
+          )}
 
-            {isHost && !isOver && (
-              <div className="absolute top-16 right-3 z-20 flex items-center gap-2">
-                <Button size="icon" variant="secondary" className="rounded-full" onClick={toggleMic}>
-                  {micOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}
-                </Button>
-                <Button size="icon" variant="secondary" className="rounded-full" onClick={toggleCamera}>
-                  {camOn ? <Video className="size-4" /> : <VideoOff className="size-4" />}
-                </Button>
-                <Button size="icon" variant="secondary" className="rounded-full" onClick={switchCamera}>
-                  <SwitchCamera className="size-4" />
-                </Button>
-                <Button variant="destructive" size="sm" onClick={handleEnd} disabled={endLive.isPending}>
-                  <X className="size-4" /> {endLive.isPending ? "Ending…" : "End stream"}
-                </Button>
-              </div>
-            )}
+          {isHost && !isOver && (
+            <div className="absolute top-16 right-3 z-20 flex items-center gap-2">
+              <Button size="icon" variant="secondary" className="rounded-full" onClick={toggleMic}>
+                {micOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+              </Button>
+              <Button
+                size="icon"
+                variant="secondary"
+                className="rounded-full"
+                onClick={toggleCamera}
+              >
+                {camOn ? <Video className="size-4" /> : <VideoOff className="size-4" />}
+              </Button>
+              <Button
+                size="icon"
+                variant="secondary"
+                className="rounded-full"
+                onClick={switchCamera}
+              >
+                <SwitchCamera className="size-4" />
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleEnd}
+                disabled={endLive.isPending}
+              >
+                <X className="size-4" /> {endLive.isPending ? "Ending…" : "End stream"}
+              </Button>
+            </div>
+          )}
 
-            {/* ── Co-host controls ── */}
-            {isCoHost && !isOver && (
-              <div className="absolute top-16 right-3 z-20 flex items-center gap-2">
-                <Button size="icon" variant="secondary" className="rounded-full" onClick={coHostRoom.toggleMic}>
-                  {coHostRoom.micOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}
-                </Button>
-                <Button size="icon" variant="secondary" className="rounded-full" onClick={coHostRoom.toggleCamera}>
-                  {coHostRoom.camOn ? <Video className="size-4" /> : <VideoOff className="size-4" />}
-                </Button>
-                <Button size="icon" variant="secondary" className="rounded-full" onClick={coHostRoom.flipCamera}>
-                  <SwitchCamera className="size-4" />
-                </Button>
-                <Button variant="destructive" size="sm" onClick={leaveCoHost}>
-                  <PhoneOff className="size-4" /> Leave
-                </Button>
-              </div>
-            )}
-
-
+          {/* ── Co-host controls ── */}
+          {isCoHost && !isOver && (
+            <div className="absolute top-16 right-3 z-20 flex items-center gap-2">
+              <Button
+                size="icon"
+                variant="secondary"
+                className="rounded-full"
+                onClick={coHostRoom.toggleMic}
+              >
+                {coHostRoom.micOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+              </Button>
+              <Button
+                size="icon"
+                variant="secondary"
+                className="rounded-full"
+                onClick={coHostRoom.toggleCamera}
+              >
+                {coHostRoom.camOn ? <Video className="size-4" /> : <VideoOff className="size-4" />}
+              </Button>
+              <Button
+                size="icon"
+                variant="secondary"
+                className="rounded-full"
+                onClick={coHostRoom.flipCamera}
+              >
+                <SwitchCamera className="size-4" />
+              </Button>
+              <Button variant="destructive" size="sm" onClick={leaveCoHost}>
+                <PhoneOff className="size-4" /> Leave
+              </Button>
+            </div>
+          )}
 
           {/* Subtle video bottom gradient for visual depth (mobile only) */}
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] bg-gradient-to-t from-black/40 via-black/15 to-transparent h-28 lg:hidden" />
@@ -924,56 +1063,91 @@ function LiveRoomPage() {
 
       {/* ── Chat / interaction panel ── */}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex max-h-[36vh] flex-col lg:pointer-events-auto lg:static lg:h-full lg:max-h-none lg:w-[360px] lg:shrink-0 lg:border-l lg:border-white/10 lg:bg-black">
-        <div className="pointer-events-auto flex max-h-[36vh] flex-col rounded-t-2xl bg-black/55 backdrop-blur-md lg:h-full lg:max-h-none lg:rounded-none lg:bg-transparent lg:backdrop-blur-none">
+        <div
+          className={cn(
+            "pointer-events-auto flex flex-col lg:h-full lg:max-h-none lg:rounded-none lg:bg-transparent",
+            // Collapsed (mobile): only the host row + toggle are visible, fully transparent.
+            // Expanded (mobile): comments become visible, panel background fades from
+            // transparent at the top to a low-opacity black near the input area.
+            chatCollapsed
+              ? "max-h-none bg-transparent"
+              : "max-h-[36vh] bg-gradient-to-t from-black/60 via-black/20 to-transparent",
+          )}
+        >
           {/* PC chat header */}
           <header className="hidden border-b border-white/10 p-3 lg:flex lg:items-center lg:gap-2">
             <p className="text-sm font-bold text-white">Live chat</p>
           </header>
 
-          {/* ── Host info row (avatar, name, follow) ── */}
+          {/* ── Host info row (avatar, name, title, three-dot menu, follow) ── */}
           <div className="flex items-center gap-2.5 px-3 py-2">
-            <Link to="/profile/$username" params={{ username: stream.host.username }}>
+            <Link
+              to="/profile/$username"
+              params={{ username: stream.host.username }}
+              className="shrink-0"
+            >
               <GAvatar user={toDisplayUser(stream.host)} size="md" />
             </Link>
             <div className="min-w-0 flex-1">
-              <UserName user={toDisplayUser(stream.host)} className="text-white [&>span]:text-white" />
+              <div className="flex items-center gap-1.5">
+                <UserName
+                  user={toDisplayUser(stream.host)}
+                  className="min-w-0 truncate text-white [&>span]:text-white"
+                />
+              </div>
               <p className="truncate text-sm text-white/70">{stream.title}</p>
             </div>
+
+            {/* Gift / Join — desktop inline; mobile is handled in the input row */}
+            <div className="hidden items-center gap-1.5 lg:flex">
+              {!isHost && !isOver && stream.giftsEnabled && (
+                <Button variant="brand" size="sm" onClick={() => setGiftPickerOpen((v) => !v)}>
+                  <Gift className="size-4" /> Gift
+                </Button>
+              )}
+              {!isHost && !isCoHost && !isOver && activeIdentity && (
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={requestJoinLive}
+                  disabled={joinRequestPending}
+                >
+                  {joinRequestPending ? (
+                    <>
+                      <Radio className="size-4 animate-pulse" /> Requesting…
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="size-4" /> Join
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+
             {!isHost && (
               <Button
                 variant={following ? "soft" : "default"}
                 size="sm"
-                onClick={() => followUser.mutate({ username: stream.host.username, follow: !following })}
+                className="shrink-0"
+                onClick={() =>
+                  followUser.mutate({ username: stream.host.username, follow: !following })
+                }
               >
                 {following ? "Following" : "Follow"}
               </Button>
             )}
-          </div>
 
-          {/* ── Action buttons row (Gift, Join Live, More) — PC only here; mobile shows them in input row ── */}
-          <div className="hidden items-center gap-1.5 px-3 pb-2 lg:flex">
-            {!isHost && !isOver && stream.giftsEnabled && (
-              <Button variant="brand" size="sm" onClick={() => setGiftPickerOpen((v) => !v)}>
-                <Gift className="size-4" /> Gift
-              </Button>
-            )}
-            {!isHost && !isCoHost && !isOver && activeIdentity && (
-              <Button
-                variant="brand"
-                size="sm"
-                onClick={requestJoinLive}
-                disabled={joinRequestPending}
-              >
-                {joinRequestPending ? (
-                  <><Radio className="size-4 animate-pulse" /> Requesting…</>
-                ) : (
-                  <><LogIn className="size-4" /> Join</>
-                )}
-              </Button>
-            )}
+            {/* Three-dot actions menu — same row as host name/title on every
+                screen size, including mobile, so it never gets pushed below. */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-sm" aria-label="More options" className="text-white hover:bg-white/15 hover:text-white">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="More options"
+                  className="shrink-0 text-white hover:bg-white/15 hover:text-white"
+                >
                   <MoreVertical className="size-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -1006,12 +1180,17 @@ function LiveRoomPage() {
                         { giftsEnabled: !stream.giftsEnabled },
                         {
                           onSuccess: () =>
-                            toast.success(stream.giftsEnabled ? "Gifts disabled for this stream" : "Gifts enabled"),
+                            toast.success(
+                              stream.giftsEnabled
+                                ? "Gifts disabled for this stream"
+                                : "Gifts enabled",
+                            ),
                         },
                       );
                     }}
                   >
-                    <Settings2 className="size-4" /> {stream.giftsEnabled ? "Disable gifts" : "Enable gifts"}
+                    <Settings2 className="size-4" />{" "}
+                    {stream.giftsEnabled ? "Disable gifts" : "Enable gifts"}
                   </DropdownMenuItem>
                 )}
                 {!isHost && (
@@ -1024,20 +1203,48 @@ function LiveRoomPage() {
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {/* Collapse/expand toggle — mobile only; comments panel is
+                collapsed by default and the user can expand it to read
+                comments, then collapse it again. */}
+            <button
+              type="button"
+              onClick={() => setChatCollapsed((v) => !v)}
+              aria-label={chatCollapsed ? "Expand live chat" : "Collapse live chat"}
+              aria-expanded={!chatCollapsed}
+              className="press grid size-8 shrink-0 place-items-center rounded-full bg-black/40 text-white lg:hidden"
+            >
+              {chatCollapsed ? (
+                <ChevronUp className="size-4" />
+              ) : (
+                <ChevronDown className="size-4" />
+              )}
+            </button>
           </div>
 
           {/* Pinned comment */}
           {pinned && (
-            <div className="flex items-start gap-2 border-b border-white/10 bg-primary/20 p-2.5 text-xs">
+            <div
+              className={cn(
+                "items-start gap-2 border-b border-white/10 bg-primary/20 p-2.5 text-xs lg:flex",
+                chatCollapsed ? "hidden lg:flex" : "flex",
+              )}
+            >
               <Pin className="mt-0.5 size-3.5 shrink-0 text-primary" />
               <p className="min-w-0 flex-1 leading-snug">
-                <span className="font-bold text-white">{pinned.sender.username}</span>{" "}
-                <span className="text-white/80">{pinned.body}</span>
+                <span className="font-bold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]">
+                  {pinned.sender.username}
+                </span>{" "}
+                <span className="text-white/80 [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]">
+                  {pinned.body}
+                </span>
               </p>
               {canModerate && (
                 <button
                   type="button"
-                  onClick={() => getLiveSocket()?.emit("live:unpin-comment", { streamId, commentId: pinned._id })}
+                  onClick={() =>
+                    getLiveSocket()?.emit("live:unpin-comment", { streamId, commentId: pinned._id })
+                  }
                   className="shrink-0 text-white/60 hover:text-white"
                 >
                   <X className="size-3.5" />
@@ -1045,22 +1252,32 @@ function LiveRoomPage() {
               )}
             </div>
           )}
-          {/* Chat messages — min-h-0 + flex-1 ensures scroll when content overflows */}
-          <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3">
+          {/* Chat messages — transparent background, text-only rows with a
+              drop shadow for legibility over any video, matching the
+              reference design. Collapsed by default on mobile (toggle
+              above); always visible on desktop (lg+). */}
+          <div
+            className={cn(
+              "min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3",
+              chatCollapsed ? "hidden lg:block" : "block",
+            )}
+          >
             {visibleMessages.length === 0 && (
-              <p className="py-6 text-center text-xs text-white/60">Say hello 👋</p>
+              <p className="py-6 text-center text-xs text-white/60 [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]">
+                Say hello 👋
+              </p>
             )}
             {visibleMessages.map((m) => (
               <div key={m._id} className="group flex items-start gap-2 text-sm">
                 <GAvatar user={toDisplayUser(m.sender)} size="xs" />
-                <p className="min-w-0 flex-1 leading-snug break-words">
+                <p className="min-w-0 flex-1 leading-snug break-words [text-shadow:0_1px_3px_rgba(0,0,0,0.9)]">
                   <span className="font-bold text-white">{m.sender.username}</span>{" "}
                   {m.isGift ? (
                     <span className="font-semibold text-amber-400">
                       <Heart className="inline size-3.5 fill-amber-400" /> {m.body}
                     </span>
                   ) : (
-                    <span className="text-white/85">{m.body}</span>
+                    <span className="text-white/90">{m.body}</span>
                   )}
                 </p>
                 {(canModerate || m.sender.username !== activeIdentity?.username) && !m.isGift && (
@@ -1076,29 +1293,42 @@ function LiveRoomPage() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-44">
                       {isHost && (
-                        <DropdownMenuItem
-                          onClick={() => startReply(m)}
-                        >
+                        <DropdownMenuItem onClick={() => startReply(m)}>
                           <Reply className="size-3.5" /> Reply
                         </DropdownMenuItem>
                       )}
                       {canModerate && (
                         <>
                           <DropdownMenuItem
-                            onClick={() => getLiveSocket()?.emit("live:pin-comment", { streamId, commentId: m._id })}
+                            onClick={() =>
+                              getLiveSocket()?.emit("live:pin-comment", {
+                                streamId,
+                                commentId: m._id,
+                              })
+                            }
                           >
                             <Pin className="size-3.5" /> Pin
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-danger"
-                            onClick={() => getLiveSocket()?.emit("live:delete-comment", { streamId, commentId: m._id })}
+                            onClick={() =>
+                              getLiveSocket()?.emit("live:delete-comment", {
+                                streamId,
+                                commentId: m._id,
+                              })
+                            }
                           >
                             <Trash2 className="size-3.5" /> Delete
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() =>
                               muteViewer.mutate(m.sender._id, {
-                                onSuccess: (r) => toast.success(r.muted ? `Muted @${m.sender.username}` : `Unmuted @${m.sender.username}`),
+                                onSuccess: (r) =>
+                                  toast.success(
+                                    r.muted
+                                      ? `Muted @${m.sender.username}`
+                                      : `Unmuted @${m.sender.username}`,
+                                  ),
                               })
                             }
                           >
@@ -1108,7 +1338,12 @@ function LiveRoomPage() {
                             className="text-danger"
                             onClick={() =>
                               banViewer.mutate(m.sender._id, {
-                                onSuccess: (r) => toast.success(r.banned ? `Banned @${m.sender.username}` : `Unbanned @${m.sender.username}`),
+                                onSuccess: (r) =>
+                                  toast.success(
+                                    r.banned
+                                      ? `Banned @${m.sender.username}`
+                                      : `Unbanned @${m.sender.username}`,
+                                  ),
                               })
                             }
                           >
@@ -1121,7 +1356,10 @@ function LiveRoomPage() {
                         <DropdownMenuItem
                           onClick={() =>
                             toggleBlock.mutate(
-                              { username: m.sender.username, block: !blockedSet?.has(m.sender.username) },
+                              {
+                                username: m.sender.username,
+                                block: !blockedSet?.has(m.sender.username),
+                              },
                               { onSuccess: () => toast.success(`Blocked @${m.sender.username}`) },
                             )
                           }
@@ -1168,8 +1406,14 @@ function LiveRoomPage() {
               {replyingTo && (
                 <div className="flex w-full items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-[11px] text-white/80">
                   <Reply className="size-3 shrink-0" />
-                  <span>Replying to <b>@{replyingTo.sender.username}</b></span>
-                  <button type="button" onClick={() => setReplyingTo(null)} className="ml-auto shrink-0 text-white/60 hover:text-white">
+                  <span>
+                    Replying to <b>@{replyingTo.sender.username}</b>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setReplyingTo(null)}
+                    className="ml-auto shrink-0 text-white/60 hover:text-white"
+                  >
                     <X className="size-3" />
                   </button>
                 </div>
@@ -1195,7 +1439,13 @@ function LiveRoomPage() {
                   </Button>
                   {/* Mobile: Gift + Join buttons inline */}
                   {!isHost && !isOver && stream.giftsEnabled && (
-                    <Button variant="ghost" size="icon" className="shrink-0 text-white hover:bg-white/15 lg:hidden" onClick={() => setGiftPickerOpen((v) => !v)} aria-label="Send gift">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0 text-white hover:bg-white/15 lg:hidden"
+                      onClick={() => setGiftPickerOpen((v) => !v)}
+                      aria-label="Send gift"
+                    >
                       <Gift className="size-4" />
                     </Button>
                   )}
@@ -1208,7 +1458,11 @@ function LiveRoomPage() {
                       disabled={joinRequestPending}
                       aria-label="Request to join live"
                     >
-                      {joinRequestPending ? <Radio className="size-4 animate-pulse" /> : <LogIn className="size-4" />}
+                      {joinRequestPending ? (
+                        <Radio className="size-4 animate-pulse" />
+                      ) : (
+                        <LogIn className="size-4" />
+                      )}
                     </Button>
                   )}
                   {/* Like button — visible on all screen sizes, vertically centered with other buttons */}
@@ -1250,19 +1504,34 @@ function LiveRoomPage() {
       </div>
 
       <ReportDialog streamId={streamId} open={reportOpen} onOpenChange={setReportOpen} />
-      <AddModeratorDialog streamId={streamId} asStaff={asStaff} open={addModOpen} onOpenChange={setAddModOpen} />
+      <AddModeratorDialog
+        streamId={streamId}
+        asStaff={asStaff}
+        open={addModOpen}
+        onOpenChange={setAddModOpen}
+      />
     </div>
   );
 }
 
-function HostEarnings({ streamId, isOver, asStaff }: { streamId: string; isOver: boolean; asStaff: boolean }) {
+function HostEarnings({
+  streamId,
+  isOver,
+  asStaff,
+}: {
+  streamId: string;
+  isOver: boolean;
+  asStaff: boolean;
+}) {
   const { data } = useLiveEarnings(streamId, true, asStaff);
   if (!data) return null;
   return (
     <div className="flex items-center gap-2 border-t border-border px-4 py-2.5 text-sm">
       <DollarSign className="size-4 text-success" />
       <span className="font-bold text-success">{formatCount(data.totalPoints)} points</span>
-      <span className="text-muted-foreground">earned from {data.giftCount} gifts{isOver ? " this stream" : " so far"}</span>
+      <span className="text-muted-foreground">
+        earned from {data.giftCount} gifts{isOver ? " this stream" : " so far"}
+      </span>
     </div>
   );
 }

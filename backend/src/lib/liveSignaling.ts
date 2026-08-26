@@ -14,6 +14,33 @@ function canModerate(stream: any, userId: string) {
   return String(stream.host) === userId || stream.moderators.some((m: any) => String(m) === userId);
 }
 
+// ── Co-host disconnect grace period ──────────────────────────────────────────
+// A raw socket "disconnect" fires for plenty of harmless, transient reasons
+// (a brief wifi drop, a mobile tab going to background, the client's own
+// token-refresh reconnect cycle in socket-client.ts calling
+// `socket.disconnect().connect()`). None of those mean the person actually
+// chose to leave the live. Previously a disconnect immediately and
+// permanently pulled the user from `coHosts` in the DB, which silently
+// evicted co-hosts seconds after they joined. Now we wait a short grace
+// window before evicting, and cancel the eviction if the same user's socket
+// reconnects and rejoins the stream (via live:join or the co-host WebRTC
+// ready handshake) in the meantime.
+const COHOST_DISCONNECT_GRACE_MS = 12_000;
+const pendingCoHostEvictions = new Map<string, ReturnType<typeof setTimeout>>();
+
+function evictionKey(streamId: string, userId: string) {
+  return `${streamId}:${userId}`;
+}
+
+function cancelPendingEviction(streamId: string, userId: string) {
+  const key = evictionKey(streamId, userId);
+  const timer = pendingCoHostEvictions.get(key);
+  if (timer) {
+    clearTimeout(timer);
+    pendingCoHostEvictions.delete(key);
+  }
+}
+
 /**
  * Everything here is real-time interaction data plus WebRTC signaling. Video/audio
  * itself never rides this socket; browsers connect directly peer-to-peer.
@@ -31,6 +58,10 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
   // ── Viewer joins: Redis-backed presence count, notify the room ──
   socket.on("live:join", async ({ streamId }: { streamId: string }) => {
     if (!userId || !streamId) return;
+
+    // If this user had a pending co-host eviction from a recent disconnect,
+    // rejoining the stream means they reconnected in time — cancel it.
+    cancelPendingEviction(streamId, userId);
 
     // A single authenticated socket can move from one live room to another.
     // Remove its old presence before joining the new room so quick card clicks
@@ -168,6 +199,7 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
 
   socket.on("live:co-host:leave", async ({ streamId }: { streamId: string }) => {
     if (!userId) return;
+    cancelPendingEviction(streamId, userId);
     const stream = await LiveStream.findOneAndUpdate(
       { _id: streamId, status: "live" },
       { $pull: { coHosts: userId } },
@@ -188,6 +220,9 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
     if (!stream) return;
     const isParticipant = String(stream.host) === userId || stream.coHosts.some((c) => String(c) === userId);
     if (!isParticipant) return;
+    // Reconnecting and re-announcing readiness also proves this participant
+    // is back — cancel any pending eviction from an earlier disconnect.
+    cancelPendingEviction(streamId, userId);
     socket.join(`live:${streamId}`);
     // Broadcast to everyone in the room EXCEPT the sender
     socket.to(`live:${streamId}`).emit("live:co-host:webrtc-ready", {
@@ -327,15 +362,30 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
     const streamId = socket.data?.streamId as string | undefined;
     const uid = socket.data?.userId as string | undefined;
     if (streamId && uid) {
-      // If this was a co-host, remove them from the stream's coHosts array
-      const coHostRemoved = await LiveStream.findOneAndUpdate(
-        { _id: streamId, status: "live", coHosts: uid },
-        { $pull: { coHosts: uid } },
-        { new: true },
-      );
-      if (coHostRemoved) {
-        io.to(`live:${streamId}`).emit("live:co-host:left", { streamId, coHostId: uid });
-      }
+      // Don't evict a co-host the instant their socket drops — a raw
+      // disconnect is frequently just a brief network blip, a backgrounded
+      // mobile tab, or the client's own token-refresh reconnect cycle, none
+      // of which mean the person chose to leave. Give them a short grace
+      // window to reconnect (live:join or live:co-host:webrtc-ready cancels
+      // this) before actually pulling them from coHosts.
+      const key = evictionKey(streamId, uid);
+      cancelPendingEviction(streamId, uid);
+      const timer = setTimeout(async () => {
+        pendingCoHostEvictions.delete(key);
+        try {
+          const coHostRemoved = await LiveStream.findOneAndUpdate(
+            { _id: streamId, status: "live", coHosts: uid },
+            { $pull: { coHosts: uid } },
+            { new: true },
+          );
+          if (coHostRemoved) {
+            io.to(`live:${streamId}`).emit("live:co-host:left", { streamId, coHostId: uid });
+          }
+        } catch (err) {
+          console.error("[live:disconnect] Error evicting co-host after grace period:", err);
+        }
+      }, COHOST_DISCONNECT_GRACE_MS);
+      pendingCoHostEvictions.set(key, timer);
     }
     if (streamId) {
       const count = await removeLiveViewer(streamId, socket.id);

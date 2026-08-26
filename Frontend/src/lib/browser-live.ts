@@ -11,6 +11,20 @@ type CandidatePayload = { streamId: string; candidate: RTCIceCandidateInit };
 type DescriptionPayload = { streamId: string; description: RTCSessionDescriptionInit };
 
 /**
+ * Explicit mic constraints for every getUserMedia() call in this file.
+ * Leaving `audio: true` as a bare boolean lets the browser pick its own
+ * defaults, which is exactly what produced audible echo/feedback when a
+ * host and a co-host tested from two devices near each other. Turning
+ * these on explicitly is required, not optional, whenever two open mics
+ * might be in the same room.
+ */
+const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+  echoCancellation: true,
+  noiseSuppression: true,
+  autoGainControl: true,
+};
+
+/**
  * Browser-native WebRTC live video. Socket.IO is used only to exchange SDP and
  * ICE candidates; media flows directly between the host and viewers.
  * This deliberately has no hosted media-server dependency.
@@ -49,9 +63,16 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
       if (cancelled || !publish || !viewerId || negotiationPeer.signalingState !== "stable") return;
       targetPeerId.current = viewerId;
       try {
-        const offer = await negotiationPeer.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true });
+        const offer = await negotiationPeer.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: true,
+        });
         await negotiationPeer.setLocalDescription(offer);
-        socket.emit("live:webrtc:offer", { streamId, targetId: viewerId, description: negotiationPeer.localDescription });
+        socket.emit("live:webrtc:offer", {
+          streamId,
+          targetId: viewerId,
+          description: negotiationPeer.localDescription,
+        });
       } catch (err: any) {
         if (!cancelled) setError(err?.message || "Could not start live video.");
       }
@@ -59,9 +80,13 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
 
     const handleReady = ({ viewerId }: { viewerId: string }) => {
       if (!publish || cancelled || hostPeers.current.has(viewerId)) return;
-      const hostPeer = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      const hostPeer = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      });
       hostPeers.current.set(viewerId, hostPeer);
-      localRef.current?.getTracks().forEach((track) => hostPeer.addTrack(track, localRef.current as MediaStream));
+      localRef.current
+        ?.getTracks()
+        .forEach((track) => hostPeer.addTrack(track, localRef.current as MediaStream));
       hostPeer.onicecandidate = ({ candidate }) => {
         if (candidate) socket.emit("live:webrtc:ice", { streamId, targetId: viewerId, candidate });
       };
@@ -73,36 +98,52 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
       };
       void sendOffer(viewerId, hostPeer);
     };
-    const handleOffer = async ({ description, hostId }: DescriptionPayload & { hostId: string }) => {
+    const handleOffer = async ({
+      description,
+      hostId,
+    }: DescriptionPayload & { hostId: string }) => {
       if (publish || cancelled) return;
       try {
         targetPeerId.current = hostId;
         await peer.setRemoteDescription(description);
-        for (const candidate of pendingCandidates.current.get(hostId) ?? []) await peer.addIceCandidate(candidate);
+        for (const candidate of pendingCandidates.current.get(hostId) ?? [])
+          await peer.addIceCandidate(candidate);
         pendingCandidates.current.delete(hostId);
         const answer = await peer.createAnswer();
         await peer.setLocalDescription(answer);
-        socket.emit("live:webrtc:answer", { streamId, targetId: hostId, description: peer.localDescription });
+        socket.emit("live:webrtc:answer", {
+          streamId,
+          targetId: hostId,
+          description: peer.localDescription,
+        });
       } catch (err: any) {
         if (!cancelled) setError(err?.message || "Could not join live video.");
       }
     };
-    const handleAnswer = async ({ description, viewerId }: DescriptionPayload & { viewerId: string }) => {
+    const handleAnswer = async ({
+      description,
+      viewerId,
+    }: DescriptionPayload & { viewerId: string }) => {
       if (!publish || cancelled) return;
       const hostPeer = hostPeers.current.get(viewerId);
       if (!hostPeer) return;
       try {
         await hostPeer.setRemoteDescription(description);
-        for (const candidate of pendingCandidates.current.get(viewerId) ?? []) await hostPeer.addIceCandidate(candidate);
+        for (const candidate of pendingCandidates.current.get(viewerId) ?? [])
+          await hostPeer.addIceCandidate(candidate);
         pendingCandidates.current.delete(viewerId);
       } catch (err: any) {
         if (!cancelled) setError(err?.message || "Could not complete live video connection.");
       }
     };
-    const handleCandidate = async ({ candidate, senderId }: CandidatePayload & { senderId: string }) => {
+    const handleCandidate = async ({
+      candidate,
+      senderId,
+    }: CandidatePayload & { senderId: string }) => {
       if (!candidate || cancelled) return;
       const candidatePeer = publish ? hostPeers.current.get(senderId) : peer;
-      if (!candidatePeer || (!publish && targetPeerId.current && targetPeerId.current !== senderId)) return;
+      if (!candidatePeer || (!publish && targetPeerId.current && targetPeerId.current !== senderId))
+        return;
       if (candidatePeer.remoteDescription) {
         try {
           await candidatePeer.addIceCandidate(candidate);
@@ -117,7 +158,8 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
     };
 
     peer.onicecandidate = ({ candidate }) => {
-      if (candidate && targetPeerId.current) socket.emit("live:webrtc:ice", { streamId, targetId: targetPeerId.current, candidate });
+      if (candidate && targetPeerId.current)
+        socket.emit("live:webrtc:ice", { streamId, targetId: targetPeerId.current, candidate });
     };
     peer.ontrack = ({ streams, track }) => {
       const incoming = streams[0] ?? new MediaStream([track]);
@@ -144,7 +186,10 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
         try {
           let media: MediaStream;
           try {
-            media = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            media = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: AUDIO_CONSTRAINTS,
+            });
           } catch {
             media = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
           }
@@ -181,7 +226,10 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
 
     return () => {
       cancelled = true;
-      if (readyTimerRef.current) { window.clearTimeout(readyTimerRef.current); readyTimerRef.current = null; }
+      if (readyTimerRef.current) {
+        window.clearTimeout(readyTimerRef.current);
+        readyTimerRef.current = null;
+      }
       if (announceReady) socket.off("connect", announceReady);
       socket.off("live:webrtc:viewer-ready", handleReady);
       socket.off("live:webrtc:offer", handleOffer);
@@ -215,10 +263,22 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
     const track = localRef.current?.getVideoTracks()[0];
     if (!track) return;
     const current = track.getSettings().facingMode;
-    void track.applyConstraints({ facingMode: current === "user" ? "environment" : "user" }).catch(() => {});
+    void track
+      .applyConstraints({ facingMode: current === "user" ? "environment" : "user" })
+      .catch(() => {});
   }
 
-  return { localStream, remoteStream, connected, error, micOn, camOn, toggleMic, toggleCamera, switchCamera };
+  return {
+    localStream,
+    remoteStream,
+    connected,
+    error,
+    micOn,
+    camOn,
+    toggleMic,
+    toggleCamera,
+    switchCamera,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -279,7 +339,9 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
       const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
       meshPeers.current.set(targetSocketId, pc);
       // Add local tracks so this is BIDIRECTIONAL
-      localRef.current?.getTracks().forEach((track) => pc.addTrack(track, localRef.current as MediaStream));
+      localRef.current
+        ?.getTracks()
+        .forEach((track) => pc.addTrack(track, localRef.current as MediaStream));
 
       pc.onicecandidate = ({ candidate }) => {
         if (candidate) {
@@ -299,7 +361,10 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
         if (!pId) return;
         streamsMap.current.set(pId, incoming);
         setCoHostStreams(
-          Array.from(streamsMap.current.entries()).map(([pid, str]) => ({ participantId: pid, stream: str })),
+          Array.from(streamsMap.current.entries()).map(([pid, str]) => ({
+            participantId: pid,
+            stream: str,
+          })),
         );
         setConnected(true);
       };
@@ -315,7 +380,14 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
     };
 
     /** When another participant announces ready, we create a peer and send them an offer */
-    const handleCoHostReady = ({ participantId, participantSocketId }: { streamId: string; participantId: string; participantSocketId: string }) => {
+    const handleCoHostReady = ({
+      participantId,
+      participantSocketId,
+    }: {
+      streamId: string;
+      participantId: string;
+      participantSocketId: string;
+    }) => {
       if (cancelledRef.current) return;
       if (participantId === myUserId) return; // skip self
       // Store mappings
@@ -340,7 +412,16 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
     };
 
     /** Receive an offer from another participant — create peer, add tracks, send answer */
-    const handleCoHostOffer = async ({ senderId, senderParticipantId, description }: { streamId: string; senderId: string; senderParticipantId: string; description: RTCSessionDescriptionInit }) => {
+    const handleCoHostOffer = async ({
+      senderId,
+      senderParticipantId,
+      description,
+    }: {
+      streamId: string;
+      senderId: string;
+      senderParticipantId: string;
+      description: RTCSessionDescriptionInit;
+    }) => {
       if (cancelledRef.current) return;
       if (senderParticipantId === myUserId) return;
       participantSockets.current.set(senderParticipantId, senderId);
@@ -364,7 +445,14 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
     };
 
     /** Receive an answer to our offer */
-    const handleCoHostAnswer = async ({ senderId, description }: { streamId: string; senderId: string; description: RTCSessionDescriptionInit }) => {
+    const handleCoHostAnswer = async ({
+      senderId,
+      description,
+    }: {
+      streamId: string;
+      senderId: string;
+      description: RTCSessionDescriptionInit;
+    }) => {
       if (cancelledRef.current) return;
       const pc = meshPeers.current.get(senderId);
       if (!pc) return;
@@ -373,17 +461,29 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
         for (const c of pendingIce.current.get(senderId) ?? []) await pc.addIceCandidate(c);
         pendingIce.current.delete(senderId);
       } catch (err: any) {
-        if (!cancelledRef.current) setError(err?.message || "Could not complete co-host connection.");
+        if (!cancelledRef.current)
+          setError(err?.message || "Could not complete co-host connection.");
       }
     };
 
     /** Receive ICE candidate from another participant */
-    const handleCoHostIce = async ({ senderId, candidate }: { streamId: string; senderId: string; candidate: RTCIceCandidateInit }) => {
+    const handleCoHostIce = async ({
+      senderId,
+      candidate,
+    }: {
+      streamId: string;
+      senderId: string;
+      candidate: RTCIceCandidateInit;
+    }) => {
       if (!candidate || cancelledRef.current) return;
       const pc = meshPeers.current.get(senderId);
       if (!pc) return;
       if (pc.remoteDescription) {
-        try { await pc.addIceCandidate(candidate); } catch { /* late candidate */ }
+        try {
+          await pc.addIceCandidate(candidate);
+        } catch {
+          /* late candidate */
+        }
       } else {
         const queued = pendingIce.current.get(senderId) ?? [];
         queued.push(candidate);
@@ -399,7 +499,7 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
     // Acquire local media
     if (navigator.mediaDevices?.getUserMedia) {
       navigator.mediaDevices
-        .getUserMedia({ video: true, audio: true })
+        .getUserMedia({ video: true, audio: AUDIO_CONSTRAINTS })
         .catch(() => navigator.mediaDevices.getUserMedia({ video: true, audio: false }))
         .then((media) => {
           if (cancelledRef.current) {
@@ -415,7 +515,8 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
           socket.emit("live:co-host:webrtc-ready", { streamId });
         })
         .catch((err: any) => {
-          if (!cancelledRef.current) setError(err?.message || "Allow camera access to join as co-host.");
+          if (!cancelledRef.current)
+            setError(err?.message || "Allow camera access to join as co-host.");
         });
     } else {
       setError("Camera access is unavailable. Open the site over HTTPS or localhost.");
@@ -454,17 +555,33 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
     const track = localRef.current?.getVideoTracks()[0];
     if (!track) return;
     const current = track.getSettings().facingMode;
-    void track.applyConstraints({ facingMode: current === "user" ? "environment" : "user" }).catch(() => {});
+    void track
+      .applyConstraints({ facingMode: current === "user" ? "environment" : "user" })
+      .catch(() => {});
   }
 
   function removeCoHostStream(participantId: string) {
     streamsMap.current.delete(participantId);
     setCoHostStreams(
-      Array.from(streamsMap.current.entries()).map(([pid, str]) => ({ participantId: pid, stream: str })),
+      Array.from(streamsMap.current.entries()).map(([pid, str]) => ({
+        participantId: pid,
+        stream: str,
+      })),
     );
   }
 
-  return { localStream, coHostStreams, connected, error, micOn, camOn, toggleMic, toggleCamera, flipCamera, removeCoHostStream };
+  return {
+    localStream,
+    coHostStreams,
+    connected,
+    error,
+    micOn,
+    camOn,
+    toggleMic,
+    toggleCamera,
+    flipCamera,
+    removeCoHostStream,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -472,7 +589,15 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
 /*  co-host (bidirectional). Called in addition to useBrowserLiveRoom.        */
 /* -------------------------------------------------------------------------- */
 
-export function useHostCoHostMesh({ streamId, hostLocalStream, enabled }: { streamId: string; hostLocalStream: MediaStream | null; enabled: boolean }) {
+export function useHostCoHostMesh({
+  streamId,
+  hostLocalStream,
+  enabled,
+}: {
+  streamId: string;
+  hostLocalStream: MediaStream | null;
+  enabled: boolean;
+}) {
   const [coHostStreams, setCoHostStreams] = useState<CoHostRemoteStream[]>([]);
   const meshPeers = useRef<Map<string, RTCPeerConnection>>(new Map());
   const pendingIce = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
@@ -482,7 +607,9 @@ export function useHostCoHostMesh({ streamId, hostLocalStream, enabled }: { stre
   const localRef = useRef<MediaStream | null>(hostLocalStream);
 
   // Keep localRef in sync
-  useEffect(() => { localRef.current = hostLocalStream; }, [hostLocalStream]);
+  useEffect(() => {
+    localRef.current = hostLocalStream;
+  }, [hostLocalStream]);
 
   useEffect(() => {
     if (!enabled || !streamId) return;
@@ -493,7 +620,9 @@ export function useHostCoHostMesh({ streamId, hostLocalStream, enabled }: { stre
       if (meshPeers.current.has(targetSocketId)) return meshPeers.current.get(targetSocketId)!;
       const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
       meshPeers.current.set(targetSocketId, pc);
-      localRef.current?.getTracks().forEach((track) => pc.addTrack(track, localRef.current as MediaStream));
+      localRef.current
+        ?.getTracks()
+        .forEach((track) => pc.addTrack(track, localRef.current as MediaStream));
 
       pc.onicecandidate = ({ candidate }) => {
         if (candidate) {
@@ -513,7 +642,10 @@ export function useHostCoHostMesh({ streamId, hostLocalStream, enabled }: { stre
         if (!pId) return;
         streamsMap.current.set(pId, incoming);
         setCoHostStreams(
-          Array.from(streamsMap.current.entries()).map(([pid, str]) => ({ participantId: pid, stream: str })),
+          Array.from(streamsMap.current.entries()).map(([pid, str]) => ({
+            participantId: pid,
+            stream: str,
+          })),
         );
       };
 
@@ -527,10 +659,11 @@ export function useHostCoHostMesh({ streamId, hostLocalStream, enabled }: { stre
       return pc;
     };
 
-    const handleCoHostReady = ({ participantId, participantSocketId }: { streamId: string; participantId: string; participantSocketId: string }) => {
-      participantSockets.current.set(participantId, participantSocketId);
-      socketParticipants.current.set(participantSocketId, participantId);
-      const pc = createMeshPeer(participantSocketId);
+    const sendOfferTo = (
+      participantId: string,
+      participantSocketId: string,
+      pc: RTCPeerConnection,
+    ) => {
       if (pc.signalingState !== "stable") return;
       pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
         .then((offer) => pc.setLocalDescription(offer))
@@ -546,7 +679,53 @@ export function useHostCoHostMesh({ streamId, hostLocalStream, enabled }: { stre
         .catch(() => {});
     };
 
-    const handleCoHostOffer = async ({ senderId, senderParticipantId, description }: { streamId: string; senderId: string; senderParticipantId: string; description: RTCSessionDescriptionInit }) => {
+    const handleCoHostReady = ({
+      participantId,
+      participantSocketId,
+    }: {
+      streamId: string;
+      participantId: string;
+      participantSocketId: string;
+    }) => {
+      participantSockets.current.set(participantId, participantSocketId);
+      socketParticipants.current.set(participantSocketId, participantId);
+      const pc = createMeshPeer(participantSocketId);
+      // The host's own camera/mic can still be initializing (getUserMedia is
+      // async) when a co-host announces readiness. Sending an offer with zero
+      // tracks would connect with no audio/video and nothing here ever
+      // renegotiates, so the co-host would be stuck silent permanently.
+      // Wait for local tracks to actually exist before offering, retrying
+      // briefly rather than giving up.
+      if (!localRef.current || localRef.current.getTracks().length === 0) {
+        let attempts = 0;
+        const waitForLocalMedia = () => {
+          attempts += 1;
+          if (localRef.current && localRef.current.getTracks().length > 0) {
+            localRef.current.getTracks().forEach((track) => {
+              const alreadyAdded = pc.getSenders().some((s) => s.track === track);
+              if (!alreadyAdded) pc.addTrack(track, localRef.current as MediaStream);
+            });
+            sendOfferTo(participantId, participantSocketId, pc);
+          } else if (attempts < 20) {
+            window.setTimeout(waitForLocalMedia, 250);
+          }
+        };
+        waitForLocalMedia();
+        return;
+      }
+      sendOfferTo(participantId, participantSocketId, pc);
+    };
+
+    const handleCoHostOffer = async ({
+      senderId,
+      senderParticipantId,
+      description,
+    }: {
+      streamId: string;
+      senderId: string;
+      senderParticipantId: string;
+      description: RTCSessionDescriptionInit;
+    }) => {
       participantSockets.current.set(senderParticipantId, senderId);
       socketParticipants.current.set(senderId, senderParticipantId);
       const pc = createMeshPeer(senderId);
@@ -562,25 +741,47 @@ export function useHostCoHostMesh({ streamId, hostLocalStream, enabled }: { stre
           description: pc.localDescription,
           participantId: senderParticipantId,
         });
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     };
 
-    const handleCoHostAnswer = async ({ senderId, description }: { streamId: string; senderId: string; description: RTCSessionDescriptionInit }) => {
+    const handleCoHostAnswer = async ({
+      senderId,
+      description,
+    }: {
+      streamId: string;
+      senderId: string;
+      description: RTCSessionDescriptionInit;
+    }) => {
       const pc = meshPeers.current.get(senderId);
       if (!pc) return;
       try {
         await pc.setRemoteDescription(description);
         for (const c of pendingIce.current.get(senderId) ?? []) await pc.addIceCandidate(c);
         pendingIce.current.delete(senderId);
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     };
 
-    const handleCoHostIce = async ({ senderId, candidate }: { streamId: string; senderId: string; candidate: RTCIceCandidateInit }) => {
+    const handleCoHostIce = async ({
+      senderId,
+      candidate,
+    }: {
+      streamId: string;
+      senderId: string;
+      candidate: RTCIceCandidateInit;
+    }) => {
       if (!candidate) return;
       const pc = meshPeers.current.get(senderId);
       if (!pc) return;
       if (pc.remoteDescription) {
-        try { await pc.addIceCandidate(candidate); } catch { /* late */ }
+        try {
+          await pc.addIceCandidate(candidate);
+        } catch {
+          /* late */
+        }
       } else {
         const queued = pendingIce.current.get(senderId) ?? [];
         queued.push(candidate);
@@ -611,7 +812,10 @@ export function useHostCoHostMesh({ streamId, hostLocalStream, enabled }: { stre
   function removeCoHostStream(participantId: string) {
     streamsMap.current.delete(participantId);
     setCoHostStreams(
-      Array.from(streamsMap.current.entries()).map(([pid, str]) => ({ participantId: pid, stream: str })),
+      Array.from(streamsMap.current.entries()).map(([pid, str]) => ({
+        participantId: pid,
+        stream: str,
+      })),
     );
   }
 
@@ -635,7 +839,7 @@ export function useCameraPreview(enabled: boolean) {
     }
     setError(null);
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: facing }, audio: true })
+      .getUserMedia({ video: { facingMode: facing }, audio: AUDIO_CONSTRAINTS })
       .catch(() => navigator.mediaDevices.getUserMedia({ video: true, audio: false }))
       .then((media) => {
         if (cancelled) {
@@ -666,5 +870,15 @@ export function useCameraPreview(enabled: boolean) {
     setFacing((value) => (value === "user" ? "environment" : "user"));
   }
 
-  return { stream, error, micOn, camOn, facing, cameraDeviceId: stream?.getVideoTracks()[0]?.getSettings().deviceId ?? null, toggleMic, toggleCam, flipCamera };
+  return {
+    stream,
+    error,
+    micOn,
+    camOn,
+    facing,
+    cameraDeviceId: stream?.getVideoTracks()[0]?.getSettings().deviceId ?? null,
+    toggleMic,
+    toggleCam,
+    flipCamera,
+  };
 }
