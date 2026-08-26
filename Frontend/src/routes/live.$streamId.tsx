@@ -964,7 +964,7 @@ function LiveRoomPage() {
                     autoPlay
                     muted
                     playsInline
-                    className="size-full object-contain"
+                    className="absolute inset-0 size-full object-cover"
                     onClick={() => !isHost && !isCoHost && !soundOn && toggleSound()}
                   />
                   {!connected && (
