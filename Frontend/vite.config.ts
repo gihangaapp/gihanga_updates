@@ -12,8 +12,11 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
-  // Use the standard Node server preset for local development and preview.
+  // Node server preset for Render/local; Vercel needs its own "vercel" preset
+  // to produce serverless functions instead of a standalone Node bundle —
+  // without this, Vercel can't find a "dist" (or its expected) output and
+  // the deployment fails with "No Output Directory found".
   nitro: {
-    preset: "node-server",
+    preset: process.env.VERCEL ? "vercel" : "node-server",
   },
 });
