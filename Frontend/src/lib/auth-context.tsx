@@ -55,12 +55,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const staffToken = getStaffAccessToken();
       if (staffToken) {
         try {
+          // Pre-seed from cache for instant rendering
           const savedStaff = localStorage.getItem("gihanga_staff_profile");
           if (savedStaff) {
             setStaffUser(JSON.parse(savedStaff));
           }
+
+          // Validate & refresh staff profile live from backend
+          const data = await api.get<{ user: UserProfile }>("/system/auth/me", true);
+          if (data?.user) {
+            setStaffUser(data.user);
+            localStorage.setItem("gihanga_staff_profile", JSON.stringify(data.user));
+          }
         } catch {
           clearStaffTokens();
+          localStorage.removeItem("gihanga_staff_profile");
+          setStaffUser(null);
         }
       }
 
@@ -123,7 +133,6 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
-// Utility Validation Helpers (re-exported for form fields)
 export const isEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(v.trim());
 
 export function passwordScore(v: string) {

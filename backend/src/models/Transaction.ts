@@ -1,7 +1,19 @@
 import crypto from "node:crypto";
 import { Document, model, Schema, Types } from "mongoose";
 
-export type TransactionKind = "earning" | "tip" | "payout" | "fee" | "bonus" | "gift" | "deposit";
+export type TransactionKind =
+  | "earning"
+  | "tip"
+  | "payout"
+  | "fee"
+  | "bonus"
+  | "gift"
+  | "deposit"
+  | "ad_payment"
+  | "ad_points_payment"
+  | "ad_refund"
+  | "ad_points_refund";
+
 export type TransactionStatus = "created" | "pending" | "completed" | "failed" | "cancelled" | "expired";
 
 export interface ITransaction extends Document {
@@ -24,6 +36,7 @@ export interface ITransaction extends Document {
   settledAt?: Date;
   relatedPost?: Types.ObjectId;
   relatedLive?: Types.ObjectId;
+  relatedAd?: Types.ObjectId;
   approvedBy?: Types.ObjectId;
   approvedAt?: Date;
   createdAt: Date;
@@ -34,7 +47,23 @@ const TransactionSchema = new Schema<ITransaction>(
   {
     wallet: { type: Schema.Types.ObjectId, ref: "Wallet", required: true },
     user: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    kind: { type: String, enum: ["earning", "tip", "payout", "fee", "bonus", "gift", "deposit"], required: true },
+    kind: {
+      type: String,
+      enum: [
+        "earning",
+        "tip",
+        "payout",
+        "fee",
+        "bonus",
+        "gift",
+        "deposit",
+        "ad_payment",
+        "ad_points_payment",
+        "ad_refund",
+        "ad_points_refund",
+      ],
+      required: true,
+    },
     amount: { type: Number, required: true },
     currency: { type: String, default: "RWF", uppercase: true, trim: true },
     label: { type: String, required: true, maxlength: 240 },
@@ -51,6 +80,7 @@ const TransactionSchema = new Schema<ITransaction>(
     settledAt: { type: Date },
     relatedPost: { type: Schema.Types.ObjectId, ref: "Post" },
     relatedLive: { type: Schema.Types.ObjectId, ref: "LiveStream" },
+    relatedAd: { type: Schema.Types.ObjectId, ref: "Advertisement" },
     approvedBy: { type: Schema.Types.ObjectId, ref: "User" },
     approvedAt: { type: Date },
   },
@@ -60,5 +90,6 @@ const TransactionSchema = new Schema<ITransaction>(
 TransactionSchema.index({ wallet: 1, createdAt: -1 });
 TransactionSchema.index({ status: 1, kind: 1 });
 TransactionSchema.index({ momoReferenceId: 1, status: 1 });
+TransactionSchema.index({ relatedAd: 1 });
 
 export const Transaction = model<ITransaction>("Transaction", TransactionSchema);

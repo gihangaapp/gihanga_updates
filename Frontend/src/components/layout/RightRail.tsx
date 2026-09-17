@@ -62,8 +62,10 @@ export function RightRail() {
   const { data: suggestedData } = useSuggestedUsers();
   const followUser = useFollowUser();
   const { data: followingSet } = useFollowingSet();
-  const tags = tagsData?.tags ?? [];
-  const suggested = suggestedData?.users ?? [];
+  const tags = (tagsData?.tags ?? []).slice(0, 5);
+  const suggested = (suggestedData?.users ?? []).filter(
+    (u) => u.isCreator && (u as any).role !== "admin" && (u as any).role !== "superadmin" && (u as any).role !== "moderator"
+  );
 
   return (
     <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-[336px] shrink-0 flex-col gap-4 overflow-y-auto px-4 py-5 no-scrollbar xl:flex">

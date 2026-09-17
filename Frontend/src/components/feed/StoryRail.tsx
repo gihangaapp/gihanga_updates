@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { Plus } from "lucide-react";
-import { openCreate } from "@/components/feed/CreateSheet";
+import { openCreate } from "@/components/create/CreateHub";
 import { StoryViewer } from "@/components/feed/StoryViewer";
 import { GAvatar } from "@/components/common/GAvatar";
 import { useStories } from "@/hooks/use-stories";

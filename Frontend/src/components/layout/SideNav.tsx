@@ -1,7 +1,7 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { LogOut, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { openCreate } from "@/components/feed/CreateSheet";
+import { openCreate } from "@/components/create/CreateHub";
 import { Logo } from "@/components/common/Logo";
 import { GAvatar } from "@/components/common/GAvatar";
 import { useSessionUser } from "@/components/auth/AccountMenu";

@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/permissions";
 import { useModerationQueue, useActionReport, useModerationRules, useUpdateModerationRule, type StaffReport } from "@/hooks/use-staff-moderation";
 import { cn } from "@/lib/utils";
+import { mediaUrl } from "@/lib/api-client";
 
 export const Route = createFileRoute("/system/dashboard/moderation")({
   component: ModerationPage,
@@ -35,7 +36,7 @@ function ActionRow({ report }: { report: StaffReport }) {
     );
   }
 
-  const media = report.targetPost?.thumbnailUrl || report.targetPost?.mediaUrl;
+  const media = mediaUrl(report.targetPost?.thumbnailUrl || report.targetPost?.mediaUrl);
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4">

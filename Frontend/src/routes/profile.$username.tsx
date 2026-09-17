@@ -1,15 +1,34 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CalendarDays, Film, Grid3x3, Heart, Settings } from "lucide-react";
+import {
+  CalendarDays,
+  Film,
+  Grid3x3,
+  Heart,
+  MessageCircle,
+  MoreVertical,
+  Play,
+  Settings,
+  Share2,
+  Trash2,
+  Volume2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { GAvatar, UserName, VerifiedBadge } from "@/components/common/GAvatar";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth-context";
 import { mediaUrl, PublicUser } from "@/lib/api-client";
 import { useUserProfile, useFollowers, useFollowing } from "@/hooks/use-social";
-import { useUserPosts, useLikedPosts } from "@/hooks/use-posts";
+import { useUserPosts, useLikedPosts, useDeletePost } from "@/hooks/use-posts";
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { formatCount } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -35,13 +54,13 @@ function toDisplayUser(u: PublicUser) {
     id: u._id,
     name: u.name,
     username: u.username,
-    bio: "",
-    avatarHue: u.avatarHue,
-    avatarUrl: u.avatarUrl,
-    verified: u.verified,
-    creator: u.isCreator,
-    live: u.isLive,
-    followers: u.followersCount,
+    bio: u.bio || "",
+    avatarHue: u.avatarHue ?? 0,
+    avatarUrl: u.avatarUrl || null,
+    verified: Boolean(u.verified),
+    creator: Boolean(u.isCreator),
+    live: Boolean(u.isLive),
+    followers: u.followersCount ?? 0,
     following: 0,
     posts: 0,
   };
@@ -102,7 +121,7 @@ function FollowListDialog({
                     onClick={() =>
                       followUser.mutate(
                         { username: u.username, follow: !isFollowing },
-                        { onError: (err: any) => toast.error(err.message || "Couldn't update follow status") },
+                        { onError: (err: any) => toast.error(err.message || "Couldn't update follow status") }
                       )
                     }
                   >
@@ -138,11 +157,27 @@ function ProfilePage() {
   const { data, isLoading, isError } = useUserProfile(username);
   const [tab, setTab] = useState<(typeof tabs)[number]["id"]>("posts");
   const [followTab, setFollowTab] = useState<"followers" | "following" | null>(null);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+
   const followUser = useFollowUser();
+  const deletePost = useDeletePost();
 
   const isMe = authUser?.username === username;
   const postsQuery = useUserPosts(username);
   const likesQuery = useLikedPosts(username, isMe && tab === "likes");
+
+  const handleDelete = async (postId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      setDeletingPostId(postId);
+      await deletePost.mutateAsync(postId);
+      toast.success("Post deleted successfully");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete post");
+    } finally {
+      setDeletingPostId(null);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -170,17 +205,21 @@ function ProfilePage() {
   };
 
   const allPosts = postsQuery.data?.pages.flatMap((p) => p.posts) ?? [];
+  const reelsList = allPosts.filter((p) => p.kind === "reel");
+  const likesList = likesQuery.data?.posts ?? [];
+
   const grid =
     tab === "reels"
-      ? allPosts.filter((p) => p.kind === "reel")
+      ? reelsList
       : tab === "likes"
-        ? likesQuery.data?.posts ?? []
+        ? likesList
         : allPosts;
 
   return (
     <AppShell>
-      <div className="mx-auto w-full max-w-[900px]">
-        <header className="surface-card relative mb-4 overflow-hidden p-0">
+      <div className="mx-auto w-full max-w-[900px] pb-10">
+        {/* Profile Header Banner & Info */}
+        <header className="surface-card relative mb-4 overflow-hidden rounded-3xl border border-border p-0 shadow-soft">
           <div
             className="h-32 w-full sm:h-44"
             style={{
@@ -189,19 +228,19 @@ function ProfilePage() {
           />
           <div className="px-4 pb-5 sm:px-6">
             <div className="-mt-12 flex items-end gap-4 sm:-mt-14">
-              <span className="rounded-full ring-4 ring-card">
-                <GAvatar user={displayUser} size="xl" />
+              <span className="rounded-full ring-4 ring-card shadow-lg">
+                <GAvatar user={displayUser} size="xl" ring={displayUser.live ? "live" : displayUser.creator ? "creator" : "none"} />
               </span>
               <div className="ml-auto flex gap-2 pb-1">
                 {isMe ? (
                   <>
-                    <Button variant="outline" asChild>
+                    <Button variant="outline" asChild className="rounded-xl font-bold">
                       <Link to="/settings">
-                        <Settings className="size-4" /> Edit profile
+                        <Settings className="size-4 mr-1.5" /> Edit profile
                       </Link>
                     </Button>
                     {authUser?.isCreator && (
-                      <Button variant="brand" asChild>
+                      <Button variant="brand" asChild className="rounded-xl font-bold">
                         <Link to="/studio">Studio</Link>
                       </Button>
                     )}
@@ -209,6 +248,7 @@ function ProfilePage() {
                 ) : (
                   <Button
                     variant={profile.isFollowing ? "outline" : "brand"}
+                    className="rounded-xl font-bold"
                     onClick={() => {
                       const wasFollowing = profile.isFollowing;
                       followUser.mutate(
@@ -216,7 +256,7 @@ function ProfilePage() {
                         {
                           onSuccess: () => toast.success(wasFollowing ? `Unfollowed @${username}` : `Following @${username}`),
                           onError: (err: any) => toast.error(err.message || "Couldn't update follow status"),
-                        },
+                        }
                       );
                     }}
                   >
@@ -226,12 +266,17 @@ function ProfilePage() {
               </div>
             </div>
 
-            <h1 className="mt-3 flex items-center gap-2 font-display text-xl font-extrabold tracking-tight">
+            <h1 className="mt-3 flex items-center gap-2 font-display text-xl font-extrabold tracking-tight text-foreground">
               {displayUser.name}
               {displayUser.verified && <VerifiedBadge className="size-5" />}
+              {displayUser.creator && (
+                <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-black uppercase text-amber-500 border border-amber-500/20">
+                  Creator
+                </span>
+              )}
             </h1>
-            <p className="text-sm text-muted-foreground">@{displayUser.username}</p>
-            {displayUser.bio && <p className="mt-2 max-w-xl text-sm leading-relaxed">{displayUser.bio}</p>}
+            <p className="text-sm font-medium text-muted-foreground">@{displayUser.username}</p>
+            {displayUser.bio && <p className="mt-2 max-w-xl text-sm leading-relaxed text-foreground/90">{displayUser.bio}</p>}
 
             <ul className="mt-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
               <li className="flex items-center gap-1.5">
@@ -248,62 +293,169 @@ function ProfilePage() {
               ].map((s) =>
                 s.onClick ? (
                   <button key={s.label} type="button" onClick={s.onClick} className="press text-left">
-                    <span className="block font-display text-lg font-extrabold">{formatCount(s.value)}</span>
+                    <span className="block font-display text-lg font-extrabold text-foreground">{formatCount(s.value)}</span>
                     <span className="text-xs text-muted-foreground hover:text-foreground">{s.label}</span>
                   </button>
                 ) : (
                   <li key={s.label}>
-                    <span className="block font-display text-lg font-extrabold">{formatCount(s.value)}</span>
+                    <span className="block font-display text-lg font-extrabold text-foreground">{formatCount(s.value)}</span>
                     <span className="text-xs text-muted-foreground">{s.label}</span>
                   </li>
-                ),
+                )
               )}
             </ul>
           </div>
         </header>
 
-        <div className="glass mb-4 flex gap-1 rounded-2xl border p-1">
+        {/* Profile Tabs Navigation */}
+        <div className="surface-card mb-4 flex gap-1 rounded-2xl border border-border p-1 shadow-sm">
           {tabs.map((t) => {
             if (t.id === "likes" && !isMe) return null;
+            const count =
+              t.id === "posts"
+                ? allPosts.length
+                : t.id === "reels"
+                  ? reelsList.length
+                  : likesList.length;
+
             return (
               <button
                 key={t.id}
                 type="button"
                 onClick={() => setTab(t.id)}
                 className={cn(
-                  "press flex flex-1 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold",
-                  t.id === tab ? "bg-primary-soft text-primary" : "text-muted-foreground",
+                  "press flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-xs sm:text-sm font-bold transition-all",
+                  t.id === tab
+                    ? "bg-primary text-primary-foreground shadow-md"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
                 )}
               >
                 <t.icon className="size-4" />
-                {t.label}
+                <span>{t.label}</span>
+                {count > 0 && (
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 py-0.2 text-[10px] font-black",
+                      t.id === tab ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {count}
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
 
+        {/* Posts, Reels, and Likes Media Grid with full audio/video/image support and delete menu */}
         {grid.length === 0 ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">Nothing here yet.</p>
+          <div className="surface-card rounded-3xl p-12 text-center text-muted-foreground border border-border">
+            <p className="text-sm font-semibold">
+              {tab === "posts"
+                ? "No posts shared yet."
+                : tab === "reels"
+                  ? "No reels published yet."
+                  : "No liked posts yet."}
+            </p>
+          </div>
         ) : (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {grid.map((item) => {
-              const image = mediaUrl(item.mediaUrl);
+              const mediaSrc = mediaUrl(item.mediaUrl) || mediaUrl(item.thumbnailUrl);
+              const isVideo = item.kind === "video" || item.kind === "reel" || Boolean(item.mediaUrl?.match(/\.(mp4|webm|mov)$/i));
+              const isDeleting = deletingPostId === item._id;
+
               return (
-                <div key={item._id} className="group relative aspect-square overflow-hidden rounded-2xl bg-elevated">
-                  {image ? (
-                    <img
-                      src={image}
-                      alt={item.body.slice(0, 60)}
-                      loading="lazy"
-                      className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                  ) : (
-                    <p className="p-4 text-sm leading-snug">{item.body}</p>
+                <div
+                  key={item._id}
+                  className="group relative aspect-square overflow-hidden rounded-2xl bg-slate-900 border border-border/60 shadow-soft hover:shadow-hover transition-all"
+                >
+                  <Link
+                    to={item.kind === "reel" ? "/reels" : "/post/$postId"}
+                    params={{ postId: item._id }}
+                    className="block size-full"
+                  >
+                    {mediaSrc ? (
+                      isVideo ? (
+                        <div className="relative size-full bg-black">
+                          <video
+                            src={mediaSrc}
+                            poster={mediaUrl(item.thumbnailUrl)}
+                            muted
+                            playsInline
+                            preload="metadata"
+                            className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
+                          />
+                          <div className="absolute top-2.5 right-2.5 grid size-6 place-items-center rounded-full bg-black/60 text-white backdrop-blur-md">
+                            <Play className="size-3 fill-white ml-0.5" />
+                          </div>
+                        </div>
+                      ) : (
+                        <img
+                          src={mediaSrc}
+                          alt={item.body ? item.body.slice(0, 40) : "Post"}
+                          loading="lazy"
+                          onError={(e) => {
+                            const target = e.currentTarget;
+                            target.style.display = "none";
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.classList.add("bg-gradient-to-tr", "from-slate-900", "to-slate-800", "flex", "items-center", "justify-center", "p-4", "text-center");
+                            }
+                          }}
+                          className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        />
+                      )
+                    ) : (
+                      <div className="flex size-full flex-col justify-between bg-gradient-to-tr from-slate-900 via-slate-800 to-indigo-950 p-4 text-white">
+                        <p className="line-clamp-4 text-xs font-semibold leading-relaxed">
+                          {item.body || "Text post"}
+                        </p>
+                        <span className="text-[10px] text-white/60 font-bold uppercase tracking-wider">
+                          Note
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Bottom Likes & Comments Hover Overlay */}
+                    <div className="absolute inset-0 flex items-center justify-center gap-4 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100 backdrop-blur-[2px] pointer-events-none">
+                      <span className="flex items-center gap-1.5 text-xs font-extrabold text-white drop-shadow-md">
+                        <Heart className="size-4 fill-white" />
+                        {formatCount(item.likesCount || 0)}
+                      </span>
+                      <span className="flex items-center gap-1.5 text-xs font-extrabold text-white drop-shadow-md">
+                        <MessageCircle className="size-4 fill-white" />
+                        {formatCount(item.commentsCount || 0)}
+                      </span>
+                    </div>
+                  </Link>
+
+                  {/* Actions Dropdown (Delete option for owner) */}
+                  {isMe && (
+                    <div className="absolute top-2 right-2 z-20">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Post actions"
+                            className="press grid size-7 place-items-center rounded-full bg-black/60 text-white backdrop-blur-md hover:bg-black/80 transition-colors"
+                          >
+                            <MoreVertical className="size-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-36">
+                          <DropdownMenuItem
+                            disabled={isDeleting}
+                            onClick={(e) => handleDelete(item._id, e)}
+                            className="text-danger focus:bg-danger/10 focus:text-danger cursor-pointer font-bold"
+                          >
+                            <Trash2 className="size-3.5 mr-2" />
+                            <span>Delete</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   )}
-                  <span className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/70 to-transparent p-2 text-xs font-bold text-white opacity-0 transition-opacity group-hover:opacity-100">
-                    <Heart className="size-3.5 fill-white" />
-                    {formatCount(item.likesCount)}
-                  </span>
                 </div>
               );
             })}

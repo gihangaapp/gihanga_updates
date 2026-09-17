@@ -1,6 +1,6 @@
 import { Schema, model, Document, Types } from "mongoose";
 
-export type SettingCategory = "rewards" | "momo" | "features" | "content" | "limits";
+export type SettingCategory = "rewards" | "momo" | "features" | "content" | "limits" | "ads" | "flags";
 
 export interface ISetting extends Document {
   key: string;
@@ -20,7 +20,7 @@ const SettingSchema = new Schema<ISetting>(
     description: { type: String },
     category: {
       type: String,
-      enum: ["rewards", "momo", "features", "content", "limits"],
+      enum: ["rewards", "momo", "features", "content", "limits", "ads", "flags"],
       required: true,
     },
     editableBy: { type: String, enum: ["superadmin"], default: "superadmin" },

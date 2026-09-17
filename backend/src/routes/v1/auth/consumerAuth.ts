@@ -2,9 +2,11 @@ import crypto from "crypto";
 import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { User, IUser } from "../../../models/User";
+import { Follow } from "../../../models/Follow";
 import { Wallet } from "../../../models/Wallet";
 import { signConsumerTokens, verifyConsumerRefreshToken } from "../../../lib/jwt";
 import { sendEmail } from "../../../lib/mailer";
+import { notify } from "../../../lib/notify";
 import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/rbac";
 import { maybeAwardDailyLogin, maybeAwardReferral } from "../../../lib/rewards";
 
@@ -74,7 +76,20 @@ async function sendPasswordResetEmail(user: IUser, token: string) {
 // POST /api/v1/auth/register
 router.post("/register", async (req: Request, res: Response) => {
   try {
-    const { name, email, username, password, avatarHue, bio, isCreator, referralCode } = req.body;
+    const {
+      name,
+      email,
+      username,
+      password,
+      avatarHue,
+      avatarUrl,
+      bio,
+      isCreator,
+      referralCode,
+      interests,
+      followingUsernames,
+      onboarded,
+    } = req.body;
 
     if (!name || !email || !username || !password) {
       return res.status(400).json({ error: "Name, email, username, and password are required" });
@@ -99,17 +114,6 @@ router.post("/register", async (req: Request, res: Response) => {
       : null;
 
     const passwordHash = await bcrypt.hash(password, 12);
-    // ─── MAIL SENDING TEMPORARILY DISABLED ─────────────────────────────────
-    // Free-tier hosting (Render/InfinityFree) is currently failing to send
-    // verification emails, so email verification is skipped for now and
-    // accounts are created as already verified. To restore the original
-    // "verify by code" flow: uncomment the verificationCode/emailVerifyToken/
-    // emailVerifyExpiry lines below, set emailVerified/verified back to
-    // false, restore emailVerifyToken/emailVerifyExpiry in User.create, and
-    // uncomment the sendVerificationEmail block further down.
-    // const verificationCode = generateVerificationCode();
-    // const emailVerifyToken = await bcrypt.hash(verificationCode, 10);
-    // const emailVerifyExpiry = new Date(Date.now() + 15 * 60 * 1000);
 
     const user = await User.create({
       name: name.trim(),
@@ -117,20 +121,52 @@ router.post("/register", async (req: Request, res: Response) => {
       email: cleanEmail,
       passwordHash,
       avatarHue: avatarHue || 205,
+      avatarUrl: avatarUrl && typeof avatarUrl === "string" ? avatarUrl.trim() : undefined,
       bio: bio ? bio.trim() : "",
       role: "user",
       isCreator: Boolean(isCreator),
-      // Skipping email verification for now (see note above) — accounts are
-      // marked verified immediately so users can use the app right away.
       emailVerified: true,
       verified: true,
-      // emailVerifyToken,
-      // emailVerifyExpiry,
-      interests: [],
-      onboarded: false,
+      interests: Array.isArray(interests) ? interests : [],
+      onboarded: Boolean(onboarded),
       referralCode: cleanUsername,
       referredBy: referrer?._id,
     });
+
+    // If initial creators/users were selected to follow
+    if (Array.isArray(followingUsernames) && followingUsernames.length > 0) {
+      try {
+        const cleanUsernames = followingUsernames.map((u: string) => String(u).toLowerCase().trim()).filter(Boolean);
+        const targets = await User.find({
+          username: { $in: cleanUsernames },
+          _id: { $ne: user._id },
+        });
+
+        if (targets.length > 0) {
+          const followDocs = targets.map((t) => ({
+            follower: user._id,
+            following: t._id,
+          }));
+          await Follow.insertMany(followDocs, { ordered: false }).catch(() => {});
+          user.followingCount = targets.length;
+          await User.updateMany(
+            { _id: { $in: targets.map((t) => t._id) } },
+            { $inc: { followersCount: 1 } }
+          );
+
+          for (const t of targets) {
+            notify({
+              recipient: String(t._id),
+              actor: String(user._id),
+              kind: "follow",
+              text: "started following you",
+            }).catch(() => {});
+          }
+        }
+      } catch (fErr) {
+        console.error("[Register] Error creating initial follows:", fErr);
+      }
+    }
 
     await Wallet.create({
       user: user._id,
@@ -140,17 +176,7 @@ router.post("/register", async (req: Request, res: Response) => {
       kingdomPoints: 100,
     });
 
-    // Mail sending is temporarily disabled (see note above) — skip sending
-    // the verification email and treat the account as already set up. To
-    // restore: uncomment the block below and remove the hardcoded
-    // `emailSent = true`.
     let emailSent = true;
-    // try {
-    //   await sendVerificationEmail(user, verificationCode);
-    // } catch (err) {
-    //   emailSent = false;
-    //   console.error("[Mailer] Verification email failed:", err);
-    // }
 
     const tokens = signConsumerTokens(user);
     const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
@@ -253,7 +279,7 @@ router.get("/me", authenticateConsumer, async (req: AuthenticatedRequest, res: R
 // PATCH /api/v1/auth/me
 router.patch("/me", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { name, bio, avatarHue, interests, username, onboarded } = req.body;
+    const { name, bio, avatarHue, avatarUrl, interests, username, onboarded } = req.body;
     const user = await User.findById(req.user?.userId);
     if (!user) {
       return res.status(401).json({ error: "Unauthenticated" });
@@ -274,6 +300,7 @@ router.patch("/me", authenticateConsumer, async (req: AuthenticatedRequest, res:
     if (name) user.name = name.trim();
     if (bio !== undefined) user.bio = bio.trim();
     if (avatarHue !== undefined) user.avatarHue = Number(avatarHue) || user.avatarHue;
+    if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
     if (Array.isArray(interests)) user.interests = interests.map((topic) => String(topic).trim()).filter(Boolean);
     if (onboarded !== undefined) user.onboarded = Boolean(onboarded);
 

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
-import { useCameraPreview, useBrowserLiveRoom } from "@/lib/browser-live";
+import { useCameraPreview, useBrowserLiveRoom } from "@/lib/live-room";
 import { formatCount } from "@/lib/format";
 import {
   useLiveStreams,
@@ -68,6 +68,7 @@ function LiveVideoPreview({
     streamId: stream._id,
     publish: isOwnStream,
     enabled,
+    hostId: stream.host._id,
   });
   const previewStream = isOwnStream ? localStream : remoteStream;
 

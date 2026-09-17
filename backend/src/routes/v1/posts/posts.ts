@@ -290,7 +290,7 @@ router.delete("/:id", authenticateConsumer, async (req: AuthenticatedRequest, re
       await Promise.all(post.tags.map((tag) => Hashtag.findOneAndUpdate({ tag }, { $inc: { postsCount: -1 } })));
     }
 
-    return res.status(204).end();
+    return res.json({ success: true, message: "Post deleted successfully" });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to delete post", details: error.message });
   }

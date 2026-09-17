@@ -5,7 +5,7 @@ import { BottomNav } from "./BottomNav";
 import { RightRail } from "./RightRail";
 import { SideNav } from "./SideNav";
 import { TopBar } from "./TopBar";
-import { CreateHost } from "@/components/feed/CreateSheet";
+import { CreateHost } from "@/components/create/CreateHub";
 import { useAuth } from "@/lib/auth-context";
 
 export function AppShell({ children }: { children: ReactNode }) {

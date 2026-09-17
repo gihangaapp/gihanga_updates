@@ -67,4 +67,18 @@ export function uploadBufferToCloudinary(
   });
 }
 
+/**
+ * Derives a JPEG thumbnail URL for a Cloudinary-hosted video by asking
+ * Cloudinary to render a frame as an image (same public_id, resource_type
+ * "video", format "jpg" — Cloudinary generates this on the fly). Returns
+ * undefined for anything that isn't a Cloudinary-hosted video URL.
+ */
+export function videoThumbnailFromCloudinary(publicId: string): string {
+  return cloudinary.url(publicId, {
+    resource_type: "video",
+    format: "jpg",
+    secure: true,
+  });
+}
+
 export { cloudinary };

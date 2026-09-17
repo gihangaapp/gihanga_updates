@@ -3,6 +3,7 @@ import { Setting } from "../../../../models/Setting";
 import { Category } from "../../../../models/Category";
 import { authenticateStaff, requirePermission, AuthenticatedRequest } from "../../../../middleware/rbac";
 import { logAudit } from "../../../../utils/auditLogger";
+import { getAdConfig, updateAdConfig } from "../../../../lib/adConfig";
 
 const router = Router();
 
@@ -19,6 +20,31 @@ router.get("/", authenticateStaff, requirePermission("settings.view"), async (_r
     });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to load settings", details: error.message });
+  }
+});
+
+// GET /api/v1/system/settings/ads — Advertising configuration
+router.get("/ads", authenticateStaff, requirePermission("ads.view"), async (_req, res: Response) => {
+  try {
+    const config = await getAdConfig();
+    return res.json({ config });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to load advertising configuration", details: error.message });
+  }
+});
+
+// PUT /api/v1/system/settings/ads — Update advertising configuration (Superadmin)
+router.put("/ads", authenticateStaff, requirePermission("settings.view"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const config = await updateAdConfig(req.body, req.staffUser!.userId);
+    await logAudit({
+      actor: req.staffUser!.userId,
+      action: "settings.ads.update",
+      meta: req.body,
+    });
+    return res.json({ config });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to update advertising configuration", details: error.message });
   }
 });
 

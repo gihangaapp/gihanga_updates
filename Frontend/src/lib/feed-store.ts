@@ -4,7 +4,6 @@
  */
 import { useMemo, useSyncExternalStore } from "react";
 import type { Post, User } from "@/types";
-import { posts as seedPosts } from "@/mock/data";
 
 export interface DraftPost {
   body: string;

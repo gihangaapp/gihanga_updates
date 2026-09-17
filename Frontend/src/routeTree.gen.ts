@@ -16,6 +16,7 @@ import { Route as BookmarksRouteImport } from './routes/bookmarks'
 import { Route as ExploreRouteImport } from './routes/explore'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as InterestsRouteImport } from './routes/interests'
+import { Route as LandingRouteImport } from './routes/landing'
 import { Route as LiveRouteImport } from './routes/live'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as NotificationsRouteImport } from './routes/notifications'
@@ -29,6 +30,7 @@ import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as WalletRouteImport } from './routes/wallet'
 import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as LiveStreamIdRouteImport } from './routes/live.$streamId'
+import { Route as PostPostIdRouteImport } from './routes/post.$postId'
 import { Route as ProfileUsernameRouteImport } from './routes/profile.$username'
 import { Route as SystemIndexRouteImport } from './routes/system.index'
 import { Route as SystemDashboardRouteImport } from './routes/system.dashboard'
@@ -36,6 +38,7 @@ import { Route as TagTagRouteImport } from './routes/tag.$tag'
 import { Route as SystemDashboardIndexRouteImport } from './routes/system.dashboard.index'
 import { Route as SystemDashboardAccountsRouteImport } from './routes/system.dashboard.accounts'
 import { Route as SystemDashboardActivityRouteImport } from './routes/system.dashboard.activity'
+import { Route as SystemDashboardAdSettingsRouteImport } from './routes/system.dashboard.ad-settings'
 import { Route as SystemDashboardAuditRouteImport } from './routes/system.dashboard.audit'
 import { Route as SystemDashboardCampaignsRouteImport } from './routes/system.dashboard.campaigns'
 import { Route as SystemDashboardGrowthRouteImport } from './routes/system.dashboard.growth'
@@ -79,6 +82,11 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
 const InterestsRoute = InterestsRouteImport.update({
   id: '/interests',
   path: '/interests',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LandingRoute = LandingRouteImport.update({
+  id: '/landing',
+  path: '/landing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LiveRoute = LiveRouteImport.update({
@@ -146,6 +154,11 @@ const LiveStreamIdRoute = LiveStreamIdRouteImport.update({
   path: '/$streamId',
   getParentRoute: () => LiveRoute,
 } as any)
+const PostPostIdRoute = PostPostIdRouteImport.update({
+  id: '/post/$postId',
+  path: '/post/$postId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProfileUsernameRoute = ProfileUsernameRouteImport.update({
   id: '/profile/$username',
   path: '/profile/$username',
@@ -181,6 +194,12 @@ const SystemDashboardActivityRoute = SystemDashboardActivityRouteImport.update({
   path: '/activity',
   getParentRoute: () => SystemDashboardRoute,
 } as any)
+const SystemDashboardAdSettingsRoute =
+  SystemDashboardAdSettingsRouteImport.update({
+    id: '/ad-settings',
+    path: '/ad-settings',
+    getParentRoute: () => SystemDashboardRoute,
+  } as any)
 const SystemDashboardAuditRoute = SystemDashboardAuditRouteImport.update({
   id: '/audit',
   path: '/audit',
@@ -237,6 +256,7 @@ export interface FileRoutesByFullPath {
   '/explore': typeof ExploreRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/interests': typeof InterestsRoute
+  '/landing': typeof LandingRoute
   '/live': typeof LiveRouteWithChildren
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
@@ -250,12 +270,14 @@ export interface FileRoutesByFullPath {
   '/wallet': typeof WalletRoute
   '/welcome': typeof WelcomeRoute
   '/live/$streamId': typeof LiveStreamIdRoute
+  '/post/$postId': typeof PostPostIdRoute
   '/profile/$username': typeof ProfileUsernameRoute
   '/system/dashboard': typeof SystemDashboardRouteWithChildren
   '/tag/$tag': typeof TagTagRoute
   '/system/': typeof SystemIndexRoute
   '/system/dashboard/accounts': typeof SystemDashboardAccountsRoute
   '/system/dashboard/activity': typeof SystemDashboardActivityRoute
+  '/system/dashboard/ad-settings': typeof SystemDashboardAdSettingsRoute
   '/system/dashboard/audit': typeof SystemDashboardAuditRoute
   '/system/dashboard/campaigns': typeof SystemDashboardCampaignsRoute
   '/system/dashboard/growth': typeof SystemDashboardGrowthRoute
@@ -275,6 +297,7 @@ export interface FileRoutesByTo {
   '/explore': typeof ExploreRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/interests': typeof InterestsRoute
+  '/landing': typeof LandingRoute
   '/live': typeof LiveRouteWithChildren
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
@@ -288,11 +311,13 @@ export interface FileRoutesByTo {
   '/wallet': typeof WalletRoute
   '/welcome': typeof WelcomeRoute
   '/live/$streamId': typeof LiveStreamIdRoute
+  '/post/$postId': typeof PostPostIdRoute
   '/profile/$username': typeof ProfileUsernameRoute
   '/tag/$tag': typeof TagTagRoute
   '/system': typeof SystemIndexRoute
   '/system/dashboard/accounts': typeof SystemDashboardAccountsRoute
   '/system/dashboard/activity': typeof SystemDashboardActivityRoute
+  '/system/dashboard/ad-settings': typeof SystemDashboardAdSettingsRoute
   '/system/dashboard/audit': typeof SystemDashboardAuditRoute
   '/system/dashboard/campaigns': typeof SystemDashboardCampaignsRoute
   '/system/dashboard/growth': typeof SystemDashboardGrowthRoute
@@ -313,6 +338,7 @@ export interface FileRoutesById {
   '/explore': typeof ExploreRoute
   '/forgot-password': typeof ForgotPasswordRoute
   '/interests': typeof InterestsRoute
+  '/landing': typeof LandingRoute
   '/live': typeof LiveRouteWithChildren
   '/login': typeof LoginRoute
   '/notifications': typeof NotificationsRoute
@@ -326,12 +352,14 @@ export interface FileRoutesById {
   '/wallet': typeof WalletRoute
   '/welcome': typeof WelcomeRoute
   '/live/$streamId': typeof LiveStreamIdRoute
+  '/post/$postId': typeof PostPostIdRoute
   '/profile/$username': typeof ProfileUsernameRoute
   '/system/dashboard': typeof SystemDashboardRouteWithChildren
   '/tag/$tag': typeof TagTagRoute
   '/system/': typeof SystemIndexRoute
   '/system/dashboard/accounts': typeof SystemDashboardAccountsRoute
   '/system/dashboard/activity': typeof SystemDashboardActivityRoute
+  '/system/dashboard/ad-settings': typeof SystemDashboardAdSettingsRoute
   '/system/dashboard/audit': typeof SystemDashboardAuditRoute
   '/system/dashboard/campaigns': typeof SystemDashboardCampaignsRoute
   '/system/dashboard/growth': typeof SystemDashboardGrowthRoute
@@ -353,6 +381,7 @@ export interface FileRouteTypes {
     | '/explore'
     | '/forgot-password'
     | '/interests'
+    | '/landing'
     | '/live'
     | '/login'
     | '/notifications'
@@ -366,12 +395,14 @@ export interface FileRouteTypes {
     | '/wallet'
     | '/welcome'
     | '/live/$streamId'
+    | '/post/$postId'
     | '/profile/$username'
     | '/system/dashboard'
     | '/tag/$tag'
     | '/system/'
     | '/system/dashboard/accounts'
     | '/system/dashboard/activity'
+    | '/system/dashboard/ad-settings'
     | '/system/dashboard/audit'
     | '/system/dashboard/campaigns'
     | '/system/dashboard/growth'
@@ -391,6 +422,7 @@ export interface FileRouteTypes {
     | '/explore'
     | '/forgot-password'
     | '/interests'
+    | '/landing'
     | '/live'
     | '/login'
     | '/notifications'
@@ -404,11 +436,13 @@ export interface FileRouteTypes {
     | '/wallet'
     | '/welcome'
     | '/live/$streamId'
+    | '/post/$postId'
     | '/profile/$username'
     | '/tag/$tag'
     | '/system'
     | '/system/dashboard/accounts'
     | '/system/dashboard/activity'
+    | '/system/dashboard/ad-settings'
     | '/system/dashboard/audit'
     | '/system/dashboard/campaigns'
     | '/system/dashboard/growth'
@@ -428,6 +462,7 @@ export interface FileRouteTypes {
     | '/explore'
     | '/forgot-password'
     | '/interests'
+    | '/landing'
     | '/live'
     | '/login'
     | '/notifications'
@@ -441,12 +476,14 @@ export interface FileRouteTypes {
     | '/wallet'
     | '/welcome'
     | '/live/$streamId'
+    | '/post/$postId'
     | '/profile/$username'
     | '/system/dashboard'
     | '/tag/$tag'
     | '/system/'
     | '/system/dashboard/accounts'
     | '/system/dashboard/activity'
+    | '/system/dashboard/ad-settings'
     | '/system/dashboard/audit'
     | '/system/dashboard/campaigns'
     | '/system/dashboard/growth'
@@ -467,6 +504,7 @@ export interface RootRouteChildren {
   ExploreRoute: typeof ExploreRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   InterestsRoute: typeof InterestsRoute
+  LandingRoute: typeof LandingRoute
   LiveRoute: typeof LiveRouteWithChildren
   LoginRoute: typeof LoginRoute
   NotificationsRoute: typeof NotificationsRoute
@@ -479,6 +517,7 @@ export interface RootRouteChildren {
   VerifyRoute: typeof VerifyRoute
   WalletRoute: typeof WalletRoute
   WelcomeRoute: typeof WelcomeRoute
+  PostPostIdRoute: typeof PostPostIdRoute
   ProfileUsernameRoute: typeof ProfileUsernameRoute
   SystemDashboardRoute: typeof SystemDashboardRouteWithChildren
   TagTagRoute: typeof TagTagRoute
@@ -534,6 +573,13 @@ declare module '@tanstack/react-router' {
       path: '/interests'
       fullPath: '/interests'
       preLoaderRoute: typeof InterestsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/landing': {
+      id: '/landing'
+      path: '/landing'
+      fullPath: '/landing'
+      preLoaderRoute: typeof LandingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/live': {
@@ -627,6 +673,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LiveStreamIdRouteImport
       parentRoute: typeof LiveRoute
     }
+    '/post/$postId': {
+      id: '/post/$postId'
+      path: '/post/$postId'
+      fullPath: '/post/$postId'
+      preLoaderRoute: typeof PostPostIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/profile/$username': {
       id: '/profile/$username'
       path: '/profile/$username'
@@ -674,6 +727,13 @@ declare module '@tanstack/react-router' {
       path: '/activity'
       fullPath: '/system/dashboard/activity'
       preLoaderRoute: typeof SystemDashboardActivityRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/ad-settings': {
+      id: '/system/dashboard/ad-settings'
+      path: '/ad-settings'
+      fullPath: '/system/dashboard/ad-settings'
+      preLoaderRoute: typeof SystemDashboardAdSettingsRouteImport
       parentRoute: typeof SystemDashboardRoute
     }
     '/system/dashboard/audit': {
@@ -755,6 +815,7 @@ const LiveRouteWithChildren = LiveRoute._addFileChildren(LiveRouteChildren)
 interface SystemDashboardRouteChildren {
   SystemDashboardAccountsRoute: typeof SystemDashboardAccountsRoute
   SystemDashboardActivityRoute: typeof SystemDashboardActivityRoute
+  SystemDashboardAdSettingsRoute: typeof SystemDashboardAdSettingsRoute
   SystemDashboardAuditRoute: typeof SystemDashboardAuditRoute
   SystemDashboardCampaignsRoute: typeof SystemDashboardCampaignsRoute
   SystemDashboardGrowthRoute: typeof SystemDashboardGrowthRoute
@@ -770,6 +831,7 @@ interface SystemDashboardRouteChildren {
 const SystemDashboardRouteChildren: SystemDashboardRouteChildren = {
   SystemDashboardAccountsRoute: SystemDashboardAccountsRoute,
   SystemDashboardActivityRoute: SystemDashboardActivityRoute,
+  SystemDashboardAdSettingsRoute: SystemDashboardAdSettingsRoute,
   SystemDashboardAuditRoute: SystemDashboardAuditRoute,
   SystemDashboardCampaignsRoute: SystemDashboardCampaignsRoute,
   SystemDashboardGrowthRoute: SystemDashboardGrowthRoute,
@@ -794,6 +856,7 @@ const rootRouteChildren: RootRouteChildren = {
   ExploreRoute: ExploreRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
   InterestsRoute: InterestsRoute,
+  LandingRoute: LandingRoute,
   LiveRoute: LiveRouteWithChildren,
   LoginRoute: LoginRoute,
   NotificationsRoute: NotificationsRoute,
@@ -806,6 +869,7 @@ const rootRouteChildren: RootRouteChildren = {
   VerifyRoute: VerifyRoute,
   WalletRoute: WalletRoute,
   WelcomeRoute: WelcomeRoute,
+  PostPostIdRoute: PostPostIdRoute,
   ProfileUsernameRoute: ProfileUsernameRoute,
   SystemDashboardRoute: SystemDashboardRouteWithChildren,
   TagTagRoute: TagTagRoute,

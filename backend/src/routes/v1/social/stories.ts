@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { Types } from "mongoose";
 import { Story } from "../../../models/Story";
 import { Follow } from "../../../models/Follow";
+import { Notification } from "../../../models/Notification";
 import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/rbac";
 
 const router = Router();
@@ -11,7 +12,7 @@ const STORY_LIFETIME_MS = 24 * 60 * 60 * 1000;
 // POST /api/v1/stories — create (auto-expires 24h from now)
 router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { mediaUrl, mediaKey, mediaType, caption, duration } = req.body;
+    const { mediaUrl, mediaKey, mediaType, caption, duration, audience } = req.body;
     if (!mediaUrl) return res.status(400).json({ error: "mediaUrl is required" });
 
     const story = await Story.create({
@@ -54,6 +55,37 @@ router.get("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Res
     return res.json({ stories: Array.from(grouped.values()) });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to load stories", details: error.message });
+  }
+});
+
+// POST /api/v1/stories/:id/reply — reply to story & generate notification
+router.post("/:id/reply", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { message } = req.body;
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: "Reply message is required" });
+    }
+
+    const story = await Story.findById(req.params.id).populate("author", "name username");
+    if (!story) return res.status(404).json({ error: "Story not found" });
+
+    const authorId = String(story.author._id || story.author);
+    if (authorId === req.user!.userId) {
+      return res.status(400).json({ error: "You cannot reply to your own story" });
+    }
+
+    // Create Notification for the story author
+    await Notification.create({
+      recipient: story.author._id || story.author,
+      actor: req.user!.userId,
+      kind: "story_reply",
+      text: `replied to your story: "${message.trim().slice(0, 80)}"`,
+      relatedPost: story._id as any,
+    });
+
+    return res.status(201).json({ success: true, message: "Reply sent successfully!" });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to send story reply", details: error.message });
   }
 });
 

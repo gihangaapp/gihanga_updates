@@ -8,7 +8,8 @@ export type NotificationKind =
   | "live"
   | "system"
   | "payment"
-  | "reward";
+  | "reward"
+  | "story_reply";
 
 export interface INotification extends Document {
   recipient: Types.ObjectId;
@@ -27,7 +28,7 @@ const NotificationSchema = new Schema<INotification>(
     recipient: { type: Schema.Types.ObjectId, ref: "User", required: true },
     kind: {
       type: String,
-      enum: ["like", "comment", "follow", "mention", "live", "system", "payment", "reward"],
+      enum: ["like", "comment", "follow", "mention", "live", "system", "payment", "reward", "story_reply"],
       required: true,
     },
     actor: { type: Schema.Types.ObjectId, ref: "User" },

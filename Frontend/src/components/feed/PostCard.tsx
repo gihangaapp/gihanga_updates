@@ -1,27 +1,20 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
+import { useSubmitNotInterested, logRecommendationEvent } from "@/hooks/use-recommendations";
 import {
   Bookmark,
-  Eye,
+  EyeOff,
   Heart,
   MapPin,
   MessageCircle,
   MoreHorizontal,
-  Play,
-  Send,
+  Share2,
   Trash2,
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { GAvatar, VerifiedBadge } from "@/components/common/GAvatar";
 import { Button } from "@/components/ui/button";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,43 +23,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatCount, timeAgo } from "@/lib/format";
-import { FeedPost, PostComment, mediaUrl } from "@/lib/api-client";
+import { FeedPost } from "@/lib/api-client";
 import { useToggleLike, useToggleBookmark, useDeletePost } from "@/hooks/use-posts";
-import { useComments, useCreateComment, useToggleCommentLike, useFollowUser, useFollowingSet } from "@/hooks/use-social";
+import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { useAuth } from "@/lib/auth-context";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { PostMediaCarousel } from "@/components/viewing/PostMediaCarousel";
+import { CommentSheet, InlineComments } from "@/components/viewing/CommentSheet";
+import { ShareSheet } from "@/components/viewing/ShareSheet";
 import { cn } from "@/lib/utils";
-
-function ActionButton({
-  icon: Icon,
-  label,
-  count,
-  active,
-  tone = "primary",
-  onClick,
-}: {
-  icon: typeof Heart;
-  label: string;
-  count?: number;
-  active?: boolean;
-  tone?: "primary" | "danger";
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      aria-pressed={active}
-      className={cn(
-        "press flex items-center gap-2 rounded-xl px-3 py-2 text-[13px] font-semibold text-muted-foreground hover:bg-muted",
-        active && (tone === "danger" ? "text-danger" : "text-primary"),
-      )}
-    >
-      <Icon className={cn("size-[18px]", active && "fill-current")} />
-      {count !== undefined && <span className="tabular-nums">{formatCount(count)}</span>}
-    </button>
-  );
-}
 
 function toDisplayUser(author: FeedPost["author"]) {
   return {
@@ -87,9 +52,12 @@ function toDisplayUser(author: FeedPost["author"]) {
 
 export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }) {
   const { user } = useAuth();
-  const [burst, setBurst] = useState(false);
+  const isMobile = useIsMobile();
+  const submitNotInterested = useSubmitNotInterested();
   const [commentsOpen, setCommentsOpen] = useState(false);
-  const lastTap = useRef(0);
+  const [inlineCommentsOpen, setInlineCommentsOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const toggleLike = useToggleLike();
   const toggleBookmark = useToggleBookmark();
@@ -100,30 +68,40 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
   const isOwnPost = user?.username === post.author.username;
   const following = followingSet?.has(post.author.username) ?? post.followingAuthor;
 
-  const like = useCallback(() => {
+  const handleLike = useCallback(() => {
+    logRecommendationEvent({
+      event: post.liked ? "post_unlike" : "post_like",
+      targetKind: post.kind === "reel" ? "reel" : "post",
+      targetId: post._id,
+      creatorId: String(post.author._id ?? post.author),
+      tags: post.tags,
+    });
     toggleLike.mutate(post._id);
-  }, [toggleLike, post._id]);
+  }, [toggleLike, post._id, post.liked, post.kind, post.author, post.tags]);
 
-  const onMediaTap = () => {
-    const now = Date.now();
-    if (now - lastTap.current < 300) {
-      if (!post.liked) like();
-      setBurst(true);
-      window.setTimeout(() => setBurst(false), 700);
+  const handleCommentClick = () => {
+    if (isMobile) {
+      setCommentsOpen(true);
+    } else {
+      setInlineCommentsOpen((prev) => !prev);
     }
-    lastTap.current = now;
   };
 
-  const image = mediaUrl(post.mediaUrl);
+  const maxCharLimit = 160;
+  const isLongCaption = post.body && post.body.length > maxCharLimit;
+  const displayCaption = isLongCaption && !isExpanded
+    ? `${post.body.slice(0, maxCharLimit)}…`
+    : post.body;
 
   return (
     <motion.article
-      initial={{ opacity: 0, y: 18 }}
+      initial={{ opacity: 0, y: 14 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-40px" }}
-      transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1], delay: Math.min(index, 4) * 0.05 }}
-      className="surface-card mb-4 overflow-hidden"
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: Math.min(index, 4) * 0.04 }}
+      className="surface-card mb-4 overflow-hidden border border-border bg-card shadow-soft"
     >
+      {/* Header */}
       <header className="flex items-center gap-3 p-4 pb-3">
         <Link
           to="/profile/$username"
@@ -133,11 +111,17 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
           <GAvatar user={toDisplayUser(post.author)} size="md" ring={post.author.isLive ? "live" : "none"} />
         </Link>
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-1">
-            <span className="truncate text-[15px] font-bold">{post.author.name}</span>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Link
+              to="/profile/$username"
+              params={{ username: post.author.username }}
+              className="truncate text-[15px] font-bold hover:underline"
+            >
+              {post.author.name}
+            </Link>
             {post.author.verified && <VerifiedBadge />}
             {post.author.isCreator && (
-              <span className="ml-1 hidden shrink-0 rounded-md bg-primary-soft px-1.5 py-px text-[10px] font-bold tracking-wide text-primary uppercase sm:inline">
+              <span className="shrink-0 rounded-md bg-primary-soft px-1.5 py-px text-[10px] font-bold tracking-wide text-primary uppercase">
                 Creator
               </span>
             )}
@@ -149,12 +133,13 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
             {post.location && (
               <>
                 <span aria-hidden>·</span>
-                <MapPin className="size-3 shrink-0" />
+                <MapPin className="size-3 shrink-0 text-success" />
                 <span className="truncate">{post.location}</span>
               </>
             )}
           </div>
         </div>
+
         {!isOwnPost && (
           <Button
             variant={following ? "soft" : "default"}
@@ -162,36 +147,47 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
             onClick={() =>
               followUser.mutate(
                 { username: post.author.username, follow: !following },
-                { onError: (err: any) => toast.error(err.message || "Couldn't update follow status") },
+                { onError: (err: any) => toast.error(err.message || "Couldn't update follow status") }
               )
             }
           >
             {following ? "Following" : "Follow"}
           </Button>
         )}
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon-sm" aria-label="Post options">
-              <MoreHorizontal />
+              <MoreHorizontal className="size-5" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuItem onClick={() => toggleBookmark.mutate(post._id)}>
-              {post.bookmarked ? "Remove from bookmarks" : "Save post"}
+              <Bookmark className="size-4" />
+              {post.bookmarked ? "Remove from saved" : "Save post"}
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                navigator.clipboard?.writeText(`${window.location.origin}/post/${post._id}`);
-                toast.success("Link copied");
-              }}
-            >
-              Copy link
+            <DropdownMenuItem onClick={() => setShareOpen(true)}>
+              <Share2 className="size-4" />
+              Share post
             </DropdownMenuItem>
+            {!isOwnPost && (
+              <DropdownMenuItem
+                onClick={() => {
+                  submitNotInterested.mutate(
+                    { contentId: post._id, reason: "not_interested" },
+                    { onSuccess: () => toast.success("Recorded. We will show less content like this.") }
+                  );
+                }}
+              >
+                <EyeOff className="size-4 text-muted-foreground" />
+                Not interested
+              </DropdownMenuItem>
+            )}
             {isOwnPost ? (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  className="text-danger"
+                  className="text-danger focus:bg-danger/10 focus:text-danger"
                   onClick={() => {
                     deletePost.mutate(post._id);
                     toast.success("Post deleted");
@@ -205,8 +201,8 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  className="text-danger"
-                  onClick={() => toast.success("Report sent to moderation")}
+                  className="text-danger focus:bg-danger/10 focus:text-danger"
+                  onClick={() => toast.success("Report sent to moderation team")}
                 >
                   Report
                 </DropdownMenuItem>
@@ -216,9 +212,21 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
         </DropdownMenu>
       </header>
 
+      {/* Caption Body */}
       {post.body && (
         <div className="px-4 pb-3">
-          <p className="text-[15px] leading-relaxed text-foreground/90">{post.body}</p>
+          <p className="text-[15px] leading-relaxed text-foreground/90 whitespace-pre-wrap">
+            {displayCaption}
+            {isLongCaption && (
+              <button
+                type="button"
+                onClick={() => setIsExpanded((prev) => !prev)}
+                className="ml-1 text-xs font-bold text-primary hover:underline"
+              >
+                {isExpanded ? "Show less" : "more"}
+              </button>
+            )}
+          </p>
           {post.tags.length > 0 && (
             <p className="mt-1.5 flex flex-wrap gap-x-2 text-[13px] font-semibold text-primary">
               {post.tags.map((t) => (
@@ -231,218 +239,94 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
         </div>
       )}
 
-      {image && post.kind !== "text" && (
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={onMediaTap}
-          onKeyDown={(e) => e.key === "Enter" && like()}
-          aria-label="Double tap to like"
-          className="relative mx-4 mb-3 overflow-hidden rounded-2xl bg-muted select-none"
-        >
-          {post.kind === "video" || post.kind === "reel" ? (
-            <video
-              src={image}
-              poster={mediaUrl(post.thumbnailUrl)}
-              controls
-              playsInline
-              className={cn(
-                "w-full bg-black object-contain",
-                post.kind === "reel" ? "aspect-9/16 max-h-[560px]" : "max-h-[520px]",
-              )}
-            />
-          ) : (
-            <img
-              src={image}
-              alt={post.body || "Post media"}
-              loading="lazy"
-              className="max-h-[600px] w-full object-contain"
-            />
-          )}
+      {/* Media Player / Carousel */}
+      <PostMediaCarousel
+        mediaUrlString={post.mediaUrl}
+        thumbnailUrl={post.thumbnailUrl}
+        kind={post.kind}
+        body={post.body}
+        liked={post.liked}
+        onDoubleTapLike={handleLike}
+      />
 
-          {post.kind === "reel" && (
-            <>
-              <span className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/45 via-transparent to-black/20" />
-              <span className="glass absolute top-3 left-3 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold">
-                <Play className="size-3 fill-current" />
-                Reel
-              </span>
-              {post.viewsCount !== undefined && (
-                <span className="glass absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold tabular-nums">
-                  <Eye className="size-3.5" />
-                  {formatCount(post.viewsCount)}
-                </span>
-              )}
-            </>
-          )}
-
-          <AnimatePresence>
-            {burst && (
-              <motion.span
-                initial={{ scale: 0.3, opacity: 0 }}
-                animate={{ scale: [0.3, 1.25, 1], opacity: [0, 1, 0] }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.7, times: [0, 0.4, 1] }}
-                className="pointer-events-none absolute inset-0 grid place-items-center"
-              >
-                <Heart className="size-24 fill-danger text-danger drop-shadow-2xl" />
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
-
-      <div className="flex items-center gap-1 border-t border-border px-2 py-1.5">
-        <ActionButton icon={Heart} label="Like" count={post.likesCount} active={post.liked} tone="danger" onClick={like} />
-        <ActionButton
-          icon={MessageCircle}
-          label="Comments"
-          count={post.commentsCount}
-          onClick={() => setCommentsOpen(true)}
-        />
-        <ActionButton
-          icon={Send}
-          label="Share"
-          count={post.sharesCount}
-          onClick={() => {
-            navigator.clipboard?.writeText(`${window.location.origin}/post/${post._id}`);
-            toast.success("Link copied");
-          }}
-        />
-        <div className="ml-auto">
-          <ActionButton
-            icon={Bookmark}
-            label="Save"
-            active={post.bookmarked}
-            onClick={() => {
-              toggleBookmark.mutate(post._id);
-              toast.success(post.bookmarked ? "Removed from bookmarks" : "Saved to bookmarks");
-            }}
-          />
-        </div>
-      </div>
-
-      <CommentsDrawer post={post} open={commentsOpen} onOpenChange={setCommentsOpen} />
-    </motion.article>
-  );
-}
-
-function CommentsDrawer({
-  post,
-  open,
-  onOpenChange,
-}: {
-  post: FeedPost;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const { data, isLoading } = useComments(open ? post._id : "");
-  const createComment = useCreateComment(post._id);
-  const [draft, setDraft] = useState("");
-  const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
-
-  function submit() {
-    if (!draft.trim()) return;
-    createComment.mutate(
-      { body: draft.trim(), parent: replyTo?.id },
-      {
-        onSuccess: () => {
-          setDraft("");
-          setReplyTo(null);
-        },
-        onError: (err: any) => toast.error(err.message || "Couldn't post your comment"),
-      },
-    );
-  }
-
-  return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[85vh]">
-        <DrawerHeader>
-          <DrawerTitle>Comments</DrawerTitle>
-          <DrawerDescription>
-            {formatCount(post.commentsCount)} on {post.author.name}&apos;s post
-          </DrawerDescription>
-        </DrawerHeader>
-        <div className="space-y-4 overflow-y-auto px-4 pb-3">
-          {isLoading && <p className="py-6 text-center text-sm text-muted-foreground">Loading comments…</p>}
-          {!isLoading && data?.comments.length === 0 && (
-            <p className="py-6 text-center text-sm text-muted-foreground">Be the first to comment.</p>
-          )}
-          {data?.comments.map((comment) => (
-            <CommentRow
-              key={comment._id}
-              comment={comment}
-              postId={post._id}
-              onReply={(id, name) => setReplyTo({ id, name })}
-            />
-          ))}
-        </div>
-        <div className="border-t border-border p-4">
-          {replyTo && (
-            <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-              Replying to <span className="font-semibold">{replyTo.name}</span>
-              <button type="button" className="text-primary hover:underline" onClick={() => setReplyTo(null)}>
-                Cancel
-              </button>
-            </div>
-          )}
-          <div className="flex items-center gap-2">
-            <input
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submit()}
-              placeholder="Add a comment…"
-              className="h-11 flex-1 rounded-full border border-border bg-elevated px-4 text-sm outline-none focus:border-ring"
-            />
-            <Button size="sm" variant="brand" onClick={submit} disabled={!draft.trim() || createComment.isPending}>
-              Post
-            </Button>
-          </div>
-        </div>
-      </DrawerContent>
-    </Drawer>
-  );
-}
-
-function CommentRow({
-  comment,
-  postId,
-  onReply,
-  depth = 0,
-}: {
-  comment: PostComment;
-  postId: string;
-  onReply: (id: string, name: string) => void;
-  depth?: number;
-}) {
-  const toggleLike = useToggleCommentLike(postId);
-
-  return (
-    <div className={cn("flex items-start gap-3", depth > 0 && "ml-8 mt-3")}>
-      <GAvatar user={toDisplayUser(comment.author)} size="sm" />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <span className="truncate text-sm font-bold">{comment.author.name}</span>
-          <span className="text-xs text-muted-foreground">{timeAgo(comment.createdAt)}</span>
-        </div>
-        <p className="text-sm leading-relaxed text-foreground/85">{comment.body}</p>
-        <div className="mt-1 flex gap-3 text-xs font-semibold text-muted-foreground">
+      {/* Action Bar */}
+      <div className="flex items-center justify-between border-t border-border px-3 py-1.5">
+        <div className="flex items-center gap-1">
+          {/* Like */}
           <button
             type="button"
-            className={cn("hover:text-danger", comment.liked && "text-danger")}
-            onClick={() => toggleLike.mutate(comment._id)}
+            onClick={handleLike}
+            aria-label="Like post"
+            aria-pressed={post.liked}
+            className={cn(
+              "press flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-colors",
+              post.liked ? "text-danger bg-danger/10" : "text-muted-foreground hover:bg-muted"
+            )}
           >
-            {formatCount(comment.likesCount)} likes
+            <motion.span whileTap={{ scale: 1.4 }}>
+              <Heart className={cn("size-4", post.liked && "fill-current")} />
+            </motion.span>
+            <span className="tabular-nums">{formatCount(post.likesCount)}</span>
           </button>
-          <button type="button" className="hover:text-primary" onClick={() => onReply(comment._id, comment.author.name)}>
-            Reply
+
+          {/* Comment */}
+          <button
+            type="button"
+            onClick={handleCommentClick}
+            aria-label="Comment"
+            className={cn(
+              "press flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-colors",
+              inlineCommentsOpen ? "text-primary bg-primary-soft" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            )}
+          >
+            <MessageCircle className="size-4" />
+            <span className="tabular-nums">{formatCount(post.commentsCount)}</span>
+          </button>
+
+          {/* Share */}
+          <button
+            type="button"
+            onClick={() => setShareOpen(true)}
+            aria-label="Share"
+            className="press flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <Share2 className="size-4" />
+            {post.sharesCount > 0 && <span className="tabular-nums">{formatCount(post.sharesCount)}</span>}
           </button>
         </div>
-        {comment.replies?.map((reply) => (
-          <CommentRow key={reply._id} comment={reply} postId={postId} onReply={onReply} depth={depth + 1} />
-        ))}
+
+        {/* Save / Bookmark */}
+        <button
+          type="button"
+          onClick={() => {
+            toggleBookmark.mutate(post._id);
+            toast.success(post.bookmarked ? "Removed from bookmarks" : "Saved to bookmarks");
+          }}
+          aria-label="Save post"
+          aria-pressed={post.bookmarked}
+          className={cn(
+            "press flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-colors",
+            post.bookmarked ? "text-primary bg-primary-soft font-bold" : "text-muted-foreground hover:bg-muted"
+          )}
+        >
+          <Bookmark className={cn("size-4", post.bookmarked && "fill-current")} />
+        </button>
       </div>
-    </div>
+
+      {/* Desktop Instagram-style Inline Hide/Show Comments Layout */}
+      {inlineCommentsOpen && !isMobile && <InlineComments post={post} />}
+
+      {/* Mobile Drawer Comments Sheet */}
+      {isMobile && <CommentSheet post={post} open={commentsOpen} onOpenChange={setCommentsOpen} />}
+
+      {/* Integrated Share Sheet */}
+      <ShareSheet
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        title={`Post by @${post.author.username} on Gihanga Updates`}
+        text={post.body}
+        url={`${typeof window !== "undefined" ? window.location.origin : ""}/post/${post._id}`}
+      />
+    </motion.article>
   );
 }

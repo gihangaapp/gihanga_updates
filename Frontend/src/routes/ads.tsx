@@ -1,20 +1,13 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Eye, MousePointerClick, Pause, Play, Plus, Target, Trash2, Wallet } from "lucide-react";
-import { toast } from "sonner";
+import { Plus, Eye, MousePointerClick, Wallet, Coins, Sparkles, Target, Layers } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AdCard } from "@/components/ads/AdCard";
+import { AdWizard } from "@/components/ads/AdWizard";
+import { useMyAds, useAdConfig, Advertisement } from "@/hooks/use-ads";
+import { useWallet } from "@/hooks/use-wallet";
 import { formatCount } from "@/lib/format";
-import {
-  useMyCampaigns,
-  useCreateCampaign,
-  useUpdateCampaign,
-  useDeleteCampaign,
-  type CampaignObjective,
-  type Campaign,
-} from "@/hooks/use-ads";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/ads")({
@@ -24,10 +17,10 @@ export const Route = createFileRoute("/ads")({
       {
         name: "description",
         content:
-          "Launch campaigns, pick an objective and audience, and track impressions, clicks and spend across Rwanda.",
+          "Launch campaigns, pay with Real Money or Gihanga Points, choose feed or story placement, and track impressions, clicks and reach across Rwanda.",
       },
       { property: "og:title", content: "Ad Center — Gihanga Updates" },
-      { property: "og:description", content: "Create and manage promotional campaigns on Gihanga Updates." },
+      { property: "og:description", content: "Create and manage promotional advertising campaigns on Gihanga Updates." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -39,230 +32,148 @@ function rwf(n: number) {
   return `${n.toLocaleString()} RWF`;
 }
 
-const STATUS_STYLE: Record<Campaign["status"], string> = {
-  review: "bg-amber-500/15 text-amber-600",
-  active: "bg-success/15 text-success",
-  paused: "bg-muted text-muted-foreground",
-  completed: "bg-primary-soft text-primary",
-  rejected: "bg-danger/15 text-danger",
-};
-
-const OBJECTIVES: { id: CampaignObjective; label: string }[] = [
-  { id: "reach", label: "Reach" },
-  { id: "views", label: "Views" },
-  { id: "clicks", label: "Clicks" },
-  { id: "leads", label: "Leads" },
-  { id: "conversions", label: "Conversions" },
-];
-
-function NewCampaignDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const createCampaign = useCreateCampaign();
-  const [name, setName] = useState("");
-  const [objective, setObjective] = useState<CampaignObjective>("reach");
-  const [dailyBudget, setDailyBudget] = useState("5000");
-  const [totalBudget, setTotalBudget] = useState("50000");
-
-  function submit() {
-    if (!name.trim()) {
-      toast.error("Give your campaign a name");
-      return;
-    }
-    createCampaign.mutate(
-      { name: name.trim(), objective, dailyBudget: Number(dailyBudget), totalBudget: Number(totalBudget) },
-      {
-        onSuccess: () => {
-          toast.success("Campaign submitted for review");
-          onOpenChange(false);
-          setName("");
-        },
-        onError: (err: any) => toast.error(err.message || "Couldn't create campaign"),
-      },
-    );
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[420px]">
-        <DialogHeader>
-          <DialogTitle>New campaign</DialogTitle>
-        </DialogHeader>
-        <div className="flex flex-col gap-3 px-1">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Campaign name" />
-          <div className="grid grid-cols-3 gap-1.5">
-            {OBJECTIVES.map((o) => (
-              <button
-                key={o.id}
-                type="button"
-                onClick={() => setObjective(o.id)}
-                className={cn(
-                  "rounded-lg border px-2 py-2 text-xs font-semibold",
-                  objective === o.id ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground",
-                )}
-              >
-                {o.label}
-              </button>
-            ))}
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-muted-foreground">Daily budget</label>
-              <Input type="number" value={dailyBudget} onChange={(e) => setDailyBudget(e.target.value)} />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-semibold text-muted-foreground">Total budget</label>
-              <Input type="number" value={totalBudget} onChange={(e) => setTotalBudget(e.target.value)} />
-            </div>
-          </div>
-          <Button variant="brand" onClick={submit} disabled={createCampaign.isPending}>
-            {createCampaign.isPending ? "Submitting…" : "Submit for review"}
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            Spend is deducted from your wallet's available balance as the campaign runs.
-          </p>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function CampaignCard({ campaign }: { campaign: Campaign }) {
-  const updateCampaign = useUpdateCampaign();
-  const deleteCampaign = useDeleteCampaign();
-  const progress = campaign.totalBudget > 0 ? Math.min(100, (campaign.spent / campaign.totalBudget) * 100) : 0;
-
-  return (
-    <div className="surface-card p-4">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate font-bold">{campaign.name}</p>
-          <p className="text-xs text-muted-foreground">{campaign.objective}</p>
-        </div>
-        <span className={cn("shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase", STATUS_STYLE[campaign.status])}>
-          {campaign.status}
-        </span>
-      </div>
-
-      {campaign.status === "rejected" && campaign.rejectionReason && (
-        <p className="mt-2 rounded-lg bg-danger/10 px-2.5 py-1.5 text-xs text-danger">{campaign.rejectionReason}</p>
-      )}
-
-      <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
-        <div>
-          <p className="flex items-center justify-center gap-1 font-bold">
-            <Eye className="size-3" /> {formatCount(campaign.impressions)}
-          </p>
-          <p className="text-muted-foreground">Impressions</p>
-        </div>
-        <div>
-          <p className="flex items-center justify-center gap-1 font-bold">
-            <MousePointerClick className="size-3" /> {formatCount(campaign.clicks)}
-          </p>
-          <p className="text-muted-foreground">Clicks</p>
-        </div>
-        <div>
-          <p className="font-bold">{campaign.ctr}%</p>
-          <p className="text-muted-foreground">CTR</p>
-        </div>
-      </div>
-
-      <div className="mt-3">
-        <div className="mb-1 flex justify-between text-xs text-muted-foreground">
-          <span>{rwf(campaign.spent)} spent</span>
-          <span>{rwf(campaign.totalBudget)} budget</span>
-        </div>
-        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-          <div className="gradient-brand h-full" style={{ width: `${progress}%` }} />
-        </div>
-      </div>
-
-      <div className="mt-3 flex gap-2">
-        {(campaign.status === "active" || campaign.status === "paused") && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="flex-1"
-            onClick={() =>
-              updateCampaign.mutate({ id: campaign._id, status: campaign.status === "active" ? "paused" : "active" })
-            }
-          >
-            {campaign.status === "active" ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
-            {campaign.status === "active" ? "Pause" : "Resume"}
-          </Button>
-        )}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-danger"
-          onClick={() => {
-            deleteCampaign.mutate(campaign._id);
-            toast.success("Campaign removed");
-          }}
-        >
-          <Trash2 className="size-3.5" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 function AdsPage() {
-  const { data, isLoading } = useMyCampaigns();
-  const [newOpen, setNewOpen] = useState(false);
-  const campaigns = data?.campaigns ?? [];
+  const { data: campaigns = [], isLoading } = useMyAds();
+  const { data: config } = useAdConfig();
+  const { data: walletData } = useWallet();
 
-  const totalSpend = campaigns.reduce((sum, c) => sum + c.spent, 0);
-  const totalImpressions = campaigns.reduce((sum, c) => sum + c.impressions, 0);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [tab, setTab] = useState<string>("all");
+
+  const totalSpentRwf = campaigns
+    .filter((c) => c.paymentMethod === "real_money" && c.paymentStatus === "paid")
+    .reduce((sum, c) => sum + (c.totalRwfCost || 0), 0);
+
+  const totalPointsSpent = campaigns
+    .filter((c) => c.paymentMethod === "gihanga_points" && c.paymentStatus === "paid")
+    .reduce((sum, c) => sum + (c.totalGpCost || 0), 0);
+
+  const totalImpressions = campaigns.reduce((sum, c) => sum + (c.analytics?.impressions || 0), 0);
+  const activeCount = campaigns.filter((c) => c.status === "active").length;
+
+  const filteredCampaigns = campaigns.filter((c) => {
+    if (tab === "all") return true;
+    if (tab === "active") return c.status === "active";
+    if (tab === "pending") return c.status === "pending_review" || c.status === "pending_payment";
+    if (tab === "unpaid") return c.paymentStatus !== "paid";
+    return true;
+  });
 
   return (
     <AppShell>
-      <div className="mx-auto w-full max-w-[900px] space-y-5">
-        <div className="flex items-center justify-between gap-3">
+      <div className="mx-auto w-full max-w-[920px] space-y-6">
+        {/* Header Title & Create Button */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="font-display text-2xl font-extrabold tracking-tight">Ad Center</h1>
-            <p className="text-sm text-muted-foreground">Promote your content to reach more people.</p>
+            <h1 className="font-display text-2xl font-extrabold tracking-tight text-foreground flex items-center gap-2">
+              <Sparkles className="size-6 text-amber-500" /> Advertising Center
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Promote your content, products, or brand across Rwanda using Real Money or Gihanga Points.
+            </p>
           </div>
-          <Button variant="brand" onClick={() => setNewOpen(true)}>
-            <Plus className="size-4" /> New campaign
+
+          <Button variant="brand" size="lg" onClick={() => setWizardOpen(true)}>
+            <Plus className="mr-1.5 size-5" /> Create Campaign
           </Button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <div className="surface-card p-4 text-center">
-            <Wallet className="mx-auto mb-1 size-5 text-primary" />
-            <p className="font-display text-lg font-extrabold">{rwf(totalSpend)}</p>
-            <p className="text-xs text-muted-foreground">Total spend</p>
-          </div>
-          <div className="surface-card p-4 text-center">
-            <Eye className="mx-auto mb-1 size-5 text-primary" />
-            <p className="font-display text-lg font-extrabold">{formatCount(totalImpressions)}</p>
-            <p className="text-xs text-muted-foreground">Impressions</p>
-          </div>
+        {/* Overview Stats Cards */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="surface-card p-4 text-center">
             <Target className="mx-auto mb-1 size-5 text-primary" />
-            <p className="font-display text-lg font-extrabold">{campaigns.filter((c) => c.status === "active").length}</p>
-            <p className="text-xs text-muted-foreground">Active campaigns</p>
+            <p className="font-display text-xl font-extrabold text-foreground">{activeCount}</p>
+            <p className="text-xs text-muted-foreground font-medium">Active Campaigns</p>
+          </div>
+
+          <div className="surface-card p-4 text-center">
+            <Eye className="mx-auto mb-1 size-5 text-primary" />
+            <p className="font-display text-xl font-extrabold text-foreground">{formatCount(totalImpressions)}</p>
+            <p className="text-xs text-muted-foreground font-medium">Total Impressions</p>
+          </div>
+
+          <div className="surface-card p-4 text-center">
+            <Coins className="mx-auto mb-1 size-5 text-amber-500" />
+            <p className="font-display text-xl font-extrabold text-foreground">{formatCount(totalPointsSpent)} GP</p>
+            <p className="text-xs text-muted-foreground font-medium">Points Spent</p>
+          </div>
+
+          <div className="surface-card p-4 text-center">
+            <Wallet className="mx-auto mb-1 size-5 text-primary" />
+            <p className="font-display text-xl font-extrabold text-foreground">{rwf(totalSpentRwf)}</p>
+            <p className="text-xs text-muted-foreground font-medium">Cash Spent</p>
           </div>
         </div>
 
+        {/* Live Rates & Conversion Info Banner */}
+        <div className="rounded-2xl border border-border bg-gradient-to-r from-amber-500/10 via-indigo-500/10 to-transparent p-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="grid size-10 place-items-center rounded-2xl bg-amber-500/20 text-amber-500 font-bold">
+              GP
+            </div>
+            <div>
+              <p className="text-sm font-bold text-foreground">Gihanga Points Advertising Enabled</p>
+              <p className="text-xs text-muted-foreground">
+                Current Superadmin Rate: <strong className="text-foreground">1 Advertising Minute = {formatCount(config?.gpPerMinute ?? 2000)} GP</strong> or <strong className="text-foreground">{rwf(config?.rwfPerMinute ?? 2000)}</strong>
+              </p>
+            </div>
+          </div>
+
+          <div className="text-right text-xs">
+            <span className="text-muted-foreground block">Your Points Balance</span>
+            <span className="font-display text-base font-extrabold text-amber-500">
+              {formatCount(walletData?.wallet?.kingdomPoints ?? 0)} GP
+            </span>
+          </div>
+        </div>
+
+        {/* Filter Tabs */}
+        <div className="flex gap-1 rounded-2xl border border-border bg-card p-1">
+          {[
+            { id: "all", label: "All Campaigns" },
+            { id: "active", label: "Active" },
+            { id: "pending", label: "Pending Review" },
+            { id: "unpaid", label: "Unpaid Drafts" },
+          ].map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className={cn(
+                "flex-1 rounded-xl px-3 py-2 text-xs font-bold transition-all",
+                tab === t.id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Campaign List */}
         {isLoading ? (
-          <p className="py-10 text-center text-sm text-muted-foreground">Loading campaigns…</p>
-        ) : campaigns.length === 0 ? (
-          <div className="surface-card flex flex-col items-center gap-2 py-14 text-center">
-            <Target className="size-8 text-muted-foreground" />
-            <p className="font-bold text-muted-foreground">No campaigns yet</p>
-            <Button variant="brand" size="sm" onClick={() => setNewOpen(true)}>
-              Create your first campaign
+          <p className="py-12 text-center text-sm text-muted-foreground">Loading your campaigns…</p>
+        ) : filteredCampaigns.length === 0 ? (
+          <div className="surface-card flex flex-col items-center gap-3 py-16 text-center border-dashed">
+            <Layers className="size-10 text-muted-foreground/60" />
+            <p className="font-bold text-base text-foreground">No campaigns found</p>
+            <p className="max-w-md text-xs text-muted-foreground">
+              Launch your first advertisement to reach thousands of users across Rwanda in feed and story placements.
+            </p>
+            <Button variant="brand" size="sm" onClick={() => setWizardOpen(true)}>
+              <Plus className="mr-1 size-4" /> Launch Campaign Now
             </Button>
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {campaigns.map((c) => (
-              <CampaignCard key={c._id} campaign={c} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            {filteredCampaigns.map((campaign) => (
+              <AdCard key={campaign._id} campaign={campaign} />
             ))}
           </div>
         )}
       </div>
-      <NewCampaignDialog open={newOpen} onOpenChange={setNewOpen} />
+
+      {/* Guided Creation Wizard Modal */}
+      <AdWizard open={wizardOpen} onOpenChange={setWizardOpen} />
     </AppShell>
   );
 }

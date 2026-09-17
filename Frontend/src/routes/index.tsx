@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { Loader2, Sparkles, TrendingUp, UserPlus } from "lucide-react";
@@ -7,20 +7,24 @@ import { StoryRail } from "@/components/feed/StoryRail";
 import { Composer } from "@/components/feed/Composer";
 import { PostCard } from "@/components/feed/PostCard";
 import { PostSkeleton } from "@/components/feed/PostSkeleton";
+import { FeedAdCard } from "@/components/ads/FeedAdCard";
 import { Button } from "@/components/ui/button";
 import { useFeed, useExplore } from "@/hooks/use-posts";
+import { useFeedAds } from "@/hooks/use-ads";
+import { useAuth } from "@/lib/auth-context";
+import { LandingPage } from "./landing";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Gihanga Updates — Home Feed for Creators" },
+      { title: "Gihanga Updates — The Creative Platform for Rwanda" },
       {
         name: "description",
         content:
           "Follow creators, watch reels and stories, and keep up with what's happening across Rwanda on Gihanga Updates.",
       },
-      { property: "og:title", content: "Gihanga Updates — Home Feed for Creators" },
+      { property: "og:title", content: "Gihanga Updates — The Creative Platform for Rwanda" },
       {
         property: "og:description",
         content:
@@ -28,8 +32,26 @@ export const Route = createFileRoute("/")({
       },
     ],
   }),
-  component: HomeFeed,
+  component: RootIndexPage,
 });
+
+function RootIndexPage() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="size-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LandingPage />;
+  }
+
+  return <HomeFeed />;
+}
 
 const tabs = [
   { id: "foryou", label: "For you", icon: Sparkles },
@@ -40,6 +62,7 @@ function HomeFeed() {
   const [tab, setTab] = useState<(typeof tabs)[number]["id"]>("foryou");
   const forYou = useFeed();
   const explore = useExplore();
+  const { data: feedAds = [] } = useFeedAds();
 
   const active = tab === "foryou" ? forYou : explore;
   const posts = (active.data?.pages.flatMap((p) => p.posts) ?? []).slice();
@@ -106,9 +129,19 @@ function HomeFeed() {
           </p>
         ) : (
           <>
-            {posts.map((p, i) => (
-              <PostCard key={p._id} post={p} index={i} />
-            ))}
+            {posts.map((p, i) => {
+              // Inject a sponsored ad every 4th post if ads are available
+              const adIndex = Math.floor(i / 4) % (feedAds.length || 1);
+              const showAd = (i + 1) % 4 === 0 && feedAds.length > 0 && feedAds[adIndex];
+              const currentAd = feedAds[adIndex];
+
+              return (
+                <React.Fragment key={p._id}>
+                  <PostCard post={p} index={i} />
+                  {showAd && currentAd && <FeedAdCard ad={currentAd} />}
+                </React.Fragment>
+              );
+            })}
             {active.hasNextPage && (
               <div className="flex justify-center py-6">
                 <Button

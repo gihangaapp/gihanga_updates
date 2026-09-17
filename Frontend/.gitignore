@@ -1,7 +1,5 @@
 node_modules
 dist
-.vercel
-.output
 .env
 .env.local
 .env.*.local

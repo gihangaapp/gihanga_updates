@@ -5,6 +5,7 @@ import {
   Film,
   Home,
   MessageCircle,
+  Radio,
   Search,
   Settings,
   ShieldCheck,
@@ -18,13 +19,11 @@ import {
 export interface NavItem {
   label: string;
   icon: LucideIcon;
-  /** Route path when the page exists, otherwise undefined (Phase 2+). */
+  /** Route path when the page exists, otherwise undefined. */
   to?: string;
   badge?: number;
   phase?: number;
 }
-
-import { Radio } from "lucide-react";
 
 export const primaryNav: NavItem[] = [
   { label: "Home", icon: Home, to: "/" },
@@ -44,11 +43,9 @@ export const secondaryNav: NavItem[] = [
   { label: "Settings", icon: Settings, to: "/settings" },
 ];
 
-
 export const mobileNav: NavItem[] = [
   { label: "Home", icon: Home, to: "/" },
-  { label: "Explore", icon: Compass, to: "/explore" },
+  { label: "Live", icon: Radio, to: "/live" },
   { label: "Reels", icon: Film, to: "/reels" },
-  { label: "Alerts", icon: Bell, to: "/notifications" },
   { label: "Profile", icon: User, to: "/profile" },
 ];

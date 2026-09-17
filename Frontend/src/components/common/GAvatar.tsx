@@ -14,11 +14,13 @@ const sizes = {
 export type AvatarSize = keyof typeof sizes;
 
 function initials(name: string) {
+  if (!name) return "GU";
   return name
     .split(" ")
     .slice(0, 2)
     .map((p) => p[0])
-    .join("");
+    .join("")
+    .toUpperCase();
 }
 
 export function GAvatar({
@@ -32,25 +34,28 @@ export function GAvatar({
   ring?: "story" | "seen" | "live" | "add" | "none";
   className?: string;
 }) {
-  const inner = user.avatarUrl ? (
+  const resolvedUrl = user?.avatarUrl ? mediaUrl(user.avatarUrl) : undefined;
+
+  const inner = resolvedUrl ? (
     <img
-      src={mediaUrl(user.avatarUrl)}
-      alt={user.name}
-      className={cn("shrink-0 rounded-full object-cover select-none", sizes[size], className)}
+      src={resolvedUrl}
+      alt={user.name || "User avatar"}
+      loading="lazy"
+      className={cn("shrink-0 rounded-full object-cover object-center select-none overflow-hidden aspect-square", sizes[size], className)}
     />
   ) : (
     <span
       className={cn(
-        "grid shrink-0 place-items-center rounded-full font-display font-bold text-primary-foreground select-none",
+        "grid shrink-0 place-items-center rounded-full font-display font-bold text-primary-foreground select-none aspect-square",
         sizes[size],
         className,
       )}
       style={{
-        backgroundImage: `linear-gradient(140deg, oklch(0.5 0.11 ${user.avatarHue}), oklch(0.74 0.1 ${user.avatarHue + 24}))`,
+        backgroundImage: `linear-gradient(140deg, oklch(0.5 0.11 ${user?.avatarHue ?? 250}), oklch(0.74 0.1 ${(user?.avatarHue ?? 250) + 24}))`,
       }}
       aria-hidden
     >
-      {initials(user.name)}
+      {initials(user?.name || "")}
     </span>
   );
 
@@ -59,14 +64,14 @@ export function GAvatar({
   return (
     <span
       className={cn(
-        "grid place-items-center rounded-full p-[2.5px]",
+        "grid place-items-center rounded-full p-[2.5px] shrink-0",
         ring === "story" && "story-ring",
         ring === "add" && "story-ring-add",
         ring === "live" && "bg-danger",
         ring === "seen" && "bg-border-strong",
       )}
     >
-      <span className="rounded-full bg-surface p-[2px]">{inner}</span>
+      <span className="rounded-full bg-surface p-[2px] shrink-0 flex items-center justify-center">{inner}</span>
     </span>
   );
 }

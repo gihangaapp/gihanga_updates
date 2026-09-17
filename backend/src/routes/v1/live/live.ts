@@ -8,6 +8,7 @@ import { Report } from "../../../models/Report";
 import { authenticateConsumer, authenticateConsumerOrStaff, AuthenticatedRequest } from "../../../middleware/rbac";
 import { optionalAuth } from "../../../middleware/optionalAuth";
 import { getIO } from "../../../lib/socket";
+import { createLiveKitToken, getLiveKitUrl, isLiveKitConfigured } from "../../../lib/livekit";
 import { applyLedgerEntry } from "../../../lib/wallet";
 import { notify } from "../../../lib/notify";
 import { notifyStaff } from "../../../lib/staffNotify";
@@ -193,6 +194,41 @@ router.get("/:id/chat", optionalAuth, async (req: AuthenticatedRequest, res: Res
     return res.json({ pinned, messages: messages.reverse() });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to load chat history", details: error.message });
+  }
+});
+
+// GET /api/v1/live/:id/livekit-token — mint a short-lived LiveKit Cloud join token
+// Replaces the manual SDP/ICE relaying in liveSignaling.ts for the video pipe:
+// the browser connects straight to LiveKit Cloud with this token, while chat,
+// reactions, gifts, viewer counts and moderation all stay on Socket.IO here.
+// Host/co-hosts get canPublish; plain viewers get canSubscribe only. The
+// response shape ({ url, token }) is what frontend/src/lib/livekit-live.ts
+// consumes. Requires LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET
+// (see .env.example); without them the legacy mesh path still works.
+router.get("/:id/livekit-token", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!isLiveKitConfigured()) {
+      return res.status(503).json({ error: "Live video service is not configured yet" });
+    }
+    const stream = await LiveStream.findById(req.params.id);
+    if (!stream) return res.status(404).json({ error: "Stream not found" });
+    if (stream.status !== "live") return res.status(409).json({ error: "Stream has ended" });
+    if (stream.bannedUsers.some((b) => String(b) === req.user!.userId)) {
+      return res.status(403).json({ error: "You're banned from this stream" });
+    }
+
+    const userId = req.user!.userId;
+    const isHost = String(stream.host) === userId;
+    const isCoHost = stream.coHosts.some((c) => String(c) === userId);
+    const token = await createLiveKitToken({
+      room: String(stream._id),
+      identity: userId,
+      canPublish: isHost || isCoHost,
+    });
+
+    return res.json({ url: getLiveKitUrl(), token, room: String(stream._id) });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to mint live token", details: error.message });
   }
 });
 

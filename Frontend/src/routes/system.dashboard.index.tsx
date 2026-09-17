@@ -13,7 +13,15 @@ export const Route = createFileRoute("/system/dashboard/")({
 function useOverview() {
   return useQuery({
     queryKey: ["staff", "overview"],
-    queryFn: () => api.get<{ stats: Record<string, number>; role: string }>("/system/overview", true),
+    queryFn: async () => {
+      try {
+        const res = await api.get<{ stats: Record<string, number>; role: string }>("/system/overview", true);
+        return res;
+      } catch (err) {
+        console.error("[useOverview Error]:", err);
+        return { stats: {}, role: "" };
+      }
+    },
   });
 }
 
@@ -41,7 +49,7 @@ function DashboardIndex() {
           Welcome back, {staffUser?.name?.split(" ")[0]}
         </h1>
         <p className="text-sm text-muted-foreground">
-          Signed in as <span className="font-semibold text-primary">{staffUser ? ROLE_LABEL[staffUser.role] : ""}</span> — here's what needs attention.
+          Signed in as <span className="font-semibold text-primary">{staffUser ? (ROLE_LABEL[staffUser.role] || staffUser.role) : ""}</span> — here's what needs attention.
         </p>
       </div>
 

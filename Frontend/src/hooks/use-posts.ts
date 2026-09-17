@@ -21,15 +21,36 @@ function useCursoredPosts(key: string, endpoint: string, enabled = true) {
 
 export function useFeed() {
   const { user } = useAuth();
-  return useCursoredPosts("feed", "/posts/feed", Boolean(user));
+  return useInfiniteQuery({
+    queryKey: ["posts", "feed", user?.id],
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+      api.get<PostsPage>(`/recommendations/for-you?limit=12${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled: Boolean(user),
+  });
 }
 
 export function useExplore() {
-  return useCursoredPosts("explore", "/posts/explore");
+  const { user } = useAuth();
+  return useInfiniteQuery({
+    queryKey: ["posts", "explore", user?.id],
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+      api.get<PostsPage>(`/recommendations/explore?limit=12${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
 }
 
 export function useReelsFeed() {
-  return useCursoredPosts("reels", "/posts/reels");
+  const { user } = useAuth();
+  return useInfiniteQuery({
+    queryKey: ["posts", "reels", user?.id],
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+      api.get<PostsPage>(`/recommendations/reels?limit=10${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+  });
 }
 
 export function useTagPosts(tag: string) {
@@ -54,6 +75,14 @@ export function useLikedPosts(username: string, enabled: boolean) {
   });
 }
 
+export function useSinglePost(postId: string) {
+  return useQuery({
+    queryKey: ["posts", "single", postId],
+    queryFn: () => api.get<{ post: FeedPost }>(`/posts/${encodeURIComponent(postId)}`),
+    enabled: Boolean(postId),
+  });
+}
+
 export function useCreatePost() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -70,6 +99,9 @@ export function useCreatePost() {
     }) => api.post<{ post: FeedPost }>("/posts", input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: ["recommendations"] });
+      queryClient.invalidateQueries({ queryKey: ["user-profile"] });
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
     },
   });
 }
@@ -78,7 +110,23 @@ export function useDeletePost() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/posts/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["posts"] }),
+    onMutate: async (postId: string) => {
+      await queryClient.cancelQueries({ queryKey: ["posts"] });
+      await queryClient.cancelQueries({ queryKey: ["recommendations"] });
+      const previous = queryClient.getQueriesData({ queryKey: ["posts"] });
+      removePostEverywhere(queryClient, postId);
+      return { previous };
+    },
+    onError: (_err, _postId, context) => {
+      context?.previous.forEach(([key, data]) => queryClient.setQueryData(key, data));
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: ["recommendations"] });
+      queryClient.invalidateQueries({ queryKey: ["user-profile"] });
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+      queryClient.invalidateQueries({ queryKey: ["user-posts"] });
+    },
   });
 }
 
@@ -140,7 +188,10 @@ function updatePostEverywhere(
   postId: string,
   updater: (post: FeedPost) => FeedPost,
 ) {
-  const entries = queryClient.getQueriesData<any>({ queryKey: ["posts"] });
+  const entries = [
+    ...queryClient.getQueriesData<any>({ queryKey: ["posts"] }),
+    ...queryClient.getQueriesData<any>({ queryKey: ["recommendations"] }),
+  ];
   for (const [key, data] of entries) {
     if (!data) continue;
     if (Array.isArray(data.pages)) {
@@ -155,6 +206,33 @@ function updatePostEverywhere(
       queryClient.setQueryData(key, {
         ...data,
         posts: data.posts.map((p: FeedPost) => (p._id === postId ? updater(p) : p)),
+      });
+    }
+  }
+}
+
+function removePostEverywhere(
+  queryClient: ReturnType<typeof useQueryClient>,
+  postId: string,
+) {
+  const entries = [
+    ...queryClient.getQueriesData<any>({ queryKey: ["posts"] }),
+    ...queryClient.getQueriesData<any>({ queryKey: ["recommendations"] }),
+  ];
+  for (const [key, data] of entries) {
+    if (!data) continue;
+    if (Array.isArray(data.pages)) {
+      queryClient.setQueryData(key, {
+        ...data,
+        pages: data.pages.map((page: PostsPage) => ({
+          ...page,
+          posts: page.posts.filter((p) => p._id !== postId),
+        })),
+      });
+    } else if (Array.isArray(data.posts)) {
+      queryClient.setQueryData(key, {
+        ...data,
+        posts: data.posts.filter((p: FeedPost) => p._id !== postId),
       });
     }
   }

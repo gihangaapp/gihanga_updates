@@ -25,10 +25,22 @@ const API_BASE_URL = resolveApiBaseUrl();
 export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
 
 /** Turns a relative `/uploads/...` path from the backend into an absolute URL. */
+/** Turns a relative `/uploads/...` path from the backend into an absolute URL. */
 export function mediaUrl(path?: string | null): string | undefined {
   if (!path) return undefined;
-  if (/^https?:\/\//.test(path)) return path;
-  return `${API_ORIGIN}${path}`;
+  const firstPath = path.includes(",") ? path.split(",")[0].trim() : path.trim();
+  if (!firstPath) return undefined;
+  if (/^https?:\/\//.test(firstPath)) return firstPath;
+  if (firstPath.startsWith("data:") || firstPath.startsWith("blob:")) return firstPath;
+  const cleanPath = firstPath.startsWith("/") ? firstPath : `/${firstPath}`;
+  return `${API_ORIGIN}${cleanPath}`;
+}
+
+/** Parses comma-separated media URLs into an array of absolute URLs */
+export function mediaUrls(path?: string | null): string[] {
+  if (!path) return [];
+  const parts = path.split(",").map((s) => s.trim()).filter(Boolean);
+  return parts.map((p) => mediaUrl(p)).filter(Boolean) as string[];
 }
 
 const CONSUMER_TOKEN_KEY = "gihanga_consumer_access_token";
@@ -134,10 +146,25 @@ async function apiFetch<T>(
     }
   }
 
-  const data = await response.json();
+  if (response.status === 204 || response.headers.get("content-length") === "0") {
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: Request failed`);
+    }
+    return {} as T;
+  }
+
+  const text = await response.text();
+  let data: any = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { message: text };
+    }
+  }
 
   if (!response.ok) {
-    throw new Error(data.error || `HTTP ${response.status}: Request failed`);
+    throw new Error(data.error || data.message || `HTTP ${response.status}: Request failed`);
   }
 
   return data as T;

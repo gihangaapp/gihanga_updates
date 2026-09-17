@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { GAvatar } from "@/components/common/GAvatar";
 import { Button } from "@/components/ui/button";
 import { useSessionUser } from "@/components/auth/AccountMenu";
-import { openCreate, type CreateMode } from "@/components/feed/CreateSheet";
+import { openCreate, type CreateMode } from "@/components/create/CreateHub";
 
 const actions: { label: string; icon: typeof Image; tone: string; mode?: CreateMode; to?: string }[] = [
   { label: "Photo", icon: Image, tone: "text-info", mode: "post" },

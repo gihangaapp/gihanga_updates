@@ -15,7 +15,7 @@ export function useStories() {
 export function useCreateStory() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { mediaUrl: string; mediaKey?: string | undefined; mediaType: "image" | "video"; caption?: string | undefined; duration?: number | undefined }) =>
+    mutationFn: (input: { mediaUrl: string; mediaKey?: string | undefined; mediaType: "image" | "video"; caption?: string | undefined; duration?: number | undefined; audience?: string }) =>
       api.post("/stories", input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["stories"] }),
   });
@@ -26,5 +26,42 @@ export function useMarkStoryViewed() {
   return useMutation({
     mutationFn: (storyId: string) => api.post(`/stories/${storyId}/view`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["stories"] }),
+  });
+}
+
+export function useReplyToStory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ storyId, message }: { storyId: string; message: string }) =>
+      api.post<{ success: boolean; message: string }>(`/stories/${storyId}/reply`, { message }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+}
+
+export function useDeleteStory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (storyId: string) => api.delete(`/stories/${storyId}`),
+    onMutate: async (storyId: string) => {
+      await queryClient.cancelQueries({ queryKey: ["stories"] });
+      const previous = queryClient.getQueryData<{ stories: StoryGroup[] }>(["stories"]);
+      if (previous?.stories) {
+        queryClient.setQueryData<{ stories: StoryGroup[] }>(["stories"], {
+          stories: previous.stories
+            .map((group) => ({
+              ...group,
+              items: group.items.filter((item) => item._id !== storyId),
+            }))
+            .filter((group) => group.items.length > 0),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _storyId, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["stories"], context.previous);
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["stories"] }),
   });
 }

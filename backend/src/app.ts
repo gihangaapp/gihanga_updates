@@ -16,6 +16,7 @@ import storiesRoutes from "./routes/v1/social/stories";
 import notificationsRoutes from "./routes/v1/notifications/notifications";
 import searchRoutes from "./routes/v1/search/search";
 import usersRoutes from "./routes/v1/users/users";
+import userSettingsRoutes from "./routes/v1/users/settings";
 import liveRoutes from "./routes/v1/live/live";
 import staffLiveRoutes from "./routes/v1/system/live/staffLive";
 import walletRoutes from "./routes/v1/wallet/wallet";
@@ -34,22 +35,21 @@ import staffOverviewRoutes from "./routes/v1/system/overview/staffOverview";
 import staffGrowthRoutes from "./routes/v1/system/growth/staffGrowth";
 import staffNotificationsRoutes from "./routes/v1/system/notifications/staffNotifications";
 import studioRoutes from "./routes/v1/studio/studio";
+import recommendationRoutes from "./routes/v1/recommendations/recommendations";
+import mediaRoutes from "./routes/v1/media/media";
 
 export function createApp(): Express {
   const app = express();
 
-  // Render terminates TLS and forwards requests through one trusted proxy.
-  // Trusting that hop lets express-rate-limit safely use X-Forwarded-For
-  // instead of treating every request as coming from the proxy itself.
-  app.set("trust proxy", 1);
+  // Trust a single reverse proxy only in production; local development connects directly.
+  app.set("trust proxy", process.env.NODE_ENV === "production" ? 1 : false);
 
   // Security & Headers
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 
   // CORS
-  // FRONTEND_ORIGIN may hold one origin or a comma-separated list (handy for
-  // Vercel, which serves both a stable production domain and a fresh preview
-  // domain per branch/PR — e.g. "https://app.vercel.app,https://staging.app.vercel.app").
+  // FRONTEND_ORIGIN may hold one origin or a comma-separated list for local
+  // development environments that expose the frontend on more than one host.
   // Leaving FRONTEND_ORIGIN unset (local/dev) falls back to reflecting
   // whatever origin the request came from, so localhost AND a LAN IP (e.g.
   // a phone on the same network, per the dynamic API URL resolution in the
@@ -121,6 +121,7 @@ export function createApp(): Express {
   app.use("/api/v1/notifications", notificationsRoutes);
   app.use("/api/v1/search", searchRoutes);
   app.use("/api/v1/users", usersRoutes);
+  app.use("/api/v1/users/settings", userSettingsRoutes);
   app.use("/api/v1/live", liveRoutes);
   app.use("/api/v1/system/live", staffLiveRoutes);
   app.use("/api/v1/wallet", walletRoutes);
@@ -139,6 +140,8 @@ export function createApp(): Express {
   app.use("/api/v1/system/growth", staffGrowthRoutes);
   app.use("/api/v1/system/notifications", staffNotificationsRoutes);
   app.use("/api/v1/studio", studioRoutes);
+  app.use("/api/v1/recommendations", recommendationRoutes);
+  app.use("/api/v1/media", mediaRoutes);
 
   // 404 Handler
   app.use((_req: Request, res: Response) => {

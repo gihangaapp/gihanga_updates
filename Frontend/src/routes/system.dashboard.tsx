@@ -17,6 +17,7 @@ import {
   Menu,
   X,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "@/components/common/Logo";
@@ -69,6 +70,7 @@ const navSections: NavSection[] = [
       { to: "/system/dashboard/staff", label: "Staff Management", icon: ShieldCheck, permissions: ["staff.view"] },
       { to: "/system/dashboard/activity", label: "Staff Activity", icon: Activity, permissions: ["audit.viewAll"] },
       { to: "/system/dashboard/settings", label: "Platform Settings", icon: Settings, permissions: ["settings.view"] },
+      { to: "/system/dashboard/ad-settings", label: "Ad Settings & Rates", icon: Sparkles, permissions: ["settings.view"] },
       { to: "/system/dashboard/audit", label: "Audit Log", icon: History, permissions: ["audit.viewOwn", "audit.viewAll"] },
     ],
   },

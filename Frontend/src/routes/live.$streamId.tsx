@@ -70,7 +70,7 @@ import {
   useCoHostLiveRoom,
   useHostCoHostMesh,
   type CoHostRemoteStream,
-} from "@/lib/browser-live";
+} from "@/lib/live-room";
 import { getLiveSocket } from "@/lib/socket-client";
 import { cn } from "@/lib/utils";
 
@@ -444,6 +444,8 @@ function LiveRoomPage() {
     streamId,
     publish: isHost && !isCoHost,
     enabled: Boolean(stream) && !isOver && !isCoHost,
+    hostId: stream?.host?._id ?? "",
+    asStaff,
   });
 
   // Host-side co-host mesh: when host, connect to all accepted co-hosts
@@ -460,6 +462,7 @@ function LiveRoomPage() {
     hostId: stream?.host?._id ?? "",
     myUserId: activeIdentity?.id ?? "",
     enabled: isCoHost && !isOver,
+    asStaff,
   });
   const updateSettings = useUpdateLiveSettings(streamId, asStaff);
   const inviteFollowers = useInviteFollowers(streamId, asStaff);

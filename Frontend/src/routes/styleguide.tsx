@@ -9,7 +9,6 @@ import { Switch } from "@/components/ui/switch";
 import { PostSkeleton } from "@/components/feed/PostSkeleton";
 import { GAvatar, UserName } from "@/components/common/GAvatar";
 import { Logo } from "@/components/common/Logo";
-import { currentUser, users } from "@/mock/data";
 
 export const Route = createFileRoute("/styleguide")({
   head: () => ({
