@@ -1,6 +1,17 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Check, X, Pause, Play, Coins, Wallet, Eye, RotateCcw, AlertTriangle, Sparkles } from "lucide-react";
+import {
+  Check,
+  X,
+  Pause,
+  Play,
+  Coins,
+  Wallet,
+  Eye,
+  RotateCcw,
+  AlertTriangle,
+  Sparkles,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -83,7 +94,8 @@ function StaffCampaignsPage() {
           <Sparkles className="size-6 text-amber-500" /> Advertising Campaigns Oversight
         </h1>
         <p className="text-sm text-muted-foreground">
-          Review submitted sponsored ads, inspect media and links, approve/reject with audit logs, manage pauses, and process refunds.
+          Review submitted sponsored ads, inspect media and links, approve/reject with audit logs,
+          manage pauses, and process refunds.
         </p>
       </div>
 
@@ -91,23 +103,37 @@ function StaffCampaignsPage() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
         <div className="rounded-2xl border border-border bg-card p-4 text-center">
           <span className="text-xs text-muted-foreground font-semibold block">Total Campaigns</span>
-          <span className="font-display text-xl font-extrabold text-foreground">{summary?.totalCampaigns ?? 0}</span>
+          <span className="font-display text-xl font-extrabold text-foreground">
+            {summary?.totalCampaigns ?? 0}
+          </span>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4 text-center">
           <span className="text-xs text-muted-foreground font-semibold block">Pending Review</span>
-          <span className="font-display text-xl font-extrabold text-amber-500">{summary?.pendingReview ?? 0}</span>
+          <span className="font-display text-xl font-extrabold text-amber-500">
+            {summary?.pendingReview ?? 0}
+          </span>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4 text-center">
           <span className="text-xs text-muted-foreground font-semibold block">Active Live</span>
-          <span className="font-display text-xl font-extrabold text-success">{summary?.activeCampaigns ?? 0}</span>
+          <span className="font-display text-xl font-extrabold text-success">
+            {summary?.activeCampaigns ?? 0}
+          </span>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4 text-center">
-          <span className="text-xs text-muted-foreground font-semibold block">Total Points Spent</span>
-          <span className="font-display text-xl font-extrabold text-amber-500">{formatCount(summary?.totalPointsSpent ?? 0)} GP</span>
+          <span className="text-xs text-muted-foreground font-semibold block">
+            Total Points Spent
+          </span>
+          <span className="font-display text-xl font-extrabold text-amber-500">
+            {formatCount(summary?.totalPointsSpent ?? 0)} GP
+          </span>
         </div>
         <div className="rounded-2xl border border-border bg-card p-4 text-center col-span-2 sm:col-span-1">
-          <span className="text-xs text-muted-foreground font-semibold block">Real Money Revenue</span>
-          <span className="font-display text-xl font-extrabold text-primary">{rwf(summary?.totalRwfRevenue ?? 0)}</span>
+          <span className="text-xs text-muted-foreground font-semibold block">
+            Real Money Revenue
+          </span>
+          <span className="font-display text-xl font-extrabold text-primary">
+            {rwf(summary?.totalRwfRevenue ?? 0)}
+          </span>
         </div>
       </div>
 
@@ -127,7 +153,9 @@ function StaffCampaignsPage() {
             onClick={() => setTab(s.id)}
             className={cn(
               "flex-1 rounded-xl px-3 py-2 text-xs font-bold capitalize transition-all",
-              tab === s.id ? "bg-indigo-600 text-white shadow-sm" : "text-muted-foreground hover:bg-muted",
+              tab === s.id
+                ? "bg-indigo-600 text-white shadow-sm"
+                : "text-muted-foreground hover:bg-muted",
             )}
           >
             {s.label}
@@ -135,7 +163,9 @@ function StaffCampaignsPage() {
         ))}
       </div>
 
-      {isLoading && <p className="py-12 text-center text-sm text-muted-foreground">Loading campaigns…</p>}
+      {isLoading && (
+        <p className="py-12 text-center text-sm text-muted-foreground">Loading campaigns…</p>
+      )}
 
       {/* Campaigns Table / List */}
       <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
@@ -154,9 +184,10 @@ function StaffCampaignsPage() {
                     </div>
 
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      By <strong className="text-foreground">@{creator?.username || "user"}</strong> ({creator?.email}) ·{" "}
-                      <span className="capitalize font-semibold">{c.adType.replace("_", " ")}</span> ·{" "}
-                      <span className="capitalize font-semibold">{c.placement} placement</span> ·{" "}
+                      By <strong className="text-foreground">@{creator?.username || "user"}</strong>{" "}
+                      ({creator?.email}) ·{" "}
+                      <span className="capitalize font-semibold">{c.adType.replace("_", " ")}</span>{" "}
+                      · <span className="capitalize font-semibold">{c.placement} placement</span> ·{" "}
                       {c.advertisingMinutes} min quota · {c.campaignDurationDays} days
                     </p>
                   </div>
@@ -189,9 +220,21 @@ function StaffCampaignsPage() {
                 {/* Metrics & Preview Buttons */}
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-3 text-xs">
                   <div className="flex gap-4 text-muted-foreground">
-                    <span>Impressions: <strong className="text-foreground">{formatCount(c.analytics?.impressions ?? 0)}</strong></span>
-                    <span>Clicks: <strong className="text-foreground">{formatCount(c.analytics?.clicks ?? 0)}</strong></span>
-                    <span>CTR: <strong className="text-foreground">{c.analytics?.ctr ?? 0}%</strong></span>
+                    <span>
+                      Impressions:{" "}
+                      <strong className="text-foreground">
+                        {formatCount(c.analytics?.impressions ?? 0)}
+                      </strong>
+                    </span>
+                    <span>
+                      Clicks:{" "}
+                      <strong className="text-foreground">
+                        {formatCount(c.analytics?.clicks ?? 0)}
+                      </strong>
+                    </span>
+                    <span>
+                      CTR: <strong className="text-foreground">{c.analytics?.ctr ?? 0}%</strong>
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -211,11 +254,7 @@ function StaffCampaignsPage() {
                         >
                           <Check className="mr-1 size-3.5" /> Approve
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => setRejectingAd(c)}
-                        >
+                        <Button size="sm" variant="destructive" onClick={() => setRejectingAd(c)}>
                           <X className="mr-1 size-3.5" /> Reject
                         </Button>
                       </>
@@ -252,7 +291,9 @@ function StaffCampaignsPage() {
         </ul>
 
         {!isLoading && !campaigns.length && (
-          <p className="py-16 text-center text-sm text-muted-foreground">No campaigns match this filter.</p>
+          <p className="py-16 text-center text-sm text-muted-foreground">
+            No campaigns match this filter.
+          </p>
         )}
       </div>
 
@@ -290,7 +331,8 @@ function StaffCampaignsPage() {
             </DialogHeader>
             <div className="space-y-4 pt-2">
               <p className="text-xs text-muted-foreground">
-                Enter a clear explanation for rejecting <strong>"{rejectingAd.title}"</strong>. The advertiser will see this message.
+                Enter a clear explanation for rejecting <strong>"{rejectingAd.title}"</strong>. The
+                advertiser will see this message.
               </p>
 
               <textarea
@@ -308,14 +350,23 @@ function StaffCampaignsPage() {
                   onChange={(e) => setAutoRefundOnReject(e.target.checked)}
                   className="rounded border-border"
                 />
-                Automatically refund payment ({rejectingAd.paymentMethod === "gihanga_points" ? `${formatCount(rejectingAd.totalGpCost)} GP` : rwf(rejectingAd.totalRwfCost)})
+                Automatically refund payment (
+                {rejectingAd.paymentMethod === "gihanga_points"
+                  ? `${formatCount(rejectingAd.totalGpCost)} GP`
+                  : rwf(rejectingAd.totalRwfCost)}
+                )
               </label>
 
               <div className="flex gap-2 pt-2">
                 <Button variant="outline" className="flex-1" onClick={() => setRejectingAd(null)}>
                   Cancel
                 </Button>
-                <Button variant="destructive" className="flex-1" disabled={rejectAd.isPending} onClick={handleRejectSubmit}>
+                <Button
+                  variant="destructive"
+                  className="flex-1"
+                  disabled={rejectAd.isPending}
+                  onClick={handleRejectSubmit}
+                >
                   Confirm Rejection
                 </Button>
               </div>

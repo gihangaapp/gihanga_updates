@@ -89,7 +89,13 @@ export function SideNav() {
 
       <nav className="flex flex-col gap-1" aria-label="Primary">
         {primaryNav.map((item) => (
-          <NavRow key={item.label} item={item} active={item.to === pathname} user={user} badgeOverride={badgeFor(item.label)} />
+          <NavRow
+            key={item.label}
+            item={item}
+            active={item.to === pathname}
+            user={user}
+            badgeOverride={badgeFor(item.label)}
+          />
         ))}
       </nav>
 
@@ -98,7 +104,13 @@ export function SideNav() {
           <div className="my-4 h-px bg-border" />
           <nav className="flex flex-col gap-1" aria-label="Creator">
             {secondaryNav.map((item) => (
-              <NavRow key={item.label} item={item} active={item.to === pathname} user={user} badgeOverride={badgeFor(item.label)} />
+              <NavRow
+                key={item.label}
+                item={item}
+                active={item.to === pathname}
+                user={user}
+                badgeOverride={badgeFor(item.label)}
+              />
             ))}
           </nav>
         </>

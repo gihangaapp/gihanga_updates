@@ -69,7 +69,9 @@ export function PointsCheckout({ open, onOpenChange, campaign, onSuccess }: Poin
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Type & Placement:</span>
-                <span className="capitalize text-foreground">{campaign.adType.replace("_", " ")} · {campaign.placement}</span>
+                <span className="capitalize text-foreground">
+                  {campaign.adType.replace("_", " ")} · {campaign.placement}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Advertising Minutes:</span>
@@ -105,7 +107,8 @@ export function PointsCheckout({ open, onOpenChange, campaign, onSuccess }: Poin
                 <div>
                   <p className="font-bold">Insufficient Gihanga Points</p>
                   <p className="mt-0.5 opacity-90">
-                    You need {formatCount(Math.abs(remainingPoints))} more GP to place this ad. Upload content, complete daily tasks, or choose Real Money.
+                    You need {formatCount(Math.abs(remainingPoints))} more GP to place this ad.
+                    Upload content, complete daily tasks, or choose Real Money.
                   </p>
                 </div>
               </div>

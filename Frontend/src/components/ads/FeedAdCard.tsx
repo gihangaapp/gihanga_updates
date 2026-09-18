@@ -57,7 +57,9 @@ export function FeedAdCard({ ad }: FeedAdCardProps) {
 
       {/* Title / Description */}
       {ad.title && <h3 className="px-4 pb-2 font-bold text-base text-foreground">{ad.title}</h3>}
-      {ad.caption && <p className="px-4 pb-3 text-xs text-foreground/90 leading-relaxed">{ad.caption}</p>}
+      {ad.caption && (
+        <p className="px-4 pb-3 text-xs text-foreground/90 leading-relaxed">{ad.caption}</p>
+      )}
 
       {/* Media Box */}
       {resolvedMedia && (

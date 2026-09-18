@@ -131,7 +131,7 @@ router.patch("/", authenticateConsumer, async (req: AuthenticatedRequest, res: R
     delete updates._id;
 
     // Synchronize User profile fields if provided
-    let userDoc = await User.findById(userId);
+    const userDoc = await User.findById(userId);
     if (userDoc) {
       let userChanged = false;
 
@@ -180,7 +180,7 @@ router.patch("/", authenticateConsumer, async (req: AuthenticatedRequest, res: R
     delete updates.avatarUrl;
     delete updates.avatarHue;
 
-    let settings = await UserSettings.findOneAndUpdate(
+    const settings = await UserSettings.findOneAndUpdate(
       { user: userId },
       { $set: updates },
       { new: true, upsert: true, runValidators: true }

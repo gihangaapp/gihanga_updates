@@ -9,7 +9,8 @@ export interface PendingPayment extends WalletTransaction {
 export function useStaffPayments(status = "pending") {
   return useQuery({
     queryKey: ["staff", "payments", status],
-    queryFn: () => api.get<{ transactions: PendingPayment[] }>(`/system/payments?status=${status}`, true),
+    queryFn: () =>
+      api.get<{ transactions: PendingPayment[] }>(`/system/payments?status=${status}`, true),
     refetchInterval: 15_000,
   });
 }
@@ -46,7 +47,8 @@ export interface RewardRates {
 export function useRewardConfig() {
   return useQuery({
     queryKey: ["staff", "rewards", "config"],
-    queryFn: () => api.get<{ rates: RewardRates; pointsToCashRate: number }>("/system/rewards/config", true),
+    queryFn: () =>
+      api.get<{ rates: RewardRates; pointsToCashRate: number }>("/system/rewards/config", true),
   });
 }
 

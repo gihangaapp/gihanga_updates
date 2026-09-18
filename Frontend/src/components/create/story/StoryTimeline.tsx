@@ -29,16 +29,12 @@ export function StoryTimeline({
               "group relative aspect-[9/16] h-16 shrink-0 cursor-pointer overflow-hidden rounded-xl border-2 transition-all",
               isActive
                 ? "border-white ring-2 ring-white/40 scale-105"
-                : "border-transparent opacity-70 hover:opacity-100"
+                : "border-transparent opacity-70 hover:opacity-100",
             )}
             style={{ background: slide.background }}
           >
             {slide.mediaThumbnail ? (
-              <img
-                src={slide.mediaThumbnail}
-                alt=""
-                className="h-full w-full object-cover"
-              />
+              <img src={slide.mediaThumbnail} alt="" className="h-full w-full object-cover" />
             ) : slide.textElements[0] ? (
               <div className="flex h-full w-full items-center justify-center p-1">
                 <span className="text-[8px] font-bold text-white line-clamp-2">

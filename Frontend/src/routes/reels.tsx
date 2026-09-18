@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import {
   Bookmark,
   Camera,
@@ -35,6 +35,9 @@ import { logRecommendationEvent } from "@/hooks/use-recommendations";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/reels")({
+  validateSearch: (search: Record<string, unknown>): { reel?: string | undefined } => ({
+    ...(typeof search["reel"] === "string" ? { reel: search["reel"] } : {}),
+  }),
   head: () => ({
     meta: [
       { title: "Reels — Short Video from Gihanga Creators" },
@@ -55,34 +58,22 @@ export const Route = createFileRoute("/reels")({
   component: ReelsPage,
 });
 
-function toDisplayUser(author: any) {
-  if (!author || typeof author === "string") {
-    return {
-      id: typeof author === "string" ? author : "unknown",
-      name: "Creator",
-      username: "creator",
-      bio: "",
-      avatarHue: 0,
-      avatarUrl: null,
-      verified: false,
-      creator: true,
-      live: false,
-      followers: 0,
-      following: 0,
-      posts: 0,
-    };
-  }
+function toDisplayUser(author: unknown) {
+  const a = (typeof author === "object" && author !== null ? author : {}) as Record<
+    string,
+    unknown
+  >;
   return {
-    id: author._id || "unknown",
-    name: author.name || "Creator",
-    username: author.username || "creator",
-    bio: author.bio || "",
-    avatarHue: author.avatarHue ?? 0,
-    avatarUrl: author.avatarUrl ?? null,
-    verified: Boolean(author.verified),
-    creator: Boolean(author.isCreator),
-    live: Boolean(author.isLive),
-    followers: author.followersCount ?? 0,
+    id: typeof a["_id"] === "string" ? (a["_id"] as string) : "unknown",
+    name: typeof a["name"] === "string" ? (a["name"] as string) : "Creator",
+    username: typeof a["username"] === "string" ? (a["username"] as string) : "creator",
+    bio: "",
+    avatarHue: typeof a["avatarHue"] === "number" ? (a["avatarHue"] as number) : 0,
+    avatarUrl: (a["avatarUrl"] as string | null) ?? null,
+    verified: Boolean(a["verified"]),
+    creator: Boolean(a["isCreator"]),
+    live: Boolean(a["isLive"]),
+    followers: typeof a["followersCount"] === "number" ? (a["followersCount"] as number) : 0,
     following: 0,
     posts: 0,
   };
@@ -91,11 +82,15 @@ function toDisplayUser(author: any) {
 function ReelCard({
   reel,
   isActive,
+  isNeighbor,
   isMuted,
   onToggleMute,
 }: {
   reel: FeedPost;
+  /** The centered, playing reel. */
   isActive: boolean;
+  /** Rendered/mounted for instant prev/next navigation, but paused + muted. */
+  isNeighbor: boolean;
   isMuted: boolean;
   onToggleMute: () => void;
 }) {
@@ -126,6 +121,12 @@ function ReelCard({
   const isOwn = user?.username === authorUsername;
   const following = followingSet?.has(authorUsername) ?? Boolean(reel.followingAuthor);
 
+  const mediaSrc = mediaUrl(reel.mediaUrl);
+  // B5 — windowed virtualization: the active reel and its ±1 neighbours stay
+  // mounted (sources attached) so arrow/wheel navigation is INSTANT; anything
+  // further away renders an empty snap cell (no network, no decode).
+  const attachSrc = (isActive || isNeighbor) && !hasError;
+
   // Viewport Active Playing & Audio Isolation Management
   useEffect(() => {
     const video = videoRef.current;
@@ -145,6 +146,14 @@ function ReelCard({
     }
   }, [isActive, hasError, isMuted]);
 
+  // Reset progress when this reel becomes active again.
+  useEffect(() => {
+    if (isActive && videoRef.current && !hasError) {
+      // keep position if returning from a comment sheet mid-play
+      void videoRef.current.play().catch(() => {});
+    }
+  }, [isActive, hasError]);
+
   const handleLike = useCallback(() => {
     logRecommendationEvent({
       event: reel.liked ? "reel_unlike" : "reel_like",
@@ -162,7 +171,10 @@ function ReelCard({
       videoRef.current.pause();
       setPlaying(false);
     } else {
-      videoRef.current.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+      videoRef.current
+        .play()
+        .then(() => setPlaying(true))
+        .catch(() => setPlaying(false));
     }
   };
 
@@ -181,39 +193,42 @@ function ReelCard({
   const maxCharLimit = 90;
   const bodyText = reel.body || "";
   const isLongCaption = bodyText.length > maxCharLimit;
-  const displayCaption = isLongCaption && !isExpanded
-    ? `${bodyText.slice(0, maxCharLimit)}…`
-    : bodyText;
+  const displayCaption =
+    isLongCaption && !isExpanded ? `${bodyText.slice(0, maxCharLimit)}…` : bodyText;
 
-  const mediaSrc = mediaUrl(reel.mediaUrl);
   const tagsList = Array.isArray(reel.tags) ? reel.tags : [];
   const primaryTag = tagsList[0] || "REELS";
 
   return (
     <article
       data-reel-id={reel._id}
-      className="relative h-[calc(100vh-9rem)] max-h-[860px] w-full shrink-0 overflow-hidden rounded-3xl bg-black lg:h-[calc(100vh-7rem)] select-none shadow-float"
-      style={{ scrollSnapAlign: "center" }}
+      className="relative flex h-full w-full shrink-0 flex-col justify-center overflow-hidden rounded-3xl bg-black select-none shadow-float"
+      style={{
+        scrollSnapAlign: "start",
+        scrollSnapStop: "always",
+      }}
     >
-      {/* Video Element */}
-      {mediaSrc && !hasError ? (
+      {/* Video Element — neighbours keep their source for instant navigation. */}
+      {mediaSrc && attachSrc ? (
         <video
           ref={videoRef}
           src={mediaSrc}
           poster={mediaUrl(reel.thumbnailUrl)}
           autoPlay={isActive}
           loop
-          muted={isMuted}
+          muted={isMuted || !isActive}
           playsInline
+          preload={isActive ? "auto" : "metadata"}
           onLoadedData={() => setIsLoading(false)}
           onError={() => {
             setIsLoading(false);
             setHasError(true);
           }}
           onClick={handleMediaTap}
-          className="size-full object-cover cursor-pointer"
+          onContextMenu={(e) => e.preventDefault()}
+          className="size-full cursor-pointer object-contain"
         />
-      ) : (
+      ) : hasError ? (
         <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center text-white">
           <p className="text-sm font-semibold">Unable to play this Reel.</p>
           <Button
@@ -224,22 +239,28 @@ function ReelCard({
               setIsLoading(true);
               if (videoRef.current) videoRef.current.load();
             }}
-            className="gap-2 text-white border-white/30 hover:bg-white/20"
+            className="gap-2 border-white/30 text-white hover:bg-white/20"
           >
             <RefreshCw className="size-4" /> Retry
           </Button>
         </div>
+      ) : (
+        // Placeholder cell (far-away reels in the window): keeps the snap
+        // geometry stable without holding any media resources.
+        <div className="flex h-full w-full items-center justify-center bg-black/80">
+          <Music2 className="size-8 animate-pulse text-white/20" />
+        </div>
       )}
 
       {/* Loading Spinner */}
-      {isLoading && !hasError && (
+      {isLoading && attachSrc && !hasError && (
         <div className="absolute inset-0 grid place-items-center bg-black/40 pointer-events-none">
           <Loader2 className="size-8 animate-spin text-white" />
         </div>
       )}
 
       {/* Subtle Play/Pause Overlay Feedback */}
-      {!playing && !isLoading && !hasError && (
+      {!playing && !isLoading && !hasError && isActive && (
         <div
           onClick={togglePlay}
           className="absolute inset-0 grid place-items-center cursor-pointer bg-black/20"
@@ -307,12 +328,17 @@ function ReelCard({
           <span
             className={cn(
               "grid size-11 place-items-center rounded-full bg-black/40 backdrop-blur-md transition-colors",
-              reel.liked && "bg-danger/20 text-danger"
+              reel.liked && "bg-danger/20 text-danger",
             )}
           >
-            <Heart className={cn("size-6", reel.liked && "fill-danger text-danger")} strokeWidth={2} />
+            <Heart
+              className={cn("size-6", reel.liked && "fill-danger text-danger")}
+              strokeWidth={2}
+            />
           </span>
-          <span className="text-[11px] font-extrabold text-white drop-shadow-md">{formatCount(reel.likesCount || 0)}</span>
+          <span className="text-[11px] font-extrabold text-white drop-shadow-md">
+            {formatCount(reel.likesCount || 0)}
+          </span>
         </button>
 
         {/* Comment (Speech Bubble + Count below) */}
@@ -324,7 +350,9 @@ function ReelCard({
           <span className="grid size-11 place-items-center rounded-full bg-black/40 backdrop-blur-md">
             <MessageCircle className="size-6 text-white" strokeWidth={2} />
           </span>
-          <span className="text-[11px] font-extrabold text-white drop-shadow-md">{formatCount(reel.commentsCount || 0)}</span>
+          <span className="text-[11px] font-extrabold text-white drop-shadow-md">
+            {formatCount(reel.commentsCount || 0)}
+          </span>
         </button>
 
         {/* Share (Paper Plane Send Icon) */}
@@ -353,7 +381,7 @@ function ReelCard({
         </button>
 
         {/* Spinning Audio Album Artwork Square matching screenshot bottom right */}
-        <div className="relative mt-2 size-10 rounded-xl overflow-hidden border-2 border-white/80 shadow-lg bg-gradient-to-tr from-indigo-600 via-violet-600 to-primary flex items-center justify-center animate-spin [animation-duration:8s]">
+        <div className="relative mt-2 size-10 rounded-xl overflow-hidden border-2 border-white/80 shadow-lg bg-gradient-to-tr from-indigo-600 via-violet-600 to-primary flex items-center justify-center animate-spin [animation-duration:8s] motion-reduce:animate-none">
           {authorAvatar ? (
             <img src={mediaUrl(authorAvatar)} alt="" className="size-full object-cover" />
           ) : (
@@ -380,7 +408,9 @@ function ReelCard({
             className="press flex items-center gap-2"
           >
             <GAvatar user={toDisplayUser(reel.author)} size="sm" />
-            <span className="text-sm font-extrabold text-white truncate hover:underline">{authorUsername}</span>
+            <span className="text-sm font-extrabold text-white truncate hover:underline">
+              {authorUsername}
+            </span>
             {authorObj?.verified && <VerifiedBadge />}
           </Link>
 
@@ -390,14 +420,17 @@ function ReelCard({
               onClick={() =>
                 followUser.mutate(
                   { username: authorUsername, follow: !following },
-                  { onError: (err: any) => toast.error(err.message || "Couldn't update follow status") }
+                  {
+                    onError: (err: Error) =>
+                      toast.error(err.message || "Couldn't update follow status"),
+                  },
                 )
               }
               className={cn(
                 "rounded-xl border px-3 py-1 text-xs font-bold transition-all shadow-md",
                 following
                   ? "border-white/30 bg-white/10 text-white backdrop-blur-md"
-                  : "border-white bg-white text-slate-950 hover:bg-white/90"
+                  : "border-white bg-white text-slate-950 hover:bg-white/90",
               )}
             >
               {following ? "Following" : "Follow"}
@@ -506,43 +539,73 @@ function ReelCard({
   );
 }
 
+/** B5 — key target ignore check: typing in inputs/sheets must not navigate. */
+function shouldIgnoreReelKeys(): boolean {
+  const active = document.activeElement;
+  if (
+    active instanceof HTMLElement &&
+    (active.tagName === "INPUT" ||
+      active.tagName === "TEXTAREA" ||
+      active.tagName === "SELECT" ||
+      active.isContentEditable)
+  ) {
+    return true;
+  }
+  // Any open dialog / sheet (Radix portals focus into them).
+  return Boolean(
+    document.querySelector("[role='dialog'][data-state='open'], [data-state='open'] > .fixed"),
+  );
+}
+
 function ReelsPage() {
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useReelsFeed();
-  const reels = data?.pages.flatMap((p) => p.posts) ?? [];
+  const reels = useMemo(() => data?.pages.flatMap((p) => p.posts) ?? [], [data]);
   const [activeReelIndex, setActiveReelIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
+  const navigate = useNavigate();
+  const { reel: deepLinkReel } = useSearch({ from: "/reels" });
 
   const containerRef = useRef<HTMLDivElement>(null);
+  // Single source of truth for the active index: a rAF-throttled scroll
+  // handler that picks the article nearest the container's centre (the old
+  // dual IntersectionObserver + scroll-listener setup jittered).
+  const scrollRafRef = useRef<number | null>(null);
 
-  // Set up IntersectionObserver to detect currently visible centered Reel
+  // B5.7 — deep-link restore: /reels?reel=<id> scrolls to that reel once loaded.
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (deepLinkHandled.current || !deepLinkReel || reels.length === 0) return;
+    const idx = reels.findIndex((r) => r._id === deepLinkReel);
+    if (idx >= 0) {
+      deepLinkHandled.current = true;
+      const target = containerRef.current?.querySelector(`article[data-reel-id="${deepLinkReel}"]`);
+      target?.scrollIntoView({ behavior: "auto", block: "start" });
+      setActiveReelIndex(idx);
+    }
+  }, [deepLinkReel, reels]);
+
+  const scrollToReel = useCallback((idx: number) => {
+    const container = containerRef.current;
+    if (!container) return;
+    const targets = container.querySelectorAll("article[data-reel-id]");
+    const target = targets[idx];
+    if (target instanceof HTMLElement) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, []);
+
+  // ── Active index from scroll position (rAF-throttled, one mechanism) ──────
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-            const reelId = entry.target.getAttribute("data-reel-id");
-            const idx = reels.findIndex((r) => r._id === reelId);
-            if (idx >= 0) setActiveReelIndex(idx);
-          }
-        }
-      },
-      { root: null, threshold: [0.5, 0.75] }
-    );
-
-    const children = container.querySelectorAll("article[data-reel-id]");
-    children.forEach((child) => observer.observe(child));
-
-    // Also add scroll listener for instant index detection
-    const handleScroll = () => {
+    const computeActive = () => {
+      scrollRafRef.current = null;
       const articles = container.querySelectorAll("article[data-reel-id]");
-      if (!articles.length) return;
-      const centerY = window.innerHeight / 2;
+      if (articles.length === 0) return;
+      const centerY = container.getBoundingClientRect().top + container.clientHeight / 2;
       let closestIdx = 0;
-      let minDistance = Infinity;
-
+      let minDistance = Number.POSITIVE_INFINITY;
       articles.forEach((art, i) => {
         const rect = art.getBoundingClientRect();
         const artCenter = rect.top + rect.height / 2;
@@ -552,99 +615,281 @@ function ReelsPage() {
           closestIdx = i;
         }
       });
-
-      if (minDistance < window.innerHeight * 0.45) {
+      if (minDistance < container.clientHeight * 0.5) {
         setActiveReelIndex(closestIdx);
       }
     };
 
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    container.addEventListener("scroll", handleScroll, { passive: true });
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("scroll", handleScroll);
-      container.removeEventListener("scroll", handleScroll);
+    const onScroll = () => {
+      if (scrollRafRef.current != null) return;
+      scrollRafRef.current = requestAnimationFrame(computeActive);
     };
-  }, [reels]);
 
-  const scrollToReel = (idx: number) => {
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      container.removeEventListener("scroll", onScroll);
+      if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
+    };
+  }, [reels.length]);
+
+  // ── B5.6 — infinite prefetch: fetch the next page when the active reel is
+  // within 3 of the end. Keeps the scroll position stable (appends only). ────
+  useEffect(() => {
+    if (
+      hasNextPage &&
+      !isFetchingNextPage &&
+      reels.length > 0 &&
+      activeReelIndex >= reels.length - 3
+    ) {
+      void fetchNextPage();
+    }
+  }, [activeReelIndex, reels.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const goToReel = useCallback(
+    (idx: number) => {
+      if (idx < 0 || idx >= reels.length) return;
+      scrollToReel(idx);
+    },
+    [reels.length, scrollToReel],
+  );
+
+  // ── B5.3 — keyboard navigation ─────────────────────────────────────────────
+  useEffect(() => {
+    const onKeyUpCooldown = { last: 0 };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (shouldIgnoreReelKeys()) return;
+      const reelsLen = reels.length;
+      if (reelsLen === 0) return;
+
+      // Key-repeat throttle (~120ms) so holding a key doesn't turbo-scroll.
+      const now = Date.now();
+      const isNavKey = ["ArrowDown", "ArrowUp", "j", "k", "PageDown", "PageUp"].includes(e.key);
+      if (isNavKey) {
+        if (now - onKeyUpCooldown.last < 120) {
+          e.preventDefault();
+          return;
+        }
+        onKeyUpCooldown.last = now;
+      }
+
+      switch (e.key) {
+        case "ArrowDown":
+        case "j":
+        case "PageDown":
+          e.preventDefault();
+          goToReel(Math.min(reelsLen - 1, activeReelIndex + 1));
+          break;
+        case "ArrowUp":
+        case "k":
+        case "PageUp":
+          e.preventDefault();
+          goToReel(Math.max(0, activeReelIndex - 1));
+          break;
+        case "m":
+        case "M":
+          setIsMuted((prev) => !prev);
+          break;
+        case " ": {
+          e.preventDefault();
+          const video = containerRef.current?.querySelector(
+            "article[data-reel-id] video",
+          ) as HTMLVideoElement | null;
+          const activeVideo = containerRef.current?.querySelectorAll("article[data-reel-id] video")[
+            activeReelIndex
+          ] as HTMLVideoElement | undefined;
+          const target = activeVideo ?? video;
+          if (target) {
+            if (target.paused) void target.play().catch(() => {});
+            else target.pause();
+          }
+          break;
+        }
+        case "l":
+        case "L": {
+          // Like the active reel via its rail button (keeps one code path).
+          const activeArticle =
+            containerRef.current?.querySelectorAll("article[data-reel-id]")[activeReelIndex];
+          const railBtn = activeArticle?.querySelector<HTMLButtonElement>("button.press");
+          railBtn?.click();
+          break;
+        }
+        case "Escape":
+          navigate({ to: "/", replace: true });
+          break;
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeReelIndex, reels.length, goToReel, navigate]);
+
+  // Focus the viewport on mount so keys work right after page load.
+  useEffect(() => {
+    containerRef.current?.focus?.();
+  }, []);
+
+  // ── B5.4 — wheel/trackpad: exactly ONE reel per gesture with cooldown and
+  // inertia-tail rejection (delta-decay detection). Touch relies on native
+  // snap. Never hijacks scrolling inside sheets/inputs. ──────────────────────
+  useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
-    const targets = container.querySelectorAll("article[data-reel-id]");
-    if (targets[idx]) {
-      targets[idx].scrollIntoView({ behavior: "smooth" });
-    }
-  };
+
+    let gestureActive = false;
+    let gestureCooldownUntil = 0;
+    let lastDelta = 0;
+
+    const onWheel = (e: WheelEvent) => {
+      // Don't hijack wheel events over open overlays.
+      if (shouldIgnoreReelKeys()) return;
+
+      const delta = Math.abs(e.deltaY);
+      if (delta < 24) return; // ignore jitter / tiny trackpad drifts
+
+      const now = Date.now();
+      if (gestureActive || now < gestureCooldownUntil) {
+        // Inertia tail: decaying deltas keep updating the last seen magnitude
+        // but don't trigger another navigation while the cooldown runs.
+        lastDelta = delta;
+        e.preventDefault();
+        return;
+      }
+
+      // Start a gesture: navigate once, then lock until deltas decay.
+      gestureActive = true;
+      lastDelta = delta;
+      e.preventDefault();
+      const direction = e.deltaY > 0 ? 1 : -1;
+      goToReel(Math.max(0, Math.min(reels.length - 1, activeReelIndex + direction)));
+
+      // ~700ms TikTok-style cooldown between gestures.
+      gestureCooldownUntil = now + 700;
+
+      const decayCheck = window.setInterval(() => {
+        if (lastDelta < 12 || Date.now() > gestureCooldownUntil + 2500) {
+          gestureActive = false;
+          window.clearInterval(decayCheck);
+        }
+        lastDelta *= 0.85; // decay reference magnitude over time
+      }, 100);
+    };
+
+    container.addEventListener("wheel", onWheel, { passive: false });
+    return () => container.removeEventListener("wheel", onWheel);
+  }, [activeReelIndex, reels.length, goToReel]);
 
   return (
     <AppShell>
-      <div className="mx-auto w-full max-w-[460px] relative">
-        {/* Desktop Side Navigation Arrows */}
-        {reels.length > 1 && (
-          <div className="hidden lg:flex flex-col gap-2 absolute -right-16 top-1/2 -translate-y-1/2 z-30">
-            <button
-              type="button"
-              disabled={activeReelIndex === 0}
-              onClick={() => scrollToReel(activeReelIndex - 1)}
-              className="press grid size-11 place-items-center rounded-full bg-surface border border-border shadow-soft text-foreground disabled:opacity-30"
-              title="Previous Reel"
-            >
-              <ChevronUp className="size-6" />
-            </button>
-            <button
-              type="button"
-              disabled={activeReelIndex === reels.length - 1}
-              onClick={() => scrollToReel(activeReelIndex + 1)}
-              className="press grid size-11 place-items-center rounded-full bg-surface border border-border shadow-soft text-foreground disabled:opacity-30"
-              title="Next Reel"
-            >
-              <ChevronDown className="size-6" />
-            </button>
-          </div>
-        )}
-
-        {/* Reels Vertical Scroll Container */}
-        <div
-          ref={containerRef}
-          className="flex flex-col gap-4 overflow-y-auto no-scrollbar"
-          style={{ scrollSnapType: "y mandatory" }}
-        >
-          {isLoading && (
-            <div className="flex items-center justify-center gap-2 py-24 text-sm text-muted-foreground">
-              <Loader2 className="size-5 animate-spin text-primary" /> Loading reels…
-            </div>
-          )}
-          {!isLoading && reels.length === 0 && (
-            <div className="surface-card rounded-3xl p-8 text-center text-muted-foreground space-y-3">
-              <Play className="size-10 mx-auto text-muted-foreground/40" />
-              <p className="text-sm font-semibold">No reels yet — be the first to post one!</p>
-              <Button variant="brand" size="sm" onClick={() => openCreate("reel")}>
-                Create a Reel
-              </Button>
-            </div>
-          )}
-          {reels.map((r, i) => (
-            <ReelCard
-              key={r._id}
-              reel={r}
-              isActive={i === activeReelIndex}
-              isMuted={isMuted}
-              onToggleMute={() => setIsMuted((prev) => !prev)}
-            />
-          ))}
-          {hasNextPage && (
-            <div className="flex justify-center py-6">
-              <Button
-                variant="outline"
-                onClick={() => fetchNextPage()}
-                disabled={isFetchingNextPage}
+      {/* B5 — ONE scroll container with a definite height (dvh, not vh: the
+          mobile-chrome-safe unit), mandatory Y snap, contained overscroll and
+          NO gap between cards (padding lives inside each card) so every snap
+          point aligns pixel-perfectly. */}
+      <div
+        className="mx-auto flex w-full max-w-[460px] flex-col"
+        style={{ height: "calc(100dvh - 9rem)" }}
+      >
+        <div className="relative min-h-0 flex-1">
+          {/* Sticky arrows — always visible while scrolling, on desktop AND
+              touch; disabled at the ends; visible focus ring for a11y. */}
+          {reels.length > 1 && (
+            <div className="absolute -right-14 top-1/2 z-30 hidden -translate-y-1/2 flex-col gap-2 lg:flex">
+              <button
+                type="button"
+                disabled={activeReelIndex === 0}
+                onClick={() => goToReel(activeReelIndex - 1)}
+                className="press grid size-11 place-items-center rounded-full bg-surface border border-border shadow-soft text-foreground disabled:opacity-30 focus-visible:ring-2 focus-visible:ring-ring"
+                title="Previous Reel (↑ / k)"
+                aria-label="Previous reel"
               >
-                {isFetchingNextPage && <Loader2 className="size-4 animate-spin" />}
-                Load more reels
-              </Button>
+                <ChevronUp className="size-6" />
+              </button>
+              <button
+                type="button"
+                disabled={activeReelIndex === reels.length - 1}
+                onClick={() => goToReel(activeReelIndex + 1)}
+                className="press grid size-11 place-items-center rounded-full bg-surface border border-border shadow-soft text-foreground disabled:opacity-30 focus-visible:ring-2 focus-visible:ring-ring"
+                title="Next Reel (↓ / j)"
+                aria-label="Next reel"
+              >
+                <ChevronDown className="size-6" />
+              </button>
             </div>
           )}
+          {/* Mobile/tablet floating arrows (touch users get snap, arrows are
+              a bonus for precision). */}
+          {reels.length > 1 && (
+            <div className="absolute right-3 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-2 lg:hidden">
+              <button
+                type="button"
+                disabled={activeReelIndex === 0}
+                onClick={() => goToReel(activeReelIndex - 1)}
+                className="press grid size-10 place-items-center rounded-full bg-black/40 text-white backdrop-blur-md disabled:opacity-25 focus-visible:ring-2 focus-visible:ring-white"
+                aria-label="Previous reel"
+              >
+                <ChevronUp className="size-5" />
+              </button>
+              <button
+                type="button"
+                disabled={activeReelIndex === reels.length - 1}
+                onClick={() => goToReel(activeReelIndex + 1)}
+                className="press grid size-10 place-items-center rounded-full bg-black/40 text-white backdrop-blur-md disabled:opacity-25 focus-visible:ring-2 focus-visible:ring-white"
+                aria-label="Next reel"
+              >
+                <ChevronDown className="size-5" />
+              </button>
+            </div>
+          )}
+
+          {/* The scroller itself */}
+          <div
+            ref={containerRef}
+            tabIndex={-1}
+            aria-label="Reels player — use arrow keys or j and k to navigate"
+            className="flex h-full w-full flex-col overflow-y-auto no-scrollbar overscroll-contain"
+            style={{ scrollSnapType: "y mandatory" }}
+          >
+            {isLoading && (
+              <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="size-5 animate-spin text-primary" /> Loading reels…
+              </div>
+            )}
+            {!isLoading && reels.length === 0 && (
+              <div className="surface-card m-4 rounded-3xl p-8 text-center text-muted-foreground space-y-3">
+                <Play className="size-10 mx-auto text-muted-foreground/40" />
+                <p className="text-sm font-semibold">No reels yet — be the first to post one!</p>
+                <Button variant="brand" size="sm" onClick={() => openCreate("reel")}>
+                  Create a Reel
+                </Button>
+              </div>
+            )}
+            {reels.map((r, i) => (
+              <div
+                key={r._id}
+                className="h-full w-full shrink-0 p-1 pb-2"
+                style={{ scrollSnapAlign: "start" }}
+              >
+                <ReelCard
+                  reel={r}
+                  isActive={i === activeReelIndex}
+                  isNeighbor={Math.abs(i - activeReelIndex) === 1}
+                  isMuted={isMuted}
+                  onToggleMute={() => setIsMuted((prev) => !prev)}
+                />
+              </div>
+            ))}
+            {/* Skeleton row while prefetching the next page */}
+            {isFetchingNextPage && (
+              <div className="flex h-full items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" /> Loading more…
+              </div>
+            )}
+          </div>
+
+          {/* A11y: announce the current reel. */}
+          <p aria-live="polite" className="sr-only">
+            {reels[activeReelIndex]
+              ? `Reel ${activeReelIndex + 1} of ${reels.length} by @${reels[activeReelIndex]?.author?.username ?? "creator"}`
+              : ""}
+          </p>
         </div>
       </div>
     </AppShell>

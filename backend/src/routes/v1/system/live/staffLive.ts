@@ -8,6 +8,7 @@ import { getIO } from "../../../../lib/socket";
 import { broadcastForceEnd } from "../../../../lib/liveSignaling";
 import { notify } from "../../../../lib/notify";
 import { clearLiveViewers } from "../../../../lib/redis";
+import { endStream } from "../../../../services/liveStreamService";
 
 const router = Router();
 const HOST_FIELDS = "name username avatarHue avatarUrl isCreator verified";
@@ -22,42 +23,42 @@ router.get("/", authenticateStaff, requirePermission("moderation.queue.view"), a
   }
 });
 
-// POST /api/v1/system/live/:id/force-end — moderator/admin/superadmin kill switch
+// POST /api/v1/system/live/:id/force-end — moderator/admin/superadmin kill switch.
+// Funnelled through the shared endStream() service (same path as host end,
+// socket end and the sweeper) so the kill switch can never drift from the
+// normal end-of-stream behaviour.
 router.post("/:id/force-end", authenticateStaff, requirePermission("live.forceEnd"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { reason } = req.body;
+    const { reason } = req.body as { reason?: string };
     const stream = await LiveStream.findById(req.params.id);
     if (!stream) return res.status(404).json({ error: "Stream not found" });
 
-    stream.status = "force_ended";
-    stream.endedAt = new Date();
-    stream.endedBy = req.staffUser!.userId as any;
-    stream.endReason = reason?.trim() || "Ended by moderator";
-    stream.viewerCount = 0;
-    await stream.save();
-    await clearLiveViewers(String(stream._id));
-    await User.findByIdAndUpdate(stream.host, { isLive: false });
+    const result = await endStream({
+      streamId: String(stream._id),
+      reason: reason?.trim() || "Ended by moderator",
+      status: "force_ended",
+      endedBy: req.staffUser!.userId,
+    });
 
+    // Compatibility: some older clients only react to broadcastForceEnd's
+    // payload shape — keep emitting it alongside the service's live:ended.
     const io = getIO();
-    if (io) broadcastForceEnd(io, String(stream._id), stream.endReason ?? "Ended by moderator");
+    if (io && result.changed) {
+      broadcastForceEnd(io, String(stream._id), result.reason);
+    }
 
-    await AuditLog.create({
-      actor: req.staffUser!.userId,
-      action: "live.force_end",
-      targetId: String(stream._id),
-      meta: { reason: stream.endReason, host: String(stream.host) },
-    });
+    if (result.changed) {
+      await AuditLog.create({
+        actor: req.staffUser!.userId,
+        action: "live.force_end",
+        targetId: String(stream._id),
+        meta: { reason: result.reason, host: String(stream.host) },
+      });
+    }
 
-    await notify({
-      recipient: String(stream.host),
-      kind: "system",
-      text: `Your live stream was ended by a moderator: ${stream.endReason}`,
-      relatedLive: String(stream._id),
-    });
-
-    return res.json({ stream });
-  } catch (error: any) {
-    return res.status(500).json({ error: "Failed to force-end stream", details: error.message });
+    return res.json({ stream: result.stream ?? stream });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to force-end stream", details: (error as Error).message });
   }
 });
 

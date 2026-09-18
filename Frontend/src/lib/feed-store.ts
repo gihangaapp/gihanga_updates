@@ -39,9 +39,14 @@ export function useFeedState() {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
+/**
+ * In-session posts. The old mock `seedPosts` base was never defined (dead
+ * reference); the real feed data comes from the react-query hooks, so the
+ * session-created posts stand on their own here.
+ */
 export function useFeedPosts(): Post[] {
   const { created } = useFeedState();
-  return useMemo(() => [...created, ...seedPosts], [created]);
+  return useMemo(() => [...created], [created]);
 }
 
 let seq = 0;

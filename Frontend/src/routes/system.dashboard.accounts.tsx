@@ -3,12 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { BadgeCheck, Gift, RotateCcw, Search, Sparkles, UserCog } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/permissions";
 import { formatCount } from "@/lib/format";
@@ -36,7 +31,15 @@ const statusTone: Record<string, string> = {
   review: "bg-muted text-muted-foreground",
 };
 
-function ReasonPrompt({ label, onConfirm, danger }: { label: string; onConfirm: (reason: string) => void; danger?: boolean }) {
+function ReasonPrompt({
+  label,
+  onConfirm,
+  danger,
+}: {
+  label: string;
+  onConfirm: (reason: string) => void;
+  danger?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
 
@@ -74,14 +77,27 @@ function ReasonPrompt({ label, onConfirm, danger }: { label: string; onConfirm: 
       >
         Confirm
       </Button>
-      <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => setOpen(false)}>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="text-muted-foreground"
+        onClick={() => setOpen(false)}
+      >
         Cancel
       </Button>
     </div>
   );
 }
 
-function GrantPointsDialog({ user, open, onOpenChange }: { user: StaffAccount | null; open: boolean; onOpenChange: (v: boolean) => void }) {
+function GrantPointsDialog({
+  user,
+  open,
+  onOpenChange,
+}: {
+  user: StaffAccount | null;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
   const grantPoints = useGrantPoints();
   const [points, setPoints] = useState("100");
   const [reason, setReason] = useState("");
@@ -155,7 +171,9 @@ function AccountsPage() {
         <h1 className="flex items-center gap-2 font-display text-2xl font-bold tracking-tight text-foreground">
           <UserCog className="size-6 text-info" /> User Accounts
         </h1>
-        <p className="text-sm text-muted-foreground">Search accounts and manage verification, status and creator access.</p>
+        <p className="text-sm text-muted-foreground">
+          Search accounts and manage verification, status and creator access.
+        </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -196,47 +214,110 @@ function AccountsPage() {
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={5} className="p-8 text-center text-muted-foreground">Loading…</td>
+                <td colSpan={5} className="p-8 text-center text-muted-foreground">
+                  Loading…
+                </td>
               </tr>
             )}
             {(data?.users ?? []).map((u) => (
               <tr key={u._id} className="border-b border-white/5 last:border-0">
                 <td className="p-3">
                   <p className="font-semibold text-foreground">{u.name}</p>
-                  <p className="text-xs text-muted-foreground">@{u.username} · {u.email}</p>
+                  <p className="text-xs text-muted-foreground">
+                    @{u.username} · {u.email}
+                  </p>
                 </td>
                 <td className="p-3">
-                  <span className={cn("rounded-md px-1.5 py-0.5 text-[11px] font-bold capitalize", statusTone[u.status])}>{u.status}</span>
+                  <span
+                    className={cn(
+                      "rounded-md px-1.5 py-0.5 text-[11px] font-bold capitalize",
+                      statusTone[u.status],
+                    )}
+                  >
+                    {u.status}
+                  </span>
                 </td>
                 <td className="p-3 text-foreground/80">{u.isCreator ? "Creator" : "User"}</td>
                 <td className="p-3 text-foreground/80">{formatCount(u.followersCount)}</td>
                 <td className="p-3">
                   <div className="flex flex-wrap gap-1.5">
                     {canVerify && (
-                      <Button size="sm" variant="outline" className="border-border text-foreground/90 hover:bg-muted" onClick={() => verify.mutate({ id: u._id }, { onSuccess: () => toast.success(`Verified @${u.username}`) })}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-border text-foreground/90 hover:bg-muted"
+                        onClick={() =>
+                          verify.mutate(
+                            { id: u._id },
+                            { onSuccess: () => toast.success(`Verified @${u.username}`) },
+                          )
+                        }
+                      >
                         <BadgeCheck className="size-3.5" />
                       </Button>
                     )}
                     {canMakeCreator && !u.isCreator && (
-                      <Button size="sm" variant="outline" className="border-border text-foreground/90 hover:bg-muted" onClick={() => makeCreator.mutate({ id: u._id }, { onSuccess: () => toast.success(`@${u.username} is now a creator`) })}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-border text-foreground/90 hover:bg-muted"
+                        onClick={() =>
+                          makeCreator.mutate(
+                            { id: u._id },
+                            { onSuccess: () => toast.success(`@${u.username} is now a creator`) },
+                          )
+                        }
+                      >
                         <Sparkles className="size-3.5" />
                       </Button>
                     )}
                     {canGrantPoints && (
-                      <Button size="sm" variant="outline" className="border-border text-foreground/90 hover:bg-muted" onClick={() => setGrantTarget(u)}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-border text-foreground/90 hover:bg-muted"
+                        onClick={() => setGrantTarget(u)}
+                      >
                         <Gift className="size-3.5" />
                       </Button>
                     )}
                     {canManage && u.status === "active" && (
-                      <ReasonPrompt label="Suspend" onConfirm={(reason) => suspend.mutate({ id: u._id, reason }, { onSuccess: () => toast.success(`Suspended @${u.username}`) })} />
+                      <ReasonPrompt
+                        label="Suspend"
+                        onConfirm={(reason) =>
+                          suspend.mutate(
+                            { id: u._id, reason },
+                            { onSuccess: () => toast.success(`Suspended @${u.username}`) },
+                          )
+                        }
+                      />
                     )}
                     {canManage && (u.status === "suspended" || u.status === "banned") && (
-                      <Button size="sm" variant="outline" className="border-border text-foreground/90 hover:bg-muted" onClick={() => reinstate.mutate({ id: u._id }, { onSuccess: () => toast.success(`Reinstated @${u.username}`) })}>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-border text-foreground/90 hover:bg-muted"
+                        onClick={() =>
+                          reinstate.mutate(
+                            { id: u._id },
+                            { onSuccess: () => toast.success(`Reinstated @${u.username}`) },
+                          )
+                        }
+                      >
                         <RotateCcw className="size-3.5" />
                       </Button>
                     )}
                     {canManage && u.status !== "banned" && (
-                      <ReasonPrompt danger label="Ban" onConfirm={(reason) => ban.mutate({ id: u._id, reason }, { onSuccess: () => toast.success(`Banned @${u.username}`) })} />
+                      <ReasonPrompt
+                        danger
+                        label="Ban"
+                        onConfirm={(reason) =>
+                          ban.mutate(
+                            { id: u._id, reason },
+                            { onSuccess: () => toast.success(`Banned @${u.username}`) },
+                          )
+                        }
+                      />
                     )}
                   </div>
                 </td>
@@ -244,14 +325,20 @@ function AccountsPage() {
             ))}
             {!isLoading && !data?.users.length && (
               <tr>
-                <td colSpan={5} className="p-8 text-center text-muted-foreground">No accounts match.</td>
+                <td colSpan={5} className="p-8 text-center text-muted-foreground">
+                  No accounts match.
+                </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
 
-      <GrantPointsDialog user={grantTarget} open={!!grantTarget} onOpenChange={(v) => !v && setGrantTarget(null)} />
+      <GrantPointsDialog
+        user={grantTarget}
+        open={!!grantTarget}
+        onOpenChange={(v) => !v && setGrantTarget(null)}
+      />
     </div>
   );
 }

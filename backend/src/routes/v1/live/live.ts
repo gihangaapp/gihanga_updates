@@ -1,4 +1,5 @@
 import { Router, Response } from "express";
+import { body as bodyValidator, validationResult } from "express-validator";
 import { LiveStream, LiveChatMessage } from "../../../models/LiveStream";
 import { User } from "../../../models/User";
 import { Follow } from "../../../models/Follow";
@@ -8,33 +9,54 @@ import { Report } from "../../../models/Report";
 import { authenticateConsumer, authenticateConsumerOrStaff, AuthenticatedRequest } from "../../../middleware/rbac";
 import { optionalAuth } from "../../../middleware/optionalAuth";
 import { getIO } from "../../../lib/socket";
-import { createLiveKitToken, getLiveKitUrl, isLiveKitConfigured } from "../../../lib/livekit";
-import { applyLedgerEntry } from "../../../lib/wallet";
+import { createLiveKitToken, getLiveKitUrl, isLiveKitConfigured, computeLiveKitTokenTtlSeconds } from "../../../lib/livekit";
+import { applyLedgerEntry, debitWalletAtomic } from "../../../lib/wallet";
 import { notify } from "../../../lib/notify";
 import { notifyStaff } from "../../../lib/staffNotify";
 import { clearLiveViewers } from "../../../lib/redis";
+import { endStream } from "../../../services/liveStreamService";
+import { getPaidInteractionDefaults, PAID_INTERACTION_BOUNDS } from "../../../lib/paidInteractions";
+import { MAX_LIVE_DURATION_MS } from "../../../lib/liveConfig";
 
 const router = Router();
 const HOST_FIELDS = "name username avatarHue avatarUrl isCreator verified followersCount";
-async function clearHostLiveFlagIfNeeded(hostId: unknown) {
-  const anotherLiveStream = await LiveStream.exists({ host: hostId, status: "live" });
-  if (!anotherLiveStream) await User.findByIdAndUpdate(hostId, { isLive: false });
-}
 
-// PATCH /api/v1/live/:id/settings — host adjusts gifts/subsOnly while live
+// PATCH /api/v1/live/:id/settings — host adjusts gifts/subsOnly/paidInteractions while live
 router.patch("/:id/settings", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const stream = await LiveStream.findOne({ _id: req.params.id, host: req.user!.userId });
     if (!stream) return res.status(404).json({ error: "Stream not found" });
 
-    const { giftsEnabled, subsOnly } = req.body;
+    const { giftsEnabled, subsOnly, paidInteractions } = req.body;
     if (giftsEnabled !== undefined) stream.giftsEnabled = Boolean(giftsEnabled);
     if (subsOnly !== undefined) stream.subsOnly = Boolean(subsOnly);
+
+    // A5 — per-stream paid like/comment/reaction settings, validated with
+    // express-validator-style bounds (min 0, sane maxima) so neither a stray
+    // client nor a compromised one can set absurd prices.
+    if (paidInteractions && typeof paidInteractions === "object") {
+      const { enabled, likePrice, commentPrice, reactionPrice } = paidInteractions as Record<string, unknown>;
+      if (enabled !== undefined) stream.paidInteractions.enabled = Boolean(enabled);
+      const priceFields: ["likePrice" | "commentPrice" | "reactionPrice", number][] = [
+        ["likePrice", PAID_INTERACTION_BOUNDS.maxLikePrice],
+        ["commentPrice", PAID_INTERACTION_BOUNDS.maxCommentPrice],
+        ["reactionPrice", PAID_INTERACTION_BOUNDS.maxReactionPrice],
+      ];
+      for (const [field, max] of priceFields) {
+        const raw = paidInteractions[field];
+        if (raw === undefined) continue;
+        const n = Number(raw);
+        if (!Number.isFinite(n) || n < 0 || n > max) {
+          return res.status(400).json({ error: `${field} must be a number between 0 and ${max}` });
+        }
+        stream.paidInteractions[field] = Math.floor(n);
+      }
+    }
     await stream.save();
 
     return res.json({ stream });
-  } catch (error: any) {
-    return res.status(500).json({ error: "Failed to update settings", details: error.message });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to update settings", details: (error as Error).message });
   }
 });
 
@@ -52,8 +74,31 @@ router.post("/start", authenticateConsumerOrStaff, async (req: AuthenticatedRequ
       return res.status(409).json({ error: "You already have an active live stream", streamId: existing._id });
     }
 
-    const { title, description, subsOnly, giftsEnabled } = req.body;
+    const { title, description, subsOnly, giftsEnabled, paidInteractions } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: "Give your stream a title" });
+
+    // A4 — server-enforced duration cap: the deadline is stored on the stream
+    // and the sweeper is the reader/enforcer. Returned in every stream payload
+    // so hosts can render a countdown and clients can pre-compute remaining time.
+    const startedAt = new Date();
+    const maxEndsAt = new Date(startedAt.getTime() + MAX_LIVE_DURATION_MS);
+
+    // A5 — paid interactions default ON for staff-hosted streams (the brief's
+    // pinned interpretation of "moderators' live streams"), OFF for everyone
+    // else. Staff-settable global price defaults via the Setting model.
+    const staffHost = user.role === "moderator" || user.role === "admin" || user.role === "superadmin";
+    const defaultPrices = await getPaidInteractionDefaults();
+    const requestedPaid =
+      paidInteractions && typeof paidInteractions === "object" ? (paidInteractions as Record<string, unknown>) : {};
+    const paidEnabledRaw = requestedPaid.enabled;
+    const paidEnabled =
+      paidEnabledRaw === undefined ? staffHost : Boolean(paidEnabledRaw);
+    const clampPriceField = (raw: unknown, fallback: number, max: number) => {
+      if (raw === undefined) return fallback;
+      const n = Number(raw);
+      if (!Number.isFinite(n) || n < 0 || n > max) return fallback;
+      return Math.floor(n);
+    };
 
     const stream = await LiveStream.create({
       host: user._id,
@@ -61,9 +106,17 @@ router.post("/start", authenticateConsumerOrStaff, async (req: AuthenticatedRequ
       description: description?.trim().slice(0, 1000),
       subsOnly: Boolean(subsOnly),
       giftsEnabled: giftsEnabled !== false,
+      paidInteractions: {
+        enabled: paidEnabled,
+        likePrice: clampPriceField(requestedPaid.likePrice, defaultPrices.likePrice, PAID_INTERACTION_BOUNDS.maxLikePrice),
+        commentPrice: clampPriceField(requestedPaid.commentPrice, defaultPrices.commentPrice, PAID_INTERACTION_BOUNDS.maxCommentPrice),
+        reactionPrice: clampPriceField(requestedPaid.reactionPrice, defaultPrices.reactionPrice, PAID_INTERACTION_BOUNDS.maxReactionPrice),
+      },
       status: "live",
-      startedAt: new Date(),
-      lastHeartbeatAt: new Date(),
+      startedAt,
+      lastHeartbeatAt: startedAt,
+      maxEndsAt,
+      timeWarningsSent: [],
     });
 
     await user.updateOne({ isLive: true });
@@ -82,9 +135,9 @@ router.post("/start", authenticateConsumerOrStaff, async (req: AuthenticatedRequ
     );
 
     const populated = await stream.populate("host", HOST_FIELDS);
-    return res.status(201).json({ stream: populated });
-  } catch (error: any) {
-    return res.status(500).json({ error: "Failed to start live stream", details: error.message });
+    return res.status(201).json({ stream: populated, maxLiveDurationMs: MAX_LIVE_DURATION_MS });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to start live stream", details: (error as Error).message });
   }
 });
 
@@ -130,26 +183,22 @@ router.post("/:id/invite", authenticateConsumerOrStaff, async (req: Authenticate
   }
 });
 
-// POST /api/v1/live/:id/end — host ends their own stream
+// POST /api/v1/live/:id/end — host ends their own stream. Idempotent, and
+// funnelled through the SAME endStream() service as the socket path, staff
+// force-end and the sweeper so end-of-stream behaviour can never drift.
 router.post("/:id/end", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const stream = await LiveStream.findOne({ _id: req.params.id, host: req.user!.userId });
     if (!stream) return res.status(404).json({ error: "Stream not found" });
-    const wasLive = stream.status === "live";
-    if (wasLive) {
-      stream.status = "ended";
-      stream.endedAt = new Date();
-      stream.endReason = "Host ended the stream";
-      stream.viewerCount = 0;
-      stream.coHosts = [];
-      await stream.save();
-      await clearLiveViewers(String(stream._id));
-      getIO()?.to(`live:${stream._id}`).emit("live:ended", { streamId: String(stream._id), reason: "Host ended the stream" });
-    }
-    await clearHostLiveFlagIfNeeded(req.user!.userId);
-    return res.json({ stream });
-  } catch (error: any) {
-    return res.status(500).json({ error: "Failed to end stream", details: error.message });
+    const result = await endStream({
+      streamId: String(stream._id),
+      reason: "Host ended the stream",
+      status: "ended",
+      notifyHost: false,
+    });
+    return res.json({ stream: result.stream ?? stream });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to end stream", details: (error as Error).message });
   }
 });
 
@@ -220,19 +269,31 @@ router.get("/:id/livekit-token", authenticateConsumerOrStaff, async (req: Authen
     const userId = req.user!.userId;
     const isHost = String(stream.host) === userId;
     const isCoHost = stream.coHosts.some((c) => String(c) === userId);
+
+    // A4 — a join token must never meaningfully outlive the stream's cap:
+    // TTL = clamp(remaining time + 60 s grace, 60 s, ceiling).
+    const remainingMs = stream.maxEndsAt ? stream.maxEndsAt.getTime() - Date.now() : Number.MAX_SAFE_INTEGER;
+    if (remainingMs <= 0) {
+      // The sweeper may not have ticked yet — end it now rather than handing
+      // out a token to a stream that's past its deadline.
+      await endStream({ streamId: String(stream._id), reason: "Maximum duration (5 hours) reached", status: "ended" });
+      return res.status(409).json({ error: "This stream reached the 5-hour limit" });
+    }
+
     const token = await createLiveKitToken({
       room: String(stream._id),
       identity: userId,
       canPublish: isHost || isCoHost,
+      ttlSeconds: computeLiveKitTokenTtlSeconds(remainingMs),
     });
 
-    return res.json({ url: getLiveKitUrl(), token, room: String(stream._id) });
+    return res.json({ url: getLiveKitUrl(), token, room: String(stream._id), maxEndsAt: stream.maxEndsAt ?? null });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to mint live token", details: error.message });
   }
 });
 
-// GET /api/v1/live/:id/earnings — host-only: gift earnings for this stream
+// GET /api/v1/live/:id/earnings — host-only: gift + paid-interaction earnings for this stream
 router.get("/:id/earnings", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const stream = await LiveStream.findById(req.params.id);
@@ -241,17 +302,35 @@ router.get("/:id/earnings", authenticateConsumerOrStaff, async (req: Authenticat
       return res.status(403).json({ error: "Only the host can view stream earnings" });
     }
 
-    const gifts = await Transaction.find({
+    const earnings = await Transaction.find({
       user: req.user!.userId,
-      kind: "gift",
+      kind: { $in: ["gift", "live_like", "live_comment", "live_reaction"] },
       relatedLive: stream._id,
       amount: { $gt: 0 },
     }).sort({ createdAt: -1 });
 
-    const totalPoints = gifts.reduce((sum, g) => sum + g.amount, 0);
-    return res.json({ totalPoints, giftCount: gifts.length, gifts });
-  } catch (error: any) {
-    return res.status(500).json({ error: "Failed to load earnings", details: error.message });
+    const gifts = earnings.filter((t) => t.kind === "gift");
+    const paidLikes = earnings.filter((t) => t.kind === "live_like");
+    const paidComments = earnings.filter((t) => t.kind === "live_comment");
+    const paidReactions = earnings.filter((t) => t.kind === "live_reaction");
+    const sum = (list: typeof earnings) => list.reduce((acc, t) => acc + t.amount, 0);
+
+    const totalPoints = sum(earnings);
+    return res.json({
+      totalPoints,
+      giftCount: gifts.length,
+      gifts,
+      paidInteractions: {
+        likeCount: paidLikes.length,
+        commentCount: paidComments.length,
+        reactionCount: paidReactions.length,
+        likePoints: sum(paidLikes),
+        commentPoints: sum(paidComments),
+        reactionPoints: sum(paidReactions),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ error: "Failed to load earnings", details: (error as Error).message });
   }
 });
 
@@ -363,11 +442,15 @@ const GIFT_OPTIONS: Record<string, number> = {
   rocket: 500,
 };
 
-// POST /api/v1/live/:id/gift — send a point-based gift, moves real wallet points immediately
+// POST /api/v1/live/:id/gift — send a point-based gift, moves real wallet points immediately.
+// Money safety (A5/§8.1): the old flow did check-then-debit (read balance,
+// then applyLedgerEntry) which two concurrent requests could double-spend.
+// The debit is now a single conditional findOneAndUpdate — the balance can
+// never go negative and concurrent gifts can never both win.
 router.post("/:id/gift", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { giftId } = req.body;
-    const amount = GIFT_OPTIONS[giftId];
+    const { giftId, idempotencyKey } = req.body as { giftId?: string; idempotencyKey?: string };
+    const amount = GIFT_OPTIONS[giftId ?? ""];
     if (!amount) return res.status(400).json({ error: "Unknown gift" });
 
     const stream = await LiveStream.findById(req.params.id).populate("host", HOST_FIELDS);
@@ -377,30 +460,43 @@ router.post("/:id/gift", authenticateConsumer, async (req: AuthenticatedRequest,
       return res.status(400).json({ error: "You can't gift your own stream" });
     }
 
-    const senderWallet = await Wallet.findOne({ user: req.user!.userId });
-    if (!senderWallet || senderWallet.kingdomPoints < amount) {
-      return res.status(400).json({ error: "Not enough Kingdom Points for that gift" });
-    }
-    if (senderWallet.frozen) return res.status(403).json({ error: "Your wallet is frozen" });
-
     const sender = await User.findById(req.user!.userId).select("name username avatarHue avatarUrl isCreator verified");
 
-    await applyLedgerEntry({
+    const debit = await debitWalletAtomic({
       userId: req.user!.userId,
+      amount,
       kind: "gift",
-      amount: -amount,
       label: `Gift sent to @${(stream.host as any).username}`,
       toBalance: "kingdomPoints",
       relatedLive: String(stream._id),
     });
-    await applyLedgerEntry({
-      userId: String((stream.host as any)._id),
-      kind: "gift",
-      amount,
-      label: `Gift from @${sender?.username}`,
-      toBalance: "kingdomPoints",
-      relatedLive: String(stream._id),
-    });
+    if (!debit.ok) {
+      if (debit.reason === "frozen") return res.status(403).json({ error: "Your wallet is frozen" });
+      return res.status(400).json({ error: "Not enough Kingdom Points for that gift" });
+    }
+
+    // Credit the host. On failure the sender is refunded — all-or-nothing.
+    try {
+      await applyLedgerEntry({
+        userId: String((stream.host as any)._id),
+        kind: "gift",
+        amount,
+        label: `Gift from @${sender?.username}`,
+        toBalance: "kingdomPoints",
+        relatedLive: String(stream._id),
+      });
+    } catch (creditErr) {
+      await applyLedgerEntry({
+        userId: req.user!.userId,
+        kind: "gift",
+        amount,
+        label: `Refund — gift to @${(stream.host as any).username} failed`,
+        toBalance: "kingdomPoints",
+        relatedLive: String(stream._id),
+      }).catch(() => {});
+      console.error("[live/gift] host credit failed; sender refunded:", creditErr);
+      return res.status(500).json({ error: "Gift failed — you were not charged" });
+    }
 
     stream.totalGifts += amount;
     await stream.save();
@@ -438,7 +534,7 @@ router.post("/:id/gift", authenticateConsumer, async (req: AuthenticatedRequest,
       relatedLive: String(stream._id),
     });
 
-    return res.json({ sent: true, amount, remainingPoints: senderWallet.kingdomPoints - amount });
+    return res.json({ sent: true, amount, remainingPoints: debit.remainingPoints });
   } catch (error: any) {
     return res.status(500).json({ error: "Gift failed", details: error.message });
   }

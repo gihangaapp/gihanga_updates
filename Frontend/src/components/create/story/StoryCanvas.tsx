@@ -9,14 +9,14 @@ import { STORY_FONTS } from "./StoryTextEditor";
 interface StoryCanvasProps {
   slide: StorySlideData;
   stickers: StorySticker[];
-  drawingUrl?: string;
-  onUpdateTextPosition?: (textId: string, x: number, y: number) => void;
-  onUpdateStickerPosition?: (stickerId: string, x: number, y: number) => void;
-  onUpdateTextScale?: (textId: string, scale: number) => void;
-  onUpdateStickerScale?: (stickerId: string, scale: number) => void;
-  onSelectTextElement?: (text: StoryTextElement) => void;
-  onRemoveSticker?: (stickerId: string) => void;
-  onRemoveTextElement?: (textId: string) => void;
+  drawingUrl?: string | undefined;
+  onUpdateTextPosition?: ((textId: string, x: number, y: number) => void) | undefined;
+  onUpdateStickerPosition?: ((stickerId: string, x: number, y: number) => void) | undefined;
+  onUpdateTextScale?: ((textId: string, scale: number) => void) | undefined;
+  onUpdateStickerScale?: ((stickerId: string, scale: number) => void) | undefined;
+  onSelectTextElement?: ((text: StoryTextElement) => void) | undefined;
+  onRemoveSticker?: ((stickerId: string) => void) | undefined;
+  onRemoveTextElement?: ((textId: string) => void) | undefined;
 }
 
 export function StoryCanvas({
@@ -35,7 +35,8 @@ export function StoryCanvas({
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [activeElementId, setActiveElementId] = useState<string | null>(null);
 
-  const activeFilterObj = STORY_FILTERS.find((f) => f.id === slide.filter) || STORY_FILTERS[0];
+  const activeFilterObj = STORY_FILTERS.find((f) => f.id === slide.filter) ??
+    STORY_FILTERS[0] ?? { id: "normal", label: "Normal", cssFilter: "none" };
 
   const handlePointerDown = (id: string, e: React.PointerEvent) => {
     e.stopPropagation();
@@ -43,7 +44,9 @@ export function StoryCanvas({
     setActiveElementId(id);
     try {
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
-    } catch {}
+    } catch {
+      /* pointer capture release is best-effort */
+    }
   };
 
   const handlePointerMoveText = (id: string, e: React.PointerEvent) => {
@@ -67,7 +70,9 @@ export function StoryCanvas({
       setDraggingId(null);
       try {
         (e.target as HTMLElement).releasePointerCapture(e.pointerId);
-      } catch {}
+      } catch {
+        /* best-effort — ignore */
+      }
     }
   };
 
@@ -114,7 +119,7 @@ export function StoryCanvas({
 
       {/* Layered Text Elements (Draggable & Resizable with Handles) */}
       {slide.textElements.map((el) => {
-        const fontObj = STORY_FONTS.find((f) => f.id === el.font) || STORY_FONTS[0];
+        const fontObj = STORY_FONTS.find((f) => f.id === el.font) ?? STORY_FONTS[0];
         const isSelected = activeElementId === el.id;
         const currentScale = el.scale || 1;
 
@@ -133,15 +138,18 @@ export function StoryCanvas({
               left: `${el.x}%`,
               top: `${el.y}%`,
               transform: `translate(-50%, -50%) rotate(${el.rotation || 0}deg) scale(${currentScale})`,
-              color: el.bgColor === "rgba(255,255,255,0.9)" && el.color === "#FFFFFF" ? "#000000" : el.color,
+              color:
+                el.bgColor === "rgba(255,255,255,0.9)" && el.color === "#FFFFFF"
+                  ? "#000000"
+                  : el.color,
               backgroundColor: el.bgColor,
               fontSize: `${el.fontSize}px`,
               textAlign: el.alignment,
             }}
             className={cn(
               "group absolute z-20 cursor-grab active:cursor-grabbing rounded-xl p-2.5 font-bold leading-snug drop-shadow-md touch-none max-w-[85%]",
-              fontObj.fontClass,
-              isSelected && "ring-2 ring-white/80 shadow-2xl"
+              fontObj?.fontClass ?? "",
+              isSelected && "ring-2 ring-white/80 shadow-2xl",
             )}
           >
             {el.text}
@@ -153,19 +161,23 @@ export function StoryCanvas({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (onUpdateTextScale) onUpdateTextScale(el.id, Math.max(0.5, currentScale - 0.15));
+                    if (onUpdateTextScale)
+                      onUpdateTextScale(el.id, Math.max(0.5, currentScale - 0.15));
                   }}
                   className="grid size-6 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
                   title="Make Smaller"
                 >
                   <ZoomOut className="size-3" />
                 </button>
-                <span className="text-[10px] font-bold text-white/70 px-1">{Math.round(currentScale * 100)}%</span>
+                <span className="text-[10px] font-bold text-white/70 px-1">
+                  {Math.round(currentScale * 100)}%
+                </span>
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (onUpdateTextScale) onUpdateTextScale(el.id, Math.min(2.5, currentScale + 0.15));
+                    if (onUpdateTextScale)
+                      onUpdateTextScale(el.id, Math.min(2.5, currentScale + 0.15));
                   }}
                   className="grid size-6 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
                   title="Make Larger"
@@ -215,11 +227,13 @@ export function StoryCanvas({
             }}
             className={cn(
               "group absolute z-20 cursor-grab active:cursor-grabbing touch-none select-none p-1 rounded-2xl",
-              isSelected && "ring-2 ring-white/80"
+              isSelected && "ring-2 ring-white/80",
             )}
           >
             {stk.type === "emoji" ? (
-              <span className="text-6xl drop-shadow-[0_4px_12px_rgba(0,0,0,0.7)]">{stk.content}</span>
+              <span className="text-6xl drop-shadow-[0_4px_12px_rgba(0,0,0,0.7)]">
+                {stk.content}
+              </span>
             ) : stk.type === "location" ? (
               <span className="font-extrabold text-emerald-400 text-lg tracking-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]">
                 📍 {stk.content}
@@ -245,19 +259,23 @@ export function StoryCanvas({
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (onUpdateStickerScale) onUpdateStickerScale(stk.id, Math.max(0.4, currentScale - 0.15));
+                    if (onUpdateStickerScale)
+                      onUpdateStickerScale(stk.id, Math.max(0.4, currentScale - 0.15));
                   }}
                   className="grid size-6 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
                   title="Make Smaller"
                 >
                   <ZoomOut className="size-3" />
                 </button>
-                <span className="text-[10px] font-bold text-white/70 px-1">{Math.round(currentScale * 100)}%</span>
+                <span className="text-[10px] font-bold text-white/70 px-1">
+                  {Math.round(currentScale * 100)}%
+                </span>
                 <button
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (onUpdateStickerScale) onUpdateStickerScale(stk.id, Math.min(2.5, currentScale + 0.15));
+                    if (onUpdateStickerScale)
+                      onUpdateStickerScale(stk.id, Math.min(2.5, currentScale + 0.15));
                   }}
                   className="grid size-6 place-items-center rounded-full bg-white/10 text-white hover:bg-white/20"
                   title="Make Larger"

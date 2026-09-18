@@ -20,10 +20,7 @@ export const STORY_BACKGROUND_PRESETS = [
   "#0F172A",
 ];
 
-export function StoryBackgroundPicker({
-  selectedBg,
-  onSelectBg,
-}: StoryBackgroundPickerProps) {
+export function StoryBackgroundPicker({ selectedBg, onSelectBg }: StoryBackgroundPickerProps) {
   return (
     <div className="flex flex-col gap-2 rounded-2xl bg-black/60 p-3 backdrop-blur-md">
       <div className="flex items-center gap-1.5 text-xs font-bold text-white">
@@ -37,7 +34,7 @@ export function StoryBackgroundPicker({
             onClick={() => onSelectBg(preset)}
             className={cn(
               "press size-8 shrink-0 rounded-full border-2 transition-transform",
-              selectedBg === preset ? "border-white scale-110" : "border-transparent"
+              selectedBg === preset ? "border-white scale-110" : "border-transparent",
             )}
             style={{ background: preset }}
           />

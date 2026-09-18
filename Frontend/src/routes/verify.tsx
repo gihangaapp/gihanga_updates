@@ -116,10 +116,13 @@ function VerifyPage() {
       back={{ to: "/register", label: "Back to sign up" }}
     >
       <form onSubmit={submit} className="space-y-5">
-        <div className="flex justify-between gap-2" onPaste={(e) => {
-          e.preventDefault();
-          setAt(0, e.clipboardData.getData("text"));
-        }}>
+        <div
+          className="flex justify-between gap-2"
+          onPaste={(e) => {
+            e.preventDefault();
+            setAt(0, e.clipboardData.getData("text"));
+          }}
+        >
           {digits.map((d, i) => (
             <input
               key={i}

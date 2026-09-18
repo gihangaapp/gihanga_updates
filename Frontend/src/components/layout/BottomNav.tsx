@@ -56,14 +56,21 @@ export function BottomNav() {
                   to={item.to}
                   className={cn(
                     "flex flex-col items-center gap-0.5 py-1 text-center transition-colors",
-                    active ? "text-primary font-bold" : "text-muted-foreground hover:text-foreground",
+                    active
+                      ? "text-primary font-bold"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   <item.icon
                     className={cn("size-[22px]", active && "fill-current")}
                     strokeWidth={active ? 2.5 : 1.9}
                   />
-                  <span className={cn("text-[11px] leading-none tracking-tight", active ? "font-bold" : "font-medium")}>
+                  <span
+                    className={cn(
+                      "text-[11px] leading-none tracking-tight",
+                      active ? "font-bold" : "font-medium",
+                    )}
+                  >
                     {item.label}
                   </span>
                 </Link>
@@ -84,14 +91,21 @@ export function BottomNav() {
                   to={item.to}
                   className={cn(
                     "flex flex-col items-center gap-0.5 py-1 text-center transition-colors",
-                    active ? "text-primary font-bold" : "text-muted-foreground hover:text-foreground",
+                    active
+                      ? "text-primary font-bold"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   <item.icon
                     className={cn("size-[22px]", active && "fill-current")}
                     strokeWidth={active ? 2.5 : 1.9}
                   />
-                  <span className={cn("text-[11px] leading-none tracking-tight", active ? "font-bold" : "font-medium")}>
+                  <span
+                    className={cn(
+                      "text-[11px] leading-none tracking-tight",
+                      active ? "font-bold" : "font-medium",
+                    )}
+                  >
                     {item.label}
                   </span>
                 </Link>

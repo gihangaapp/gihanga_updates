@@ -1,6 +1,16 @@
 import { useState, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Settings, Coins, Wallet, Clock, Video, ShieldCheck, Save, Loader2, Sparkles } from "lucide-react";
+import {
+  Settings,
+  Coins,
+  Wallet,
+  Clock,
+  Video,
+  ShieldCheck,
+  Save,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,18 +60,25 @@ function SuperadminAdSettingsPage() {
             <Sparkles className="size-6 text-amber-500" /> Advertising Configuration & Pricing
           </h1>
           <p className="text-sm text-muted-foreground">
-            Superadmin privileges required — configure pricing per advertising minute, Gihanga Points conversion rates, video duration caps, and platform limits.
+            Superadmin privileges required — configure pricing per advertising minute, Gihanga
+            Points conversion rates, video duration caps, and platform limits.
           </p>
         </div>
 
         <Button variant="brand" size="lg" disabled={updateSettings.isPending} onClick={handleSave}>
-          {updateSettings.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Save className="mr-2 size-4" />}
+          {updateSettings.isPending ? (
+            <Loader2 className="mr-2 size-4 animate-spin" />
+          ) : (
+            <Save className="mr-2 size-4" />
+          )}
           Save All Changes
         </Button>
       </div>
 
       {isLoading ? (
-        <p className="py-12 text-center text-sm text-muted-foreground">Loading advertising settings…</p>
+        <p className="py-12 text-center text-sm text-muted-foreground">
+          Loading advertising settings…
+        </p>
       ) : (
         <div className="grid gap-6 lg:grid-cols-2">
           {/* General Platform Controls */}
@@ -72,29 +89,53 @@ function SuperadminAdSettingsPage() {
 
             <div className="flex items-center justify-between rounded-xl bg-muted/40 p-3.5">
               <div>
-                <span className="text-sm font-semibold text-foreground block">Enable Advertising Platform</span>
-                <span className="text-xs text-muted-foreground">Master toggle for creating and running ad campaigns platform-wide.</span>
+                <span className="text-sm font-semibold text-foreground block">
+                  Enable Advertising Platform
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Master toggle for creating and running ad campaigns platform-wide.
+                </span>
               </div>
               <button
                 type="button"
                 onClick={() => handleChange("enabled", !form.enabled)}
-                className={cn("relative h-6 w-11 shrink-0 rounded-full transition-colors", form.enabled ? "bg-indigo-500" : "bg-white/10")}
+                className={cn(
+                  "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+                  form.enabled ? "bg-indigo-500" : "bg-white/10",
+                )}
               >
-                <span className={cn("absolute top-0.5 size-5 rounded-full bg-white transition-transform", form.enabled ? "translate-x-[22px]" : "translate-x-0.5")} />
+                <span
+                  className={cn(
+                    "absolute top-0.5 size-5 rounded-full bg-white transition-transform",
+                    form.enabled ? "translate-x-[22px]" : "translate-x-0.5",
+                  )}
+                />
               </button>
             </div>
 
             <div className="flex items-center justify-between rounded-xl bg-muted/40 p-3.5">
               <div>
-                <span className="text-sm font-semibold text-foreground block">Enable Gihanga Points Payment Method</span>
-                <span className="text-xs text-muted-foreground">Allows users and creators to pay for ads using their Gihanga Points balance.</span>
+                <span className="text-sm font-semibold text-foreground block">
+                  Enable Gihanga Points Payment Method
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Allows users and creators to pay for ads using their Gihanga Points balance.
+                </span>
               </div>
               <button
                 type="button"
                 onClick={() => handleChange("pointsEnabled", !form.pointsEnabled)}
-                className={cn("relative h-6 w-11 shrink-0 rounded-full transition-colors", form.pointsEnabled ? "bg-amber-500" : "bg-white/10")}
+                className={cn(
+                  "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+                  form.pointsEnabled ? "bg-amber-500" : "bg-white/10",
+                )}
               >
-                <span className={cn("absolute top-0.5 size-5 rounded-full bg-white transition-transform", form.pointsEnabled ? "translate-x-[22px]" : "translate-x-0.5")} />
+                <span
+                  className={cn(
+                    "absolute top-0.5 size-5 rounded-full bg-white transition-transform",
+                    form.pointsEnabled ? "translate-x-[22px]" : "translate-x-0.5",
+                  )}
+                />
               </button>
             </div>
           </div>
@@ -137,21 +178,29 @@ function SuperadminAdSettingsPage() {
 
             {/* Live Package Preview Box */}
             <div className="rounded-xl border border-border/80 bg-elevated p-4 space-y-2">
-              <span className="text-xs font-bold text-foreground block">Dynamic Package Calculation Preview</span>
+              <span className="text-xs font-bold text-foreground block">
+                Dynamic Package Calculation Preview
+              </span>
               <div className="grid grid-cols-3 gap-2 pt-1 text-center text-xs">
                 <div className="rounded-lg bg-card p-2">
                   <span className="text-muted-foreground block font-bold">10 Minutes</span>
-                  <span className="text-amber-500 font-bold block">{formatCount(10 * currentGpPerMin)} GP</span>
+                  <span className="text-amber-500 font-bold block">
+                    {formatCount(10 * currentGpPerMin)} GP
+                  </span>
                   <span className="text-primary font-bold block">{rwf(10 * currentRwfPerMin)}</span>
                 </div>
                 <div className="rounded-lg bg-card p-2">
                   <span className="text-muted-foreground block font-bold">30 Minutes</span>
-                  <span className="text-amber-500 font-bold block">{formatCount(30 * currentGpPerMin)} GP</span>
+                  <span className="text-amber-500 font-bold block">
+                    {formatCount(30 * currentGpPerMin)} GP
+                  </span>
                   <span className="text-primary font-bold block">{rwf(30 * currentRwfPerMin)}</span>
                 </div>
                 <div className="rounded-lg bg-card p-2">
                   <span className="text-muted-foreground block font-bold">60 Minutes</span>
-                  <span className="text-amber-500 font-bold block">{formatCount(60 * currentGpPerMin)} GP</span>
+                  <span className="text-amber-500 font-bold block">
+                    {formatCount(60 * currentGpPerMin)} GP
+                  </span>
                   <span className="text-primary font-bold block">{rwf(60 * currentRwfPerMin)}</span>
                 </div>
               </div>
@@ -180,7 +229,9 @@ function SuperadminAdSettingsPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-xs font-semibold text-muted-foreground">Min Quota Minutes</label>
+                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                  Min Quota Minutes
+                </label>
                 <Input
                   type="number"
                   value={form.minMinutes ?? 1}
@@ -188,7 +239,9 @@ function SuperadminAdSettingsPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold text-muted-foreground">Max Quota Minutes</label>
+                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                  Max Quota Minutes
+                </label>
                 <Input
                   type="number"
                   value={form.maxMinutes ?? 180}
@@ -206,7 +259,9 @@ function SuperadminAdSettingsPage() {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-xs font-semibold text-muted-foreground">Minimum Campaign Days</label>
+                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                  Minimum Campaign Days
+                </label>
                 <Input
                   type="number"
                   value={form.minCampaignDays ?? 1}
@@ -214,7 +269,9 @@ function SuperadminAdSettingsPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-semibold text-muted-foreground">Maximum Campaign Days</label>
+                <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                  Maximum Campaign Days
+                </label>
                 <Input
                   type="number"
                   value={form.maxCampaignDays ?? 30}

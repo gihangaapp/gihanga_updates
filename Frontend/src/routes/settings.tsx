@@ -302,7 +302,7 @@ export function SettingsPage() {
       return settingsPayload.user;
     }
     if (authUser) {
-      return {
+      const mapped: UserSettingsUser = {
         id: authUser.id,
         name: authUser.name,
         username: authUser.username,
@@ -318,8 +318,8 @@ export function SettingsPage() {
         followingCount: authUser.followingCount || 0,
         postsCount: authUser.postsCount || 0,
         mtnMomoNumber: "",
-        createdAt: authUser.createdAt ? String(authUser.createdAt) : undefined,
       };
+      return mapped;
     }
     return null;
   }, [settingsPayload?.user, authUser]);
@@ -360,10 +360,14 @@ export function SettingsPage() {
   const handleUpdate = async (updates: Partial<UserSettingsData> & Partial<UserSettingsUser>) => {
     const res = await updateSettings.mutateAsync(updates);
     if (res.user && authUser) {
-      updateConsumerProfile({
-        ...authUser,
-        ...res.user,
-      });
+      // Only defined fields flow into the profile (exactOptionalPropertyTypes).
+      const patch: Partial<typeof authUser> = {};
+      for (const [key, value] of Object.entries(res.user)) {
+        if (value !== undefined) {
+          (patch as Record<string, unknown>)[key] = value;
+        }
+      }
+      updateConsumerProfile({ ...authUser, ...patch });
     }
     return res;
   };
@@ -482,14 +486,14 @@ export function SettingsPage() {
                             "w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-2xl text-xs font-bold transition-all text-left group",
                             isActive
                               ? "bg-primary text-primary-foreground shadow-sm"
-                              : "text-foreground hover:bg-elevated hover:text-foreground"
+                              : "text-foreground hover:bg-elevated hover:text-foreground",
                           )}
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             <Icon
                               className={cn(
                                 "size-4.5 shrink-0 transition-transform group-hover:scale-110",
-                                isActive ? "text-primary-foreground" : "text-muted-foreground"
+                                isActive ? "text-primary-foreground" : "text-muted-foreground",
                               )}
                             />
                             <span className="truncate">{item.label}</span>
@@ -500,7 +504,7 @@ export function SettingsPage() {
                                 "rounded-full px-2 py-0.5 text-[10px] font-extrabold",
                                 isActive
                                   ? "bg-primary-foreground/20 text-primary-foreground"
-                                  : "bg-primary/10 text-primary"
+                                  : "bg-primary/10 text-primary",
                               )}
                             >
                               {item.badge}
@@ -544,14 +548,15 @@ export function SettingsPage() {
                   <ArrowLeft className="size-4" />
                   All Settings
                 </button>
-                <span className="text-xs font-black text-foreground">
-                  {currentNavItem?.label}
-                </span>
+                <span className="text-xs font-black text-foreground">{currentNavItem?.label}</span>
               </div>
             ) : (
               <div className="space-y-4">
                 {NAV_GROUPS.map((group) => (
-                  <div key={group.label} className="surface-card rounded-3xl p-4 border border-border">
+                  <div
+                    key={group.label}
+                    className="surface-card rounded-3xl p-4 border border-border"
+                  >
                     <span className="px-2 text-[11px] font-black uppercase tracking-wider text-muted-foreground">
                       {group.label}
                     </span>
@@ -595,7 +600,12 @@ export function SettingsPage() {
           </div>
 
           {/* Main Content Area */}
-          <main className={cn("col-span-1 lg:col-span-8", isMobileMenuOpen ? "hidden lg:block" : "block")}>
+          <main
+            className={cn(
+              "col-span-1 lg:col-span-8",
+              isMobileMenuOpen ? "hidden lg:block" : "block",
+            )}
+          >
             {/* Breadcrumb path for desktop */}
             <div className="mb-4 hidden lg:flex items-center gap-2 text-xs font-medium text-muted-foreground">
               <button
@@ -622,19 +632,11 @@ export function SettingsPage() {
             )}
 
             {activeSection === "account" && (
-              <AccountSection
-                user={user}
-                settings={settings}
-                onSave={handleUpdate}
-              />
+              <AccountSection user={user} settings={settings} onSave={handleUpdate} />
             )}
 
             {activeSection === "profile" && (
-              <ProfileSection
-                user={user}
-                settings={settings}
-                onSave={handleUpdate}
-              />
+              <ProfileSection user={user} settings={settings} onSave={handleUpdate} />
             )}
 
             {activeSection === "privacy" && (
@@ -649,9 +651,7 @@ export function SettingsPage() {
               <NotificationsSection settings={settings} onSave={handleUpdate} />
             )}
 
-            {activeSection === "feed" && (
-              <FeedSection settings={settings} onSave={handleUpdate} />
-            )}
+            {activeSection === "feed" && <FeedSection settings={settings} onSave={handleUpdate} />}
 
             {activeSection === "messages" && (
               <MessagesSection settings={settings} onSave={handleUpdate} />
@@ -665,9 +665,7 @@ export function SettingsPage() {
               <WalletSection settings={settings} wallet={wallet} user={user} />
             )}
 
-            {activeSection === "ads" && (
-              <AdsSection settings={settings} onSave={handleUpdate} />
-            )}
+            {activeSection === "ads" && <AdsSection settings={settings} onSave={handleUpdate} />}
 
             {activeSection === "appearance" && (
               <AppearanceSection
@@ -716,8 +714,8 @@ function OverviewSection({
   onNavigate,
 }: {
   user: UserSettingsUser | null;
-  settings?: UserSettingsData;
-  wallet?: UserSettingsWallet;
+  settings?: UserSettingsData | undefined;
+  wallet?: UserSettingsWallet | undefined;
   onNavigate: (section: SectionKey) => void;
 }) {
   const securityScore = useMemo(() => {
@@ -748,19 +746,21 @@ function OverviewSection({
                 />
               ) : (
                 <GAvatar
-                  user={{
-                    id: user?.id || "me",
-                    name: user?.name || "Member",
-                    username: user?.username || "user",
-                    avatarHue: user?.avatarHue ?? 205,
-                    avatarUrl: null,
-                    creator: Boolean(user?.isCreator),
-                    verified: Boolean(user?.verified),
-                    live: false,
-                    followers: user?.followersCount || 0,
-                    following: user?.followingCount || 0,
-                    posts: user?.postsCount || 0,
-                  } as any}
+                  user={
+                    {
+                      id: user?.id || "me",
+                      name: user?.name || "Member",
+                      username: user?.username || "user",
+                      avatarHue: user?.avatarHue ?? 205,
+                      avatarUrl: null,
+                      creator: Boolean(user?.isCreator),
+                      verified: Boolean(user?.verified),
+                      live: false,
+                      followers: user?.followersCount || 0,
+                      following: user?.followingCount || 0,
+                      posts: user?.postsCount || 0,
+                    } as any
+                  }
                   size="lg"
                   className="size-16 ring-4 ring-primary/20 shadow-md aspect-square"
                 />
@@ -771,9 +771,7 @@ function OverviewSection({
                 <h2 className="font-display text-lg font-black text-foreground">
                   {user?.name || "Gihanga Member"}
                 </h2>
-                {user?.verified && (
-                  <CheckCircle2 className="size-4 text-primary fill-primary/20" />
-                )}
+                {user?.verified && <CheckCircle2 className="size-4 text-primary fill-primary/20" />}
                 <Badge variant="secondary" className="text-[10px] font-black uppercase">
                   {settings?.creatorCategory || (user?.isCreator ? "Creator" : "Member")}
                 </Badge>
@@ -828,7 +826,7 @@ function OverviewSection({
               "rounded-full px-3 py-1 text-xs font-black",
               securityScore >= 4
                 ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
-                : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
+                : "bg-amber-500/10 text-amber-500 border border-amber-500/20",
             )}
           >
             {securityScore >= 4 ? "Protected" : "Action Needed"}
@@ -941,9 +939,7 @@ function OverviewSection({
           <div className="space-y-2 text-xs">
             <div className="flex justify-between py-1 border-b border-border/40">
               <span className="text-muted-foreground">Points Balance</span>
-              <span className="font-extrabold text-primary">
-                {pointsDisplay} Pts
-              </span>
+              <span className="font-extrabold text-primary">{pointsDisplay} Pts</span>
             </div>
             <div className="flex justify-between py-1 border-b border-border/40">
               <span className="text-muted-foreground">Available Cash</span>
@@ -971,8 +967,8 @@ function AccountSection({
   onSave,
 }: {
   user: UserSettingsUser | null;
-  settings?: UserSettingsData;
-  onSave: (updates: Partial<UserSettingsData> & Partial<UserSettingsUser>) => Promise<void>;
+  settings?: UserSettingsData | undefined;
+  onSave: (updates: Partial<UserSettingsData> & Partial<UserSettingsUser>) => Promise<unknown>;
 }) {
   const [displayName, setDisplayName] = useState(user?.name || "");
   const [username, setUsername] = useState(user?.username || "");
@@ -984,7 +980,8 @@ function AccountSection({
   useEffect(() => {
     if (user?.name) setDisplayName(user.name);
     if (user?.username) setUsername(user.username);
-    if (settings?.phone || user?.mtnMomoNumber) setPhone(settings?.phone || user?.mtnMomoNumber || "");
+    if (settings?.phone || user?.mtnMomoNumber)
+      setPhone(settings?.phone || user?.mtnMomoNumber || "");
     if (settings?.dob) setDob(settings.dob);
     if (settings?.gender) setGender(settings.gender);
   }, [user, settings]);
@@ -1001,7 +998,9 @@ function AccountSection({
       });
       toast.success("Account information updated successfully");
     } catch (err: any) {
-      toast.error(err?.response?.data?.message || err?.message || "Failed to update account information");
+      toast.error(
+        err?.response?.data?.message || err?.message || "Failed to update account information",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -1037,7 +1036,9 @@ function AccountSection({
               <Input
                 value={username}
                 placeholder="username"
-                onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                onChange={(e) =>
+                  setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))
+                }
                 className="pl-7 h-10 rounded-xl font-mono text-xs font-bold"
               />
             </div>
@@ -1046,7 +1047,12 @@ function AccountSection({
           <div className="space-y-1.5">
             <div className="flex justify-between items-center">
               <Label className="text-xs font-bold">Email Address</Label>
-              <span className={cn("text-[10px] font-bold", user?.emailVerified ? "text-emerald-500" : "text-amber-500")}>
+              <span
+                className={cn(
+                  "text-[10px] font-bold",
+                  user?.emailVerified ? "text-emerald-500" : "text-amber-500",
+                )}
+              >
                 {user?.emailVerified ? "✓ Verified" : "⚠ Unverified"}
               </span>
             </div>
@@ -1064,8 +1070,17 @@ function AccountSection({
           <div className="space-y-1.5">
             <div className="flex justify-between items-center">
               <Label className="text-xs font-bold">Phone Number</Label>
-              <span className={cn("text-[10px] font-bold", settings?.phoneVerified || Boolean(user?.mtnMomoNumber) ? "text-emerald-500" : "text-muted-foreground")}>
-                {settings?.phoneVerified || Boolean(user?.mtnMomoNumber) ? "✓ Verified" : "Unverified"}
+              <span
+                className={cn(
+                  "text-[10px] font-bold",
+                  settings?.phoneVerified || Boolean(user?.mtnMomoNumber)
+                    ? "text-emerald-500"
+                    : "text-muted-foreground",
+                )}
+              >
+                {settings?.phoneVerified || Boolean(user?.mtnMomoNumber)
+                  ? "✓ Verified"
+                  : "Unverified"}
               </span>
             </div>
             <Input
@@ -1124,13 +1139,15 @@ function ProfileSection({
   onSave,
 }: {
   user: UserSettingsUser | null;
-  settings?: UserSettingsData;
-  onSave: (updates: Partial<UserSettingsData> & Partial<UserSettingsUser>) => Promise<void>;
+  settings?: UserSettingsData | undefined;
+  onSave: (updates: Partial<UserSettingsData> & Partial<UserSettingsUser>) => Promise<unknown>;
 }) {
   const [name, setName] = useState(user?.name || "");
   const [bio, setBio] = useState(user?.bio || "");
   const [website, setWebsite] = useState(settings?.website || "");
-  const [creatorCategory, setCreatorCategory] = useState(settings?.creatorCategory || "General Creator");
+  const [creatorCategory, setCreatorCategory] = useState(
+    settings?.creatorCategory || "General Creator",
+  );
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || "");
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -1197,19 +1214,21 @@ function ProfileSection({
               />
             ) : (
               <GAvatar
-                user={{
-                  id: user?.id || "me",
-                  name: name || user?.name || "Member",
-                  username: user?.username || "user",
-                  avatarHue: user?.avatarHue ?? 205,
-                  avatarUrl: null,
-                  creator: Boolean(user?.isCreator),
-                  verified: Boolean(user?.verified),
-                  live: false,
-                  followers: user?.followersCount || 0,
-                  following: user?.followingCount || 0,
-                  posts: user?.postsCount || 0,
-                } as any}
+                user={
+                  {
+                    id: user?.id || "me",
+                    name: name || user?.name || "Member",
+                    username: user?.username || "user",
+                    avatarHue: user?.avatarHue ?? 205,
+                    avatarUrl: null,
+                    creator: Boolean(user?.isCreator),
+                    verified: Boolean(user?.verified),
+                    live: false,
+                    followers: user?.followersCount || 0,
+                    following: user?.followingCount || 0,
+                    posts: user?.postsCount || 0,
+                  } as any
+                }
                 size="xl"
                 className="size-20 ring-4 ring-primary/20 shadow-md aspect-square"
               />
@@ -1233,7 +1252,9 @@ function ProfileSection({
           </div>
 
           <div className="flex-1 text-center sm:text-left space-y-1">
-            <h4 className="text-sm font-extrabold text-foreground">{name || user?.username || "Your Name"}</h4>
+            <h4 className="text-sm font-extrabold text-foreground">
+              {name || user?.username || "Your Name"}
+            </h4>
             <p className="text-xs text-muted-foreground">@{user?.username || "username"}</p>
             <div className="pt-1 flex flex-wrap gap-2 justify-center sm:justify-start">
               <Button
@@ -1328,8 +1349,8 @@ function PrivacySection({
   settings,
   onSave,
 }: {
-  settings?: UserSettingsData;
-  onSave: (updates: Partial<UserSettingsData>) => Promise<void>;
+  settings?: UserSettingsData | undefined;
+  onSave: (updates: Partial<UserSettingsData>) => Promise<unknown>;
 }) {
   return (
     <div className="space-y-6">
@@ -1463,8 +1484,8 @@ function SecuritySection({
   settings,
   onSave,
 }: {
-  settings?: UserSettingsData;
-  onSave: (updates: Partial<UserSettingsData>) => Promise<void>;
+  settings?: UserSettingsData | undefined;
+  onSave: (updates: Partial<UserSettingsData>) => Promise<unknown>;
 }) {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -1619,9 +1640,7 @@ function SecuritySection({
               disabled={revokeSessionsMutation.isPending}
               className="rounded-xl text-xs font-bold text-danger hover:bg-danger/10 hover:text-danger"
             >
-              {revokeSessionsMutation.isPending
-                ? "Logging out..."
-                : "Log Out All Other Devices"}
+              {revokeSessionsMutation.isPending ? "Logging out..." : "Log Out All Other Devices"}
             </Button>
           </div>
         </div>
@@ -1735,8 +1754,8 @@ function NotificationsSection({
   settings,
   onSave,
 }: {
-  settings?: UserSettingsData;
-  onSave: (updates: Partial<UserSettingsData>) => Promise<void>;
+  settings?: UserSettingsData | undefined;
+  onSave: (updates: Partial<UserSettingsData>) => Promise<unknown>;
 }) {
   return (
     <div className="space-y-6">
@@ -1871,8 +1890,8 @@ function FeedSection({
   settings,
   onSave,
 }: {
-  settings?: UserSettingsData;
-  onSave: (updates: Partial<UserSettingsData>) => Promise<void>;
+  settings?: UserSettingsData | undefined;
+  onSave: (updates: Partial<UserSettingsData>) => Promise<unknown>;
 }) {
   return (
     <div className="space-y-6">
@@ -1961,8 +1980,8 @@ function MessagesSection({
   settings,
   onSave,
 }: {
-  settings?: UserSettingsData;
-  onSave: (updates: Partial<UserSettingsData>) => Promise<void>;
+  settings?: UserSettingsData | undefined;
+  onSave: (updates: Partial<UserSettingsData>) => Promise<unknown>;
 }) {
   const [newBlockedWord, setNewBlockedWord] = useState("");
   const blockedWords = settings?.blockedWords || [];
@@ -2049,9 +2068,7 @@ function MessagesSection({
 
         <div className="flex flex-wrap gap-2 pt-2">
           {blockedWords.length === 0 ? (
-            <span className="text-xs text-muted-foreground">
-              No filtered words added yet.
-            </span>
+            <span className="text-xs text-muted-foreground">No filtered words added yet.</span>
           ) : (
             blockedWords.map((word) => (
               <span
@@ -2082,8 +2099,8 @@ function CreatorSection({
   settings,
   onSave,
 }: {
-  settings?: UserSettingsData;
-  onSave: (updates: Partial<UserSettingsData>) => Promise<void>;
+  settings?: UserSettingsData | undefined;
+  onSave: (updates: Partial<UserSettingsData>) => Promise<unknown>;
 }) {
   return (
     <div className="space-y-6">
@@ -2164,8 +2181,8 @@ function WalletSection({
   wallet,
   user,
 }: {
-  settings?: UserSettingsData;
-  wallet?: UserSettingsWallet;
+  settings?: UserSettingsData | undefined;
+  wallet?: UserSettingsWallet | undefined;
   user: UserSettingsUser | null;
 }) {
   const points = wallet?.kingdomPoints ?? 0;
@@ -2189,9 +2206,7 @@ function WalletSection({
               Total Creator Balance
             </span>
             <div className="flex items-baseline gap-2 mt-1">
-              <h2 className="font-display text-3xl font-black text-foreground">
-                {cash}
-              </h2>
+              <h2 className="font-display text-3xl font-black text-foreground">{cash}</h2>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
               ≈ {points} Gihanga Points available
@@ -2199,9 +2214,7 @@ function WalletSection({
           </div>
 
           <div className="flex items-center gap-2">
-            <Button className="rounded-xl font-bold text-xs h-9">
-              Withdraw to MoMo
-            </Button>
+            <Button className="rounded-xl font-bold text-xs h-9">Withdraw to MoMo</Button>
             <Button variant="outline" className="rounded-xl font-bold text-xs h-9">
               Add Points
             </Button>
@@ -2253,8 +2266,8 @@ function AdsSection({
   settings,
   onSave,
 }: {
-  settings?: UserSettingsData;
-  onSave: (updates: Partial<UserSettingsData>) => Promise<void>;
+  settings?: UserSettingsData | undefined;
+  onSave: (updates: Partial<UserSettingsData>) => Promise<unknown>;
 }) {
   return (
     <div className="space-y-6">
@@ -2307,10 +2320,10 @@ function AppearanceSection({
   setTheme,
   onSave,
 }: {
-  settings?: UserSettingsData;
+  settings?: UserSettingsData | undefined;
   theme: string;
   setTheme: (theme: "light" | "dark") => void;
-  onSave: (updates: Partial<UserSettingsData>) => Promise<void>;
+  onSave: (updates: Partial<UserSettingsData>) => Promise<unknown>;
 }) {
   return (
     <div className="space-y-6">
@@ -2332,7 +2345,7 @@ function AppearanceSection({
                 "flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all",
                 theme === "light"
                   ? "border-primary bg-primary/10 ring-2 ring-primary/20"
-                  : "border-border bg-elevated hover:border-primary/50"
+                  : "border-border bg-elevated hover:border-primary/50",
               )}
             >
               <Sun className="size-5 text-amber-500" />
@@ -2352,13 +2365,15 @@ function AppearanceSection({
                 "flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all",
                 theme === "dark"
                   ? "border-primary bg-primary/10 ring-2 ring-primary/20"
-                  : "border-border bg-elevated hover:border-primary/50"
+                  : "border-border bg-elevated hover:border-primary/50",
               )}
             >
               <Moon className="size-5 text-primary" />
               <div>
                 <span className="text-xs font-bold block text-foreground">Dark Mode</span>
-                <span className="text-[10px] text-muted-foreground">Sleek obsidian night theme</span>
+                <span className="text-[10px] text-muted-foreground">
+                  Sleek obsidian night theme
+                </span>
               </div>
             </button>
           </div>
@@ -2397,8 +2412,8 @@ function AccessibilitySection({
   settings,
   onSave,
 }: {
-  settings?: UserSettingsData;
-  onSave: (updates: Partial<UserSettingsData>) => Promise<void>;
+  settings?: UserSettingsData | undefined;
+  onSave: (updates: Partial<UserSettingsData>) => Promise<unknown>;
 }) {
   return (
     <div className="space-y-6">
@@ -2450,8 +2465,8 @@ function LanguageSection({
   settings,
   onSave,
 }: {
-  settings?: UserSettingsData;
-  onSave: (updates: Partial<UserSettingsData>) => Promise<void>;
+  settings?: UserSettingsData | undefined;
+  onSave: (updates: Partial<UserSettingsData>) => Promise<unknown>;
 }) {
   return (
     <div className="space-y-6">
@@ -2511,8 +2526,8 @@ function StorageSection({
   settings,
   onSave,
 }: {
-  settings?: UserSettingsData;
-  onSave: (updates: Partial<UserSettingsData>) => Promise<void>;
+  settings?: UserSettingsData | undefined;
+  onSave: (updates: Partial<UserSettingsData>) => Promise<unknown>;
 }) {
   const [isClearingCache, setIsClearingCache] = useState(false);
   const requestDataMutation = useRequestAccountData();
@@ -2726,19 +2741,21 @@ function BlockedAccountsSection() {
               >
                 <div className="flex items-center gap-3">
                   <GAvatar
-                    user={{
-                      id: username,
-                      name: username,
-                      username,
-                      avatarHue: 205,
-                      avatarUrl: null,
-                      creator: false,
-                      verified: false,
-                      live: false,
-                      followers: 0,
-                      following: 0,
-                      posts: 0,
-                    } as any}
+                    user={
+                      {
+                        id: username,
+                        name: username,
+                        username,
+                        avatarHue: 205,
+                        avatarUrl: null,
+                        creator: false,
+                        verified: false,
+                        live: false,
+                        followers: 0,
+                        following: 0,
+                        posts: 0,
+                      } as any
+                    }
                     size="sm"
                     className="size-8 aspect-square"
                   />
@@ -2796,9 +2813,7 @@ function HelpSupportSection() {
               <h4 className="text-xs font-extrabold text-foreground group-hover:text-primary">
                 Contact Support
               </h4>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                support@gihanga.rw
-              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">support@gihanga.rw</p>
             </div>
             <ExternalLink className="size-4 text-muted-foreground group-hover:text-primary" />
           </a>

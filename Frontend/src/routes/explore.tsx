@@ -115,7 +115,8 @@ export function ExplorePage() {
   const trendingTags = (trending.data?.tags ?? []).slice(0, 5);
 
   // Fresh media items
-  const mediaPosts = (activeTab === "reels" ? reelsFeed : explore).data?.pages.flatMap((p) => p.posts) ?? [];
+  const mediaPosts =
+    (activeTab === "reels" ? reelsFeed : explore).data?.pages.flatMap((p) => p.posts) ?? [];
 
   return (
     <AppShell>
@@ -181,7 +182,7 @@ export function ExplorePage() {
                   "press relative flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-xs sm:text-sm font-bold transition-all",
                   active
                     ? "bg-primary text-primary-foreground shadow-md"
-                    : "bg-surface text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60"
+                    : "bg-surface text-muted-foreground hover:bg-muted hover:text-foreground border border-border/60",
                 )}
               >
                 <tab.icon className="size-4" />
@@ -198,7 +199,9 @@ export function ExplorePage() {
               <div className="flex items-center gap-2">
                 <Users className="size-4.5 text-primary" />
                 <h2 className="font-display text-base font-extrabold tracking-tight text-foreground">
-                  {term ? `Found ${filteredUsers.length} account${filteredUsers.length === 1 ? "" : "s"}` : "Suggested Creators & Accounts"}
+                  {term
+                    ? `Found ${filteredUsers.length} account${filteredUsers.length === 1 ? "" : "s"}`
+                    : "Suggested Creators & Accounts"}
                 </h2>
                 {filteredUsers.length > 0 && (
                   <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-extrabold text-primary">
@@ -214,7 +217,9 @@ export function ExplorePage() {
                   onClick={() => setUserFilter("all")}
                   className={cn(
                     "rounded-lg px-2.5 py-1 text-xs font-bold transition-all",
-                    userFilter === "all" ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    userFilter === "all"
+                      ? "bg-surface text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   All ({rawUsersList.length})
@@ -224,7 +229,9 @@ export function ExplorePage() {
                   onClick={() => setUserFilter("creators")}
                   className={cn(
                     "rounded-lg px-2.5 py-1 text-xs font-bold transition-all",
-                    userFilter === "creators" ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    userFilter === "creators"
+                      ? "bg-surface text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   Creators
@@ -234,7 +241,9 @@ export function ExplorePage() {
                   onClick={() => setUserFilter("verified")}
                   className={cn(
                     "rounded-lg px-2.5 py-1 text-xs font-bold transition-all",
-                    userFilter === "verified" ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    userFilter === "verified"
+                      ? "bg-surface text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   Verified
@@ -261,7 +270,11 @@ export function ExplorePage() {
                           params={{ username: u.username }}
                           className="flex items-center gap-3 min-w-0"
                         >
-                          <GAvatar user={toDisplayUser(u)} size="md" ring={u.isLive ? "live" : u.isCreator ? "creator" : "none"} />
+                          <GAvatar
+                            user={toDisplayUser(u)}
+                            size="md"
+                            ring={u.isLive ? "live" : u.isCreator ? "creator" : "none"}
+                          />
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1">
                               <span className="truncate font-extrabold text-sm text-foreground group-hover:text-primary transition-colors">
@@ -287,7 +300,7 @@ export function ExplorePage() {
                               "h-8 rounded-xl px-3 text-xs font-extrabold shrink-0 transition-transform active:scale-95",
                               isFollowing
                                 ? "bg-muted text-foreground hover:bg-muted/80"
-                                : "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+                                : "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90",
                             )}
                           >
                             {isFollowing ? (
@@ -313,7 +326,9 @@ export function ExplorePage() {
                       {/* Footer Badge & Metric Row */}
                       <div className="mt-3 flex items-center justify-between pt-2 border-t border-border/50 text-[11px] text-muted-foreground">
                         <div className="flex items-center gap-1.5 font-bold">
-                          <span className="text-foreground">{formatCount(u.followersCount || 0)}</span>
+                          <span className="text-foreground">
+                            {formatCount(u.followersCount || 0)}
+                          </span>
                           <span>followers</span>
                         </div>
 
@@ -375,13 +390,18 @@ export function ExplorePage() {
                   params={{ tag: t.tag }}
                   className="surface-card lift group flex items-center gap-3.5 rounded-2xl p-3.5 border border-border hover:border-primary/50 transition-all"
                 >
-                  <span className={cn(
-                    "grid size-10 shrink-0 place-items-center rounded-xl font-display text-base font-black shadow-md",
-                    idx === 0 ? "bg-gradient-to-tr from-amber-500 to-yellow-400 text-slate-950 font-extrabold" :
-                    idx === 1 ? "bg-gradient-to-tr from-slate-300 to-slate-100 text-slate-950 font-extrabold" :
-                    idx === 2 ? "bg-gradient-to-tr from-amber-700 to-amber-600 text-white font-extrabold" :
-                    "bg-primary-soft text-primary font-bold"
-                  )}>
+                  <span
+                    className={cn(
+                      "grid size-10 shrink-0 place-items-center rounded-xl font-display text-base font-black shadow-md",
+                      idx === 0
+                        ? "bg-gradient-to-tr from-amber-500 to-yellow-400 text-slate-950 font-extrabold"
+                        : idx === 1
+                          ? "bg-gradient-to-tr from-slate-300 to-slate-100 text-slate-950 font-extrabold"
+                          : idx === 2
+                            ? "bg-gradient-to-tr from-amber-700 to-amber-600 text-white font-extrabold"
+                            : "bg-primary-soft text-primary font-bold",
+                    )}
+                  >
                     #{idx + 1}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -464,7 +484,14 @@ export function ExplorePage() {
                             target.style.display = "none";
                             const parent = target.parentElement;
                             if (parent) {
-                              parent.classList.add("bg-gradient-to-tr", "from-slate-900", "to-slate-800", "flex", "items-center", "justify-center");
+                              parent.classList.add(
+                                "bg-gradient-to-tr",
+                                "from-slate-900",
+                                "to-slate-800",
+                                "flex",
+                                "items-center",
+                                "justify-center",
+                              );
                             }
                           }}
                           className="size-full object-cover transition-transform duration-500 group-hover:scale-105"

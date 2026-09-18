@@ -57,7 +57,9 @@ export function StoryRail() {
           <button
             key={group.author.username}
             type="button"
-            onClick={() => setViewing(groups.findIndex((g) => g.author.username === group.author.username))}
+            onClick={() =>
+              setViewing(groups.findIndex((g) => g.author.username === group.author.username))
+            }
             className="press flex w-[72px] shrink-0 flex-col items-center gap-1.5"
             style={{ scrollSnapAlign: "start" }}
           >

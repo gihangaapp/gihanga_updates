@@ -5,7 +5,7 @@ import { normalizePhone } from "../src/lib/momo";
 
 const walletRoute = readFileSync(new URL("../src/routes/v1/wallet/wallet.ts", import.meta.url), "utf8");
 const settlement = readFileSync(new URL("../src/lib/paymentSettlement.ts", import.meta.url), "utf8");
-const frontendHook = readFileSync(new URL("../../Frontend/src/hooks/use-wallet.ts", import.meta.url), "utf8");
+const frontendHook = readFileSync(new URL("../../frontend/src/hooks/use-wallet.ts", import.meta.url), "utf8");
 
 
 test("valid Rwanda MSISDN is normalized to international digits", () => {

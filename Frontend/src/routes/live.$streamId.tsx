@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ChevronDown,
   ChevronUp,
+  Coins,
   DollarSign,
   Flag,
   Gift,
@@ -21,6 +22,7 @@ import {
   ShieldBan,
   ShieldOff,
   SwitchCamera,
+  Timer,
   Trash2,
   UserCheck,
   UserMinus,
@@ -62,6 +64,7 @@ import {
   useInviteFollowers,
   GIFT_CATALOG,
   type LiveChatEntry,
+  type LiveStreamData,
 } from "@/hooks/use-live";
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { useToggleBlock, useBlockedSet } from "@/hooks/use-blocks";
@@ -69,9 +72,13 @@ import {
   useBrowserLiveRoom,
   useCoHostLiveRoom,
   useHostCoHostMesh,
+  useViewerStreams,
+  VIEWER_GRID_AVAILABLE,
   type CoHostRemoteStream,
 } from "@/lib/live-room";
 import { getLiveSocket } from "@/lib/socket-client";
+import { useLiveVideoHealth } from "@/hooks/use-live-video-health";
+import { VideoStatusOverlay, ConnectionQualityBanner } from "@/components/live/LiveOverlays";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/live/$streamId")({
@@ -231,7 +238,7 @@ function AddModeratorDialog({
                   setUsername("");
                   onOpenChange(false);
                 },
-                onError: (err: any) => toast.error(err.message || "Couldn't add moderator"),
+                onError: (err: Error) => toast.error(err.message || "Couldn't add moderator"),
               })
             }
             disabled={!username.trim() || addMod.isPending}
@@ -281,7 +288,12 @@ function JoinRequestDialog({
   );
 }
 
-function CoHostVideoTile({
+/**
+ * A2 — one tile component used for EVERY role's grid. `selfView` renders the
+ * local camera (host/co-host); remote tiles render subscribed MediaStreams.
+ * Audio for remote tiles follows the viewer's single sound toggle.
+ */
+function LiveVideoTile({
   stream,
   label,
   muted,
@@ -292,22 +304,28 @@ function CoHostVideoTile({
   onToggleCam,
   onFlip,
   onLeave,
+  selfView,
+  health,
+  dataSaver,
 }: {
-  stream: MediaStream;
-  label?: string;
-  muted?: boolean;
-  showControls?: boolean;
-  micOn?: boolean;
-  camOn?: boolean;
-  onToggleMic?: () => void;
-  onToggleCam?: () => void;
-  onFlip?: () => void;
-  onLeave?: () => void;
+  stream: MediaStream | null;
+  label?: string | undefined;
+  muted?: boolean | undefined;
+  showControls?: boolean | undefined;
+  micOn?: boolean | undefined;
+  camOn?: boolean | undefined;
+  onToggleMic?: (() => void) | undefined;
+  onToggleCam?: (() => void) | undefined;
+  onFlip?: (() => void) | undefined;
+  onLeave?: (() => void) | undefined;
+  selfView?: boolean | undefined;
+  health?: ReturnType<typeof useLiveVideoHealth> | undefined;
+  dataSaver?: boolean | undefined;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
     if (videoRef.current) {
-      videoRef.current.srcObject = stream;
+      videoRef.current.srcObject = stream ?? null;
       videoRef.current.muted = muted ?? false;
     }
   }, [stream, muted]);
@@ -319,13 +337,20 @@ function CoHostVideoTile({
         autoPlay
         playsInline
         muted={muted ?? false}
-        className="absolute inset-0 size-full object-cover"
+        className={cn(
+          "absolute inset-0 size-full object-cover",
+          // A6 data-saver: render at half size so adaptiveStream delivers a
+          // lower simulcast layer (the element size drives the layer choice).
+          dataSaver && "inset-1/4 size-1/2 object-contain",
+          selfView && "scale-x-[-1]",
+        )}
       />
       {label && (
-        <span className="absolute bottom-2 left-2 rounded-md bg-black/60 px-2 py-0.5 text-xs font-bold text-white backdrop-blur z-10">
+        <span className="absolute bottom-2 left-2 z-10 rounded-md bg-black/60 px-2 py-0.5 text-xs font-bold text-white backdrop-blur">
           {label}
         </span>
       )}
+      {health && <VideoStatusOverlay health={health} role={selfView ? "host" : "viewer"} />}
       {showControls && (
         <div className="absolute bottom-2 right-2 flex items-center gap-1.5 z-10">
           {onToggleMic && (
@@ -413,10 +438,16 @@ function LiveRoomPage() {
     { requestorId: string; requestorSocketId: string; requestor: Author }[]
   >([]);
   const [coHostList, setCoHostList] = useState<Author[]>([]);
+  const [timeWarning, setTimeWarning] = useState<number | null>(null);
+  const [dataSaver, setDataSaver] = useState(false);
+  // A5 — paid-interaction UI state
+  const [paidConfirmOpen, setPaidConfirmOpen] = useState<null | "comment" | "reaction">(null);
+  const [paidConfirmDontAsk, setPaidConfirmDontAsk] = useState(false);
+  const [insufficientPoints, setInsufficientPoints] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const stream = data?.stream as any;
+  const stream = data?.stream as LiveStreamData | undefined;
   const isHost = Boolean(
     activeIdentity &&
     stream &&
@@ -430,6 +461,15 @@ function LiveRoomPage() {
   const canModerate = isHost || isMod;
   const isOver = stream ? stream.status !== "live" || Boolean(ended) : false;
 
+  // A5 — paid interaction pricing (server-authoritative; UI only reflects it).
+  const paid = stream?.paidInteractions;
+  const paidEnabled = Boolean(
+    paid?.enabled && !canModerate && activeIdentity && !isHost && !isCoHost,
+  );
+  const commentPrice = paid?.commentPrice ?? 0;
+  const reactionPrice = paid?.reactionPrice ?? 0;
+  const walletPoints = walletData?.wallet.kingdomPoints ?? 0;
+
   const {
     localStream,
     remoteStream,
@@ -437,6 +477,7 @@ function LiveRoomPage() {
     error: browserError,
     micOn,
     camOn,
+    qualitySamples: publisherQuality,
     toggleMic,
     toggleCamera,
     switchCamera,
@@ -464,21 +505,61 @@ function LiveRoomPage() {
     enabled: isCoHost && !isOver,
     asStaff,
   });
+
+  // A2 — plain viewers' split-screen source: host + every accepted co-host.
+  const coHostIds = useMemo(() => coHostList.map((c) => c._id), [coHostList]);
+  const viewerRoom = useViewerStreams({
+    streamId,
+    hostId: stream?.host?._id ?? "",
+    authorizedIds: [stream?.host?._id ?? "", ...coHostIds],
+    enabled: Boolean(stream) && !isOver && !isHost && !isCoHost && Boolean(activeIdentity),
+    asStaff,
+  });
+
   const updateSettings = useUpdateLiveSettings(streamId, asStaff);
   const inviteFollowers = useInviteFollowers(streamId, asStaff);
 
-  // Co-host streams: host sees hostCoHostStreams, co-host sees coHostRoom.coHostStreams
+  // Co-host streams: host sees hostCoHostStreams, co-host sees coHostRoom.coHostStreams,
+  // and (A2) plain viewers on the LiveKit transport see viewerRoom.viewerStreams —
+  // the SAME grid layout renders for every role.
   const allCoHostStreams: CoHostRemoteStream[] = isHost
     ? hostCoHostStreams
     : isCoHost
       ? coHostRoom.coHostStreams
-      : [];
-  const hasCoHosts = allCoHostStreams.length > 0;
+      : VIEWER_GRID_AVAILABLE
+        ? viewerRoom.viewerStreams
+        : [];
+  // For plain viewers the grid INCLUDES the host tile (all tiles are remote).
+  const viewerGridTiles: CoHostRemoteStream[] = useMemo(() => {
+    if (isHost || isCoHost) return [];
+    if (!VIEWER_GRID_AVAILABLE) return [];
+    return viewerRoom.viewerStreams;
+  }, [isHost, isCoHost, viewerRoom.viewerStreams]);
+  const hasCoHosts = allCoHostStreams.length > 0 || viewerGridTiles.length > 0;
+
+  // ── §8.2 fix: role/session values the socket handlers need, via refs so
+  // the effect can keep its [streamId, navigate] deps without closing over
+  // stale isHost/isCoHost/coHostRoom state (the old onCoHostLeft bug).
+  const roleRef = useRef({ isHost, isCoHost, hostRemoveCoHost, activeIdentity, coHostRoom });
+  roleRef.current = { isHost, isCoHost, hostRemoveCoHost, activeIdentity, coHostRoom };
+
+  // A2 — late joiners: seed the co-host list from the stream document
+  // (GET /live/:id already populates coHosts) and merge live events on top.
+  useEffect(() => {
+    if (stream?.coHosts) {
+      setCoHostList((prev) => {
+        const byId = new Map(prev.map((c) => [c._id, c]));
+        for (const c of stream.coHosts ?? []) byId.set(c._id, c);
+        return Array.from(byId.values());
+      });
+    }
+  }, [stream?.coHosts]);
 
   // Auto-collapse the comments panel the first time a co-host joins (2+
   // streamers live) so the split video grid gets room; only collapse it
   // automatically once so a user re-expanding it isn't immediately
-  // re-collapsed by this effect on the next render.
+  // re-collapsed by this effect on the next render. A2: applies to viewers
+  // too now that they see the same grid.
   useEffect(() => {
     if (hasCoHosts && !chatAutoCollapsed) {
       setChatCollapsed(true);
@@ -511,6 +592,16 @@ function LiveRoomPage() {
     [activeMediaStream, isHost, isCoHost],
   );
 
+  // A3 — the video-health state machine behind the main tile.
+  const mainVideoHealth = useLiveVideoHealth({
+    videoRef,
+    connected,
+    hasStream: Boolean(activeMediaStream),
+    streamLive: Boolean(stream && stream.status === "live" && !ended),
+    isViewer: !isHost && !isCoHost,
+    reconnecting: false,
+  });
+
   useEffect(() => {
     if (!videoRef.current) return;
     // Only update srcObject if the stream identity actually changed
@@ -541,6 +632,8 @@ function LiveRoomPage() {
     setJoinRequestPending(false);
     setJoinRequests([]);
     setCoHostList([]);
+    setTimeWarning(null);
+    setInsufficientPoints(false);
   }, [streamId]);
 
   useEffect(() => {
@@ -553,6 +646,32 @@ function LiveRoomPage() {
     setViewerCount(stream?.viewerCount ?? 0);
     setReactionCount(stream?.reactionsCount ?? 0);
   }, [stream?.viewerCount, stream?.reactionsCount]);
+
+  // A4 — remaining-time countdown (host badge + viewer subtle notice).
+  const [remainingMs, setRemainingMs] = useState<number | null>(null);
+  useEffect(() => {
+    if (!stream?.maxEndsAt || stream.status !== "live") {
+      setRemainingMs(null);
+      return;
+    }
+    const target = new Date(stream.maxEndsAt).getTime();
+    const tick = () => setRemainingMs(Math.max(0, target - Date.now()));
+    tick();
+    const t = window.setInterval(tick, 1_000);
+    return () => window.clearInterval(t);
+  }, [stream?.maxEndsAt, stream?.status]);
+
+  // A4 — formatted remaining time for the host countdown badge.
+  const remainingLabel = useMemo(() => {
+    if (remainingMs == null || remainingMs <= 0) return null;
+    const totalSec = Math.floor(remainingMs / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return h > 0
+      ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+      : `${m}:${String(s).padStart(2, "0")}`;
+  }, [remainingMs]);
 
   // heartbeat.mutate is read through a ref rather than a direct effect
   // dependency: mutate's identity isn't guaranteed stable across renders,
@@ -569,7 +688,7 @@ function LiveRoomPage() {
     const keepAlive = () => {
       getLiveSocket()?.emit("live:heartbeat", { streamId });
       heartbeatMutateRef.current(undefined, {
-        onError: (error: any) => {
+        onError: (error: Error) => {
           if (
             String(error?.message || "")
               .toLowerCase()
@@ -635,6 +754,27 @@ function LiveRoomPage() {
     const onChatBlocked = (p: { streamId: string; reason: string }) => {
       if (p.streamId === streamId) toast.error(p.reason);
     };
+    // A4 — remaining-time warnings (30/5/1 minutes before the 5h cap).
+    const onTimeWarning = (p: { streamId: string; minutesLeft: number }) => {
+      if (p.streamId !== streamId) return;
+      setTimeWarning(p.minutesLeft);
+      window.setTimeout(() => setTimeWarning((w) => (w === p.minutesLeft ? null : w)), 30_000);
+    };
+
+    // A5 — precise payment failures: roll back optimistic UI, surface reason.
+    const onPaymentFailed = (p: {
+      streamId: string;
+      kind: "comment" | "reaction" | string;
+      reason: string;
+      message: string;
+    }) => {
+      if (p.streamId !== streamId) return;
+      if (p.reason === "insufficient") setInsufficientPoints(true);
+      if (p.kind === "reaction") {
+        setReactionCount((n) => Math.max(0, n - 1));
+      }
+      toast.error(p.message || "Payment failed");
+    };
 
     // ── Co-host join-request listeners ──
     const onJoinRequest = (p: {
@@ -673,15 +813,26 @@ function LiveRoomPage() {
         setCoHostList((prev) => [...prev.filter((c) => c._id !== p.coHostId), p.coHost!]);
       }
     };
+    // A2 — late-joiner snapshot: the full current co-host list on join.
+    const onCoHostSnapshot = (p: { streamId: string; coHosts: Author[] }) => {
+      if (p.streamId !== streamId) return;
+      setCoHostList((prev) => {
+        const byId = new Map(prev.map((c) => [c._id, c]));
+        for (const c of p.coHosts ?? []) byId.set(c._id, c);
+        return Array.from(byId.values());
+      });
+    };
     const onCoHostLeft = (p: { streamId: string; coHostId: string }) => {
       if (p.streamId !== streamId) return;
       setCoHostList((prev) => prev.filter((c) => c._id !== p.coHostId));
-      if (isHost) hostRemoveCoHost(p.coHostId);
-      if (isCoHost) coHostRoom.removeCoHostStream(p.coHostId);
+      // §8.2 — read the CURRENT role through the ref, not the stale closure.
+      const role = roleRef.current;
+      if (role.isHost) role.hostRemoveCoHost(p.coHostId);
+      if (role.isCoHost) role.coHostRoom.removeCoHostStream(p.coHostId);
       // If the server actually evicted *us* (e.g. the disconnect grace period
       // ran out because we were genuinely offline), reflect that locally too
       // instead of leaving the UI stuck believing we're still a co-host.
-      if (activeIdentity && p.coHostId === activeIdentity.id) {
+      if (role.activeIdentity && p.coHostId === role.activeIdentity.id) {
         setIsCoHost(false);
         setJoinRequestPending(false);
       }
@@ -697,10 +848,13 @@ function LiveRoomPage() {
     socket.on("live:kicked", onKicked);
     socket.on("live:banned", onBanned);
     socket.on("live:chat-blocked", onChatBlocked);
+    socket.on("live:time-warning", onTimeWarning);
+    socket.on("live:payment-failed", onPaymentFailed);
     socket.on("live:join-request", onJoinRequest);
     socket.on("live:join-request-accepted", onJoinAccepted);
     socket.on("live:join-request-rejected", onJoinRejected);
     socket.on("live:co-host:joined", onCoHostJoined);
+    socket.on("live:co-host:snapshot", onCoHostSnapshot);
     socket.on("live:co-host:left", onCoHostLeft);
     return () => {
       if (socket.connected) socket.emit("live:leave", { streamId });
@@ -715,10 +869,13 @@ function LiveRoomPage() {
       socket.off("live:kicked", onKicked);
       socket.off("live:banned", onBanned);
       socket.off("live:chat-blocked", onChatBlocked);
+      socket.off("live:time-warning", onTimeWarning);
+      socket.off("live:payment-failed", onPaymentFailed);
       socket.off("live:join-request", onJoinRequest);
       socket.off("live:join-request-accepted", onJoinAccepted);
       socket.off("live:join-request-rejected", onJoinRejected);
       socket.off("live:co-host:joined", onCoHostJoined);
+      socket.off("live:co-host:snapshot", onCoHostSnapshot);
       socket.off("live:co-host:left", onCoHostLeft);
     };
   }, [streamId, navigate]);
@@ -729,6 +886,36 @@ function LiveRoomPage() {
 
   const visibleMessages = messages.filter((m) => !blockedSet?.has(m.sender.username));
 
+  function startReply(comment: LiveChatEntry) {
+    setReplyingTo(comment);
+    // Focus the input (it will show the @username prefix)
+  }
+
+  // A5 — paid confirmation gate ("don't ask again" is per stream).
+  const paidConfirmSkipKey = `gihanga:paid-confirm-skip:${streamId}`;
+  const shouldConfirmPaid = (kind: "comment" | "reaction") => {
+    try {
+      if (sessionStorage.getItem(paidConfirmSkipKey) === "1") return false;
+    } catch {
+      /* private mode */
+    }
+    return !paidConfirmDontAsk || paidConfirmOpen !== null ? true : kind !== paidConfirmOpen;
+  };
+
+  function emitChat(body: string) {
+    const socket = getLiveSocket();
+    if (!socket) return;
+    const idempotencyKey =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`;
+    const event = paidEnabled ? "live:paid-chat" : "live:chat";
+    const payload = paidEnabled ? { streamId, body, idempotencyKey } : { streamId, body };
+    const send = () => socket.emit(event, payload);
+    if (socket.connected) send();
+    else socket.once("connect", send);
+  }
+
   function sendChat() {
     const body = draft.trim();
     if (!body || isOver) return;
@@ -737,19 +924,31 @@ function LiveRoomPage() {
       toast.error("Sign in to join the live chat");
       return;
     }
+    // A5 — confirm-once dialog before the first paid comment of the stream.
+    if (paidEnabled && commentPrice > 0 && shouldConfirmPaid("comment")) {
+      setPaidConfirmOpen("comment");
+      return;
+    }
     // Build the message body — prepend @reply if replying to a comment
     const replyPrefix = replyingTo ? `@${replyingTo.sender.username} ` : "";
     const fullBody = replyPrefix + body;
-    const send = () => socket.emit("live:chat", { streamId, body: fullBody });
-    if (socket.connected) send();
-    else socket.once("connect", send);
+    emitChat(fullBody);
     setDraft("");
     setReplyingTo(null);
   }
 
-  function startReply(comment: LiveChatEntry) {
-    setReplyingTo(comment);
-    // Focus the input (it will show the @username prefix)
+  function emitReaction() {
+    const socket = getLiveSocket();
+    if (!socket) return;
+    const idempotencyKey =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random()}`;
+    const event = paidEnabled ? "live:paid-react" : "live:react";
+    const payload = paidEnabled
+      ? { streamId, kind: "heart", idempotencyKey }
+      : { streamId, kind: "heart" };
+    socket.emit(event, payload);
   }
 
   function sendReaction() {
@@ -759,11 +958,39 @@ function LiveRoomPage() {
       toast.error("Sign in to react to this live");
       return;
     }
-    const react = () => socket.emit("live:react", { streamId, kind: "heart" });
-    if (socket.connected) react();
-    else socket.once("connect", react);
+    // A5 — confirm-once dialog before the first paid reaction of the stream.
+    if (paidEnabled && reactionPrice > 0 && shouldConfirmPaid("reaction")) {
+      setPaidConfirmOpen("reaction");
+      return;
+    }
+    // Optimistic UI — rolled back by the live:payment-failed listener.
     setReactionCount((n) => n + 1);
     setHeartBurst((n) => n + 1);
+    emitReaction();
+  }
+
+  function confirmPaidInteraction() {
+    const kind = paidConfirmOpen;
+    setPaidConfirmOpen(null);
+    if (paidConfirmDontAsk) {
+      try {
+        sessionStorage.setItem(paidConfirmSkipKey, "1");
+      } catch {
+        /* private mode */
+      }
+    }
+    if (kind === "reaction") {
+      setReactionCount((n) => n + 1);
+      setHeartBurst((n) => n + 1);
+      emitReaction();
+    } else if (kind === "comment") {
+      const body = draft.trim();
+      if (!body) return;
+      const replyPrefix = replyingTo ? `@${replyingTo.sender.username} ` : "";
+      emitChat(replyPrefix + body);
+      setDraft("");
+      setReplyingTo(null);
+    }
   }
 
   function toggleSound() {
@@ -778,6 +1005,18 @@ function LiveRoomPage() {
           toast.error("Couldn't enable sound — try tapping again");
         });
     }
+    // A2 — viewer audio must play from ALL tiles once sound is enabled.
+    if (next) {
+      document.querySelectorAll<HTMLVideoElement>("video[data-live-tile]").forEach((el) => {
+        el.muted = false;
+        el.volume = 1;
+        void el.play().catch(() => {});
+      });
+    } else {
+      document.querySelectorAll<HTMLVideoElement>("video[data-live-tile]").forEach((el) => {
+        el.muted = true;
+      });
+    }
   }
 
   function handleEnd() {
@@ -786,7 +1025,7 @@ function LiveRoomPage() {
         toast.success("Stream ended");
         navigate({ to: "/live" });
       },
-      onError: (error: any) => toast.error(error.message || "Couldn't end the stream"),
+      onError: (error: Error) => toast.error(error.message || "Couldn't end the stream"),
     });
   }
 
@@ -796,14 +1035,19 @@ function LiveRoomPage() {
         setGiftPickerOpen(false);
         toast.success(`Gift sent! ${res.remainingPoints} points left`);
       },
-      onError: (err: any) => toast.error(err.message || "Couldn't send that gift"),
+      onError: (err: Error) => toast.error(err.message || "Couldn't send that gift"),
     });
   }
 
   function shareStream() {
     const url = `${window.location.origin}/live/${streamId}`;
     if (navigator.share) {
-      navigator.share({ title: stream?.title, url }).catch(() => {});
+      navigator
+        .share({
+          url,
+          ...(stream?.title ? { title: stream.title } : {}),
+        })
+        .catch(() => {});
     } else {
       navigator.clipboard?.writeText(url);
       toast.success("Link copied");
@@ -868,6 +1112,7 @@ function LiveRoomPage() {
   }
 
   const following = followingSet?.has(stream.host.username) ?? false;
+  const reachedCap = Boolean(ended && /5-hour|maximum duration/i.test(ended));
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-black lg:flex-row">
@@ -886,9 +1131,21 @@ function LiveRoomPage() {
             <div className="flex size-full flex-col items-center justify-center gap-2 text-white/70">
               <VideoOff className="size-10" />
               <p className="font-semibold">{ended || "This stream has ended"}</p>
-              <Button variant="outline" className="mt-2 border-white/30 text-white" asChild>
-                <Link to="/live">Browse other streams</Link>
-              </Button>
+              {reachedCap && (
+                <p className="max-w-xs text-center text-sm text-white/60">
+                  This stream reached the 5-hour limit
+                </p>
+              )}
+              <div className="mt-2 flex items-center gap-2">
+                <Button variant="outline" className="border-white/30 text-white" asChild>
+                  <Link to="/live">Browse other streams</Link>
+                </Button>
+                {reachedCap && isHost && (
+                  <Button variant="brand" asChild>
+                    <Link to="/live">Start a new stream</Link>
+                  </Button>
+                )}
+              </div>
             </div>
           ) : browserError ? (
             <div className="flex size-full flex-col items-center justify-center gap-2 p-6 text-center text-white/70">
@@ -897,23 +1154,19 @@ function LiveRoomPage() {
             </div>
           ) : (
             <>
-              {/* ── Split-screen grid when there are co-hosts ──
-                  Self view always renders LAST (bottom-most slot); every
-                  other participant renders BEFORE it, so on each person's
-                  own device their own camera sits at the bottom while
-                  everyone else appears above/first — matches how the
-                  reference app lays it out.
+              {/* ── Split-screen grid — THE SAME layout for host, co-hosts and
+                  viewers (A2). Self view always renders LAST (bottom-most
+                  slot); every other participant renders BEFORE it, so on each
+                  person's own device their own camera sits at the bottom
+                  while everyone else appears above/first — matches how the
+                  reference app lays it out. For plain viewers every tile is
+                  remote (no "You" tile).
                   The grid itself adapts to the participant count so it
                   never produces a tiny/unusable split:
-                    2 people → even 50/50 split (side-by-side on wide
-                      screens, stacked evenly — never shrinking — on
-                      narrow ones)
-                    3 people → 1 tile spans the full top row, the other 2
-                      split the bottom row in half
-                    4+ people → even auto-fit grid, each tile fills its
-                      cell fully (no leftover black space when someone
-                      leaves — the grid just reflows around the remaining
-                      tiles) */}
+                    2 people → even 50/50 split
+                    3 people → 1 tile spans the full top row, 2 below
+                    4+ people → even auto-fit grid that reflows when someone
+                      leaves (no leftover black space) */}
               {hasCoHosts ? (
                 <div
                   className={cn(
@@ -928,36 +1181,39 @@ function LiveRoomPage() {
                   {/* Every other participant, in the order they joined */}
                   {allCoHostStreams.map((cs) => {
                     const coHostInfo = coHostList.find((c) => c._id === cs.participantId);
+                    const isHostTile = cs.participantId === stream.host._id;
                     return (
-                      <CoHostVideoTile
+                      <LiveVideoTile
                         key={cs.participantId}
                         stream={cs.stream}
-                        label={coHostInfo?.username}
-                        muted={false}
+                        label={
+                          coHostInfo?.username ?? (isHostTile ? stream.host.username : undefined)
+                        }
+                        muted={!soundOn}
+                        dataSaver={dataSaver && !isHost && !isCoHost}
                       />
                     );
                   })}
                   {/* Self view — always last, so it sits in the bottom-most grid cell */}
-                  <div className="relative min-h-0 overflow-hidden rounded-2xl bg-black/40">
-                    <video
-                      ref={setVideoRef}
-                      autoPlay
-                      muted
-                      playsInline
-                      className="absolute inset-0 size-full object-cover"
-                    />
-                    <span className="absolute bottom-2 left-2 z-10 rounded-md bg-black/60 px-2 py-0.5 text-xs font-bold text-white backdrop-blur">
-                      You
-                    </span>
-                    {!connected && !isCoHost && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white/80">
-                        <Video className="size-8 animate-pulse" />
-                        <p className="text-sm">
-                          {isHost ? "Starting your camera…" : "Connecting…"}
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                  {(isHost || isCoHost) && (
+                    <div className="relative min-h-0 overflow-hidden rounded-2xl bg-black/40">
+                      <video
+                        ref={setVideoRef}
+                        autoPlay
+                        muted
+                        playsInline
+                        data-live-tile="self"
+                        className="absolute inset-0 size-full object-cover"
+                      />
+                      <span className="absolute bottom-2 left-2 z-10 rounded-md bg-black/60 px-2 py-0.5 text-xs font-bold text-white backdrop-blur">
+                        You
+                      </span>
+                      <VideoStatusOverlay
+                        health={mainVideoHealth}
+                        role={isHost ? "host" : "co-host"}
+                      />
+                    </div>
+                  )}
                 </div>
               ) : (
                 /* ── Single video (no co-hosts) ── */
@@ -967,29 +1223,36 @@ function LiveRoomPage() {
                     autoPlay
                     muted
                     playsInline
-                    className="absolute inset-0 size-full object-cover"
                     onClick={() => !isHost && !isCoHost && !soundOn && toggleSound()}
+                    className={cn(
+                      "absolute inset-0 size-full object-cover",
+                      dataSaver && !isHost && !isCoHost && "inset-1/4 size-1/2 object-contain",
+                    )}
                   />
-                  {!connected && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white/80">
-                      <Video className="size-8 animate-pulse" />
-                      <p className="text-sm">
-                        {isHost ? "Starting your camera…" : "Connecting to the stream…"}
-                      </p>
-                    </div>
-                  )}
-                  {!isHost && !isCoHost && connected && !remoteStream && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/60 text-white/80">
-                      <Video className="size-8" />
-                      <p className="text-sm">Waiting for the host's video…</p>
-                    </div>
-                  )}
+                  {/* A3 — one overlay with distinct messages for every failure
+                      mode; never rendered over healthy video. */}
+                  <VideoStatusOverlay
+                    health={mainVideoHealth}
+                    role={isHost ? "host" : isCoHost ? "co-host" : "viewer"}
+                  />
                 </>
               )}
             </>
           )}
 
           <FloatingHearts burst={heartBurst} />
+
+          {/* A6 — poor-connection banner with hysteresis (viewer wording).
+               The streamer variant uses the publisher's uplink samples. */}
+          {!isOver && !browserError && (
+            <ConnectionQualityBanner
+              samples={isHost || isCoHost ? publisherQuality : viewerRoom.qualitySamples}
+              variant={isHost || isCoHost ? "broadcaster" : "viewer"}
+              escalated={
+                mainVideoHealth.state === "disconnected" || mainVideoHealth.state === "reconnecting"
+              }
+            />
+          )}
 
           {/* ── Incoming co-host join requests (host only) ── */}
           {isHost && !isOver && joinRequests[0] && (
@@ -1016,11 +1279,44 @@ function LiveRoomPage() {
                   <Gift className="size-3" /> {formatCount(stream.totalGifts)} pts
                 </span>
               )}
+              {/* A4 — host countdown badge / viewer subtle notice */}
+              {isHost && remainingLabel && (
+                <span
+                  className={cn(
+                    "flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold text-white",
+                    remainingMs != null && remainingMs < 5 * 60_000
+                      ? "bg-danger animate-pulse"
+                      : "bg-black/60",
+                  )}
+                >
+                  <Timer className="size-3" /> {remainingLabel}
+                </span>
+              )}
+              {!isHost && timeWarning != null && (
+                <span className="rounded-lg bg-black/60 px-2.5 py-1 text-xs font-bold text-white/80">
+                  {timeWarning} min left
+                </span>
+              )}
             </div>
           )}
 
           {!isHost && !isCoHost && !isOver && (
             <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
+              {/* A6 — Data saver: shrink the rendered element so adaptiveStream
+                  pins a lower simulcast layer (halves data). */}
+              <Button
+                size="icon"
+                variant={dataSaver ? "brand" : "secondary"}
+                className="rounded-full"
+                onClick={() => setDataSaver((v) => !v)}
+                aria-pressed={dataSaver}
+                aria-label={dataSaver ? "Disable data saver" : "Enable data saver"}
+                title={
+                  dataSaver ? "Data saver on — tap for full quality" : "Data saver — use less data"
+                }
+              >
+                <Timer className="size-4" />
+              </Button>
               <Button
                 size="icon"
                 variant="secondary"
@@ -1208,7 +1504,8 @@ function LiveRoomPage() {
                     onClick={() =>
                       inviteFollowers.mutate(undefined, {
                         onSuccess: (r) => toast.success(`Invited ${r.invited} followers`),
-                        onError: (err: any) => toast.error(err.message || "Couldn't send invites"),
+                        onError: (err: Error) =>
+                          toast.error(err.message || "Couldn't send invites"),
                       })
                     }
                     disabled={inviteFollowers.isPending}
@@ -1234,6 +1531,28 @@ function LiveRoomPage() {
                   >
                     <Settings2 className="size-4" />{" "}
                     {stream.giftsEnabled ? "Disable gifts" : "Enable gifts"}
+                  </DropdownMenuItem>
+                )}
+                {isHost && (
+                  <DropdownMenuItem
+                    onClick={() => {
+                      updateSettings.mutate(
+                        { paidInteractions: { enabled: !stream.paidInteractions?.enabled } },
+                        {
+                          onSuccess: () =>
+                            toast.success(
+                              stream.paidInteractions?.enabled
+                                ? "Paid interactions disabled"
+                                : `Paid interactions enabled — ❤ ${paid?.reactionPrice ?? 1} pts, comments ${paid?.commentPrice ?? 5} pts`,
+                            ),
+                        },
+                      );
+                    }}
+                  >
+                    <Coins className="size-4" />{" "}
+                    {stream.paidInteractions?.enabled
+                      ? "Disable paid interactions"
+                      : "Enable paid interactions"}
                   </DropdownMenuItem>
                 )}
                 {!isHost && (
@@ -1335,7 +1654,9 @@ function LiveRoomPage() {
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-44">
-                      {isHost && (
+                      {/* §8.4 — Reply available to host AND moderators (was
+                          host-only, so mods could never reply). */}
+                      {canModerate && (
                         <DropdownMenuItem onClick={() => startReply(m)}>
                           <Reply className="size-3.5" /> Reply
                         </DropdownMenuItem>
@@ -1436,7 +1757,7 @@ function LiveRoomPage() {
             </div>
           )}
 
-          {/* Host earnings */}
+          {/* Host earnings (A5: includes paid-interaction breakdown) */}
           {isHost && (
             <div className="pointer-events-auto">
               <HostEarnings streamId={streamId} isOver={isOver} asStaff={asStaff} />
@@ -1463,11 +1784,35 @@ function LiveRoomPage() {
               )}
               {!replyingTo && (
                 <>
+                  {/* A5 — live wallet balance + price hints in the input row */}
+                  {paidEnabled && (
+                    <div className="flex w-full items-center justify-between gap-2 rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-bold text-white/80">
+                      <span className="flex items-center gap-1">
+                        <Coins className="size-3 text-amber-400" />
+                        {insufficientPoints ? (
+                          <span className="text-danger">
+                            Not enough points ({walletPoints}/{commentPrice}) —{" "}
+                            <Link to="/wallet" className="underline">
+                              Top up
+                            </Link>
+                          </span>
+                        ) : (
+                          `${walletPoints} pts`
+                        )}
+                      </span>
+                      <span>
+                        ❤ {reactionPrice} pts · comment {commentPrice} pts
+                      </span>
+                    </div>
+                  )}
                   <input
                     value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
+                    onChange={(e) => {
+                      setDraft(e.target.value);
+                      setInsufficientPoints(false);
+                    }}
                     onKeyDown={(e) => e.key === "Enter" && sendChat()}
-                    placeholder="Send a message…"
+                    placeholder={paidEnabled ? `Comment · ${commentPrice} pts` : "Send a message…"}
                     className="h-9 min-w-0 flex-1 rounded-full border border-white/20 bg-white/10 px-3 text-sm text-white placeholder:text-white/50 outline-none focus:border-white/40"
                   />
                   {/* Tight cluster: Send / Gift / Join / Like — small gap between
@@ -1512,14 +1857,19 @@ function LiveRoomPage() {
                         )}
                       </Button>
                     )}
-                    {/* Like button — visible on all screen sizes, vertically centered with other buttons */}
+                    {/* Like button — A5: shows the price when paid mode is on. */}
                     <button
                       type="button"
                       onClick={sendReaction}
-                      aria-label="Send a like"
-                      className="press shrink-0 grid size-9 place-items-center rounded-full bg-white/15 text-white"
+                      aria-label={
+                        paidEnabled ? `Send a like (${reactionPrice} points)` : "Send a like"
+                      }
+                      className="press flex shrink-0 items-center gap-1 rounded-full bg-white/15 px-3 text-white size-9 justify-center"
                     >
                       <Heart className="size-4" />
+                      {paidEnabled && reactionPrice > 0 && (
+                        <span className="text-[10px] font-extrabold">{reactionPrice}</span>
+                      )}
                     </button>
                   </div>
                 </>
@@ -1530,7 +1880,7 @@ function LiveRoomPage() {
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && sendChat()}
-                    placeholder={""}
+                    placeholder={paidEnabled ? `Reply · ${commentPrice} pts` : ""}
                     autoFocus
                     className="h-9 min-w-0 flex-1 rounded-full border border-white/20 bg-white/10 px-3 text-sm text-white placeholder:text-white/50 outline-none focus:border-white/40"
                   />
@@ -1550,6 +1900,60 @@ function LiveRoomPage() {
           )}
         </div>
       </div>
+
+      {/* A5 — paid-interaction confirm-once dialog */}
+      <Dialog open={paidConfirmOpen !== null} onOpenChange={(v) => !v && setPaidConfirmOpen(null)}>
+        <DialogContent className="sm:max-w-[360px]">
+          <DialogHeader>
+            <DialogTitle>
+              {paidConfirmOpen === "reaction" ? "Send a paid like?" : "Send a paid comment?"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 px-1 text-sm">
+            <p className="text-muted-foreground">
+              Paid interactions cost Kingdom Points which go to the host.{" "}
+              {paidConfirmOpen === "reaction"
+                ? `Each like costs ${reactionPrice} point${reactionPrice === 1 ? "" : "s"}.`
+                : `Each comment costs ${commentPrice} point${commentPrice === 1 ? "" : "s"}.`}{" "}
+              Your balance: <b className="text-foreground">{walletPoints} pts</b>.
+            </p>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={paidConfirmDontAsk}
+                onChange={(e) => setPaidConfirmDontAsk(e.target.checked)}
+                className="size-4 accent-primary"
+              />
+              Don't ask again for this stream
+            </label>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setPaidConfirmOpen(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="brand"
+                className="flex-1"
+                disabled={
+                  walletPoints < (paidConfirmOpen === "reaction" ? reactionPrice : commentPrice)
+                }
+                onClick={confirmPaidInteraction}
+              >
+                {paidConfirmOpen === "reaction"
+                  ? `Like · ${reactionPrice} pts`
+                  : `Send · ${commentPrice} pts`}
+              </Button>
+            </div>
+            {walletPoints < (paidConfirmOpen === "reaction" ? reactionPrice : commentPrice) && (
+              <p className="text-xs text-danger">
+                Not enough Kingdom Points —{" "}
+                <Link to="/wallet" className="underline">
+                  top up your wallet
+                </Link>
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <ReportDialog streamId={streamId} open={reportOpen} onOpenChange={setReportOpen} />
       <AddModeratorDialog
@@ -1573,13 +1977,23 @@ function HostEarnings({
 }) {
   const { data } = useLiveEarnings(streamId, true, asStaff);
   if (!data) return null;
+  const paid = data.paidInteractions;
+  const paidTotal = paid ? paid.likePoints + paid.commentPoints + paid.reactionPoints : 0;
   return (
-    <div className="flex items-center gap-2 border-t border-border px-4 py-2.5 text-sm">
-      <DollarSign className="size-4 text-success" />
-      <span className="font-bold text-success">{formatCount(data.totalPoints)} points</span>
-      <span className="text-muted-foreground">
-        earned from {data.giftCount} gifts{isOver ? " this stream" : " so far"}
-      </span>
+    <div className="border-t border-border px-4 py-2.5 text-sm">
+      <div className="flex items-center gap-2">
+        <DollarSign className="size-4 text-success" />
+        <span className="font-bold text-success">{formatCount(data.totalPoints)} points</span>
+        <span className="text-muted-foreground">
+          earned from {data.giftCount} gifts{isOver ? " this stream" : " so far"}
+        </span>
+      </div>
+      {paid && paidTotal > 0 && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          Paid interactions: {formatCount(paidTotal)} pts — {paid.likeCount} likes,{" "}
+          {paid.commentCount} comments, {paid.reactionCount} reactions
+        </p>
+      )}
     </div>
   );
 }

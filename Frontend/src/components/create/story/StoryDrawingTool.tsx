@@ -1,5 +1,18 @@
 import { useState, useRef, useEffect } from "react";
-import { PenTool, Eraser, Square, Circle, ArrowUpRight, Minus, Heart, Star, Undo2, Check, Trash2, X } from "lucide-react";
+import {
+  PenTool,
+  Eraser,
+  Square,
+  Circle,
+  ArrowUpRight,
+  Minus,
+  Heart,
+  Star,
+  Undo2,
+  Check,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
@@ -9,7 +22,7 @@ import { STORY_FILTERS } from "./StoryEffects";
 interface StoryDrawingToolProps {
   onSave: (dataUrl: string) => void;
   onCancel: () => void;
-  existingDrawing?: string;
+  existingDrawing?: string | undefined;
   slide?: StorySlideData;
 }
 
@@ -29,7 +42,12 @@ const DRAW_COLORS = [
   "#FEE440",
 ];
 
-export function StoryDrawingTool({ onSave, onCancel, existingDrawing, slide }: StoryDrawingToolProps) {
+export function StoryDrawingTool({
+  onSave,
+  onCancel,
+  existingDrawing,
+  slide,
+}: StoryDrawingToolProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [tool, setTool] = useState<DrawToolMode>("pen");
   const [color, setColor] = useState("#FFFFFF");
@@ -76,7 +94,9 @@ export function StoryDrawingTool({ onSave, onCancel, existingDrawing, slide }: S
     try {
       const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
       historyRef.current.push(data);
-    } catch {}
+    } catch {
+      /* best-effort — ignore */
+    }
   };
 
   const handleUndo = () => {
@@ -93,8 +113,10 @@ export function StoryDrawingTool({ onSave, onCancel, existingDrawing, slide }: S
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
-    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+    const touch = "touches" in e ? e.touches[0] : undefined;
+    const mouse = "clientX" in e ? e : undefined;
+    const clientX = touch ? touch.clientX : mouse ? mouse.clientX : 0;
+    const clientY = touch ? touch.clientY : mouse ? mouse.clientY : 0;
     const x = ((clientX - rect.left) / rect.width) * canvas.width;
     const y = ((clientY - rect.top) / rect.height) * canvas.height;
     return { x, y };
@@ -199,26 +221,60 @@ export function StoryDrawingTool({ onSave, onCancel, existingDrawing, slide }: S
         const headLen = ctx.lineWidth * 2.5;
         ctx.beginPath();
         ctx.moveTo(x, y);
-        ctx.lineTo(x - headLen * Math.cos(angle - Math.PI / 6), y - headLen * Math.sin(angle - Math.PI / 6));
-        ctx.lineTo(x - headLen * Math.cos(angle + Math.PI / 6), y - headLen * Math.sin(angle + Math.PI / 6));
+        ctx.lineTo(
+          x - headLen * Math.cos(angle - Math.PI / 6),
+          y - headLen * Math.sin(angle - Math.PI / 6),
+        );
+        ctx.lineTo(
+          x - headLen * Math.cos(angle + Math.PI / 6),
+          y - headLen * Math.sin(angle + Math.PI / 6),
+        );
         ctx.lineTo(x, y);
         ctx.fill();
       } else if (tool === "heart") {
         drawHeart(ctx, startPos.x + width / 2, startPos.y + height / 2, Math.abs(width), isFilled);
       } else if (tool === "star") {
-        drawStar(ctx, startPos.x + width / 2, startPos.y + height / 2, 5, Math.abs(width) / 2, Math.abs(width) / 4, isFilled);
+        drawStar(
+          ctx,
+          startPos.x + width / 2,
+          startPos.y + height / 2,
+          5,
+          Math.abs(width) / 2,
+          Math.abs(width) / 4,
+          isFilled,
+        );
       }
     }
   };
 
-  const drawHeart = (ctx: CanvasRenderingContext2D, cx: number, cy: number, size: number, fill: boolean) => {
+  const drawHeart = (
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    size: number,
+    fill: boolean,
+  ) => {
     ctx.save();
     ctx.beginPath();
     const topCurveHeight = size * 0.3;
     ctx.moveTo(cx, cy + size / 4);
     ctx.bezierCurveTo(cx, cy, cx - size / 2, cy, cx - size / 2, cy + topCurveHeight);
-    ctx.bezierCurveTo(cx - size / 2, cy + (size + topCurveHeight) / 2, cx, cy + size / 2 + topCurveHeight, cx, cy + size / 2);
-    ctx.bezierCurveTo(cx, cy + size / 2 + topCurveHeight, cx + size / 2, cy + (size + topCurveHeight) / 2, cx + size / 2, cy + topCurveHeight);
+    ctx.bezierCurveTo(
+      cx - size / 2,
+      cy + (size + topCurveHeight) / 2,
+      cx,
+      cy + size / 2 + topCurveHeight,
+      cx,
+      cy + size / 2,
+    );
+    ctx.bezierCurveTo(
+      cx,
+      cy + size / 2 + topCurveHeight,
+      cx + size / 2,
+      cy + (size + topCurveHeight) / 2,
+      cx + size / 2,
+      cy + topCurveHeight,
+    );
     ctx.bezierCurveTo(cx + size / 2, cy, cx, cy, cx, cy + size / 4);
     ctx.closePath();
     if (fill) ctx.fill();
@@ -226,7 +282,15 @@ export function StoryDrawingTool({ onSave, onCancel, existingDrawing, slide }: S
     ctx.restore();
   };
 
-  const drawStar = (ctx: CanvasRenderingContext2D, cx: number, cy: number, spikes: number, outerRadius: number, innerRadius: number, fill: boolean) => {
+  const drawStar = (
+    ctx: CanvasRenderingContext2D,
+    cx: number,
+    cy: number,
+    spikes: number,
+    outerRadius: number,
+    innerRadius: number,
+    fill: boolean,
+  ) => {
     let rot = (Math.PI / 2) * 3;
     let x = cx;
     let y = cy;
@@ -301,7 +365,9 @@ export function StoryDrawingTool({ onSave, onCancel, existingDrawing, slide }: S
                 onClick={() => setTool(t.id)}
                 className={cn(
                   "press grid size-9 shrink-0 place-items-center rounded-xl transition-all",
-                  tool === t.id ? "bg-white text-slate-950 shadow-lg font-bold" : "bg-white/15 text-white hover:bg-white/25"
+                  tool === t.id
+                    ? "bg-white text-slate-950 shadow-lg font-bold"
+                    : "bg-white/15 text-white hover:bg-white/25",
                 )}
                 title={t.label}
               >
@@ -319,7 +385,7 @@ export function StoryDrawingTool({ onSave, onCancel, existingDrawing, slide }: S
               onClick={() => setIsFilled(!isFilled)}
               className={cn(
                 "press rounded-full border border-white/30 px-3 py-1.5 text-xs font-extrabold transition-all",
-                isFilled ? "bg-white text-slate-950" : "bg-white/15 text-white"
+                isFilled ? "bg-white text-slate-950" : "bg-white/15 text-white",
               )}
             >
               {isFilled ? "Fill" : "Outline"}
@@ -347,7 +413,12 @@ export function StoryDrawingTool({ onSave, onCancel, existingDrawing, slide }: S
           </button>
 
           {/* Done / Save */}
-          <Button variant="brand" size="sm" onClick={handleDone} className="rounded-full font-bold px-4">
+          <Button
+            variant="brand"
+            size="sm"
+            onClick={handleDone}
+            className="rounded-full font-bold px-4"
+          >
             <Check className="size-4 mr-1" /> Done
           </Button>
         </div>
@@ -375,11 +446,7 @@ export function StoryDrawingTool({ onSave, onCancel, existingDrawing, slide }: S
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <img
-                  src={slide.mediaThumbnail}
-                  alt=""
-                  className="h-full w-full object-cover"
-                />
+                <img src={slide.mediaThumbnail} alt="" className="h-full w-full object-cover" />
               )}
             </div>
           )}
@@ -409,7 +476,9 @@ export function StoryDrawingTool({ onSave, onCancel, existingDrawing, slide }: S
                 onClick={() => setColor(c)}
                 className={cn(
                   "press size-7 shrink-0 rounded-full border-2 transition-transform",
-                  color === c ? "border-white scale-125 shadow-lg ring-2 ring-white/50" : "border-transparent"
+                  color === c
+                    ? "border-white scale-125 shadow-lg ring-2 ring-white/50"
+                    : "border-transparent",
                 )}
                 style={{ backgroundColor: c }}
               />
@@ -424,7 +493,10 @@ export function StoryDrawingTool({ onSave, onCancel, existingDrawing, slide }: S
             min={2}
             max={36}
             step={1}
-            onValueChange={([val]) => setStrokeWidth(val)}
+            onValueChange={(vals) => {
+              const val = vals[0];
+              if (val !== undefined) setStrokeWidth(val);
+            }}
           />
         </div>
       </div>

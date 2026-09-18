@@ -52,16 +52,34 @@ const navLinks = [
 
 /* ─── Explore Content Categories ───────────────────────────── */
 const exploreCategories = [
-  "Music", "Comedy", "Dance", "Fashion", "Technology",
-  "Photography", "Art & Design", "Food & Cooking",
-  "Education", "Sports", "Travel", "Storytelling", "Business",
+  "Music",
+  "Comedy",
+  "Dance",
+  "Fashion",
+  "Technology",
+  "Photography",
+  "Art & Design",
+  "Food & Cooking",
+  "Education",
+  "Sports",
+  "Travel",
+  "Storytelling",
+  "Business",
 ];
 
 const discoverCategories = [
-  "Top Creators", "Trending Reels", "Live Now",
-  "New Voices", "Kigali Scene", "Culture & Heritage",
-  "Fitness & Health", "Podcasts", "Beauty",
-  "Motivation", "Gaming", "Music Production",
+  "Top Creators",
+  "Trending Reels",
+  "Live Now",
+  "New Voices",
+  "Kigali Scene",
+  "Culture & Heritage",
+  "Fitness & Health",
+  "Podcasts",
+  "Beauty",
+  "Motivation",
+  "Gaming",
+  "Music Production",
 ];
 
 /* ─── Enable Section Steps ─────────────────────────────────── */
@@ -105,20 +123,53 @@ const enableSteps = [
 
 /* ─── FAQ Data ─────────────────────────────────────────────── */
 const faqGeneral = [
-  { q: "What is Gihanga Updates?", a: "Gihanga Updates is a social content platform built for creators and audiences in Rwanda and across East Africa. Share stories, reels, go live, and get paid for your creativity." },
-  { q: "Is Gihanga Updates free to use?", a: "Yes! Creating an account, posting, watching, and engaging is completely free. Creators can also earn money through tips, ad revenue, and brand deals." },
-  { q: "Who can become a creator?", a: "Anyone! Apply for creator status in your settings. Once approved, you unlock advanced analytics, scheduling, monetization tools, and more." },
-  { q: "What content can I post?", a: "Photos, videos, stories, reels, text updates, and live streams. Express yourself however feels right." },
-  { q: "Is my data safe?", a: "Absolutely. We use industry-standard encryption and give you granular privacy controls over who sees your content and profile." },
+  {
+    q: "What is Gihanga Updates?",
+    a: "Gihanga Updates is a social content platform built for creators and audiences in Rwanda and across East Africa. Share stories, reels, go live, and get paid for your creativity.",
+  },
+  {
+    q: "Is Gihanga Updates free to use?",
+    a: "Yes! Creating an account, posting, watching, and engaging is completely free. Creators can also earn money through tips, ad revenue, and brand deals.",
+  },
+  {
+    q: "Who can become a creator?",
+    a: "Anyone! Apply for creator status in your settings. Once approved, you unlock advanced analytics, scheduling, monetization tools, and more.",
+  },
+  {
+    q: "What content can I post?",
+    a: "Photos, videos, stories, reels, text updates, and live streams. Express yourself however feels right.",
+  },
+  {
+    q: "Is my data safe?",
+    a: "Absolutely. We use industry-standard encryption and give you granular privacy controls over who sees your content and profile.",
+  },
 ];
 
 const faqCreators = [
-  { q: "How do I earn money on Gihanga Updates?", a: "Creators earn through viewer tips (in RWF), ad revenue sharing, brand partnership deals, and premium content subscriptions." },
-  { q: "How do payouts work?", a: "Earnings are tracked in your Wallet. Withdraw directly to your mobile money account or bank at any time." },
-  { q: "Can I schedule posts?", a: "Yes! Creator accounts get access to the Studio with post scheduling, analytics dashboards, and draft management." },
-  { q: "What are the community guidelines?", a: "We promote authentic, respectful content. Hate speech, harassment, and harmful content are not tolerated. Full guidelines are in our Terms of Service." },
-  { q: "How do live streams work?", a: "Tap the Live button, set a title, and start broadcasting. Viewers can join, react, comment, and send tips in real-time." },
-  { q: "Can I collaborate with other creators?", a: "Yes! You can tag, mention, and co-create content with other users. Collaboration features are built into the creator toolkit." },
+  {
+    q: "How do I earn money on Gihanga Updates?",
+    a: "Creators earn through viewer tips (in RWF), ad revenue sharing, brand partnership deals, and premium content subscriptions.",
+  },
+  {
+    q: "How do payouts work?",
+    a: "Earnings are tracked in your Wallet. Withdraw directly to your mobile money account or bank at any time.",
+  },
+  {
+    q: "Can I schedule posts?",
+    a: "Yes! Creator accounts get access to the Studio with post scheduling, analytics dashboards, and draft management.",
+  },
+  {
+    q: "What are the community guidelines?",
+    a: "We promote authentic, respectful content. Hate speech, harassment, and harmful content are not tolerated. Full guidelines are in our Terms of Service.",
+  },
+  {
+    q: "How do live streams work?",
+    a: "Tap the Live button, set a title, and start broadcasting. Viewers can join, react, comment, and send tips in real-time.",
+  },
+  {
+    q: "Can I collaborate with other creators?",
+    a: "Yes! You can tag, mention, and co-create content with other users. Collaboration features are built into the creator toolkit.",
+  },
 ];
 
 /* ─── Footer Links ─────────────────────────────────────────── */
@@ -137,7 +188,14 @@ const footerColumns = [
   },
   {
     title: "Resources",
-    links: ["Community Guidelines", "Safety Center", "Terms of Service", "Privacy Policy", "Cookie Policy", "Accessibility"],
+    links: [
+      "Community Guidelines",
+      "Safety Center",
+      "Terms of Service",
+      "Privacy Policy",
+      "Cookie Policy",
+      "Accessibility",
+    ],
   },
 ];
 
@@ -152,6 +210,7 @@ export function GetStartedButton({
   to?: string;
   className?: string;
   size?: "sm" | "md" | "lg";
+  // "md" maps to Button's default size (kept for API compat).
   children?: React.ReactNode;
   variant?: "brand" | "solid-blue";
 }) {
@@ -167,9 +226,7 @@ export function GetStartedButton({
       <motion.div
         initial={false}
         animate={
-          isHovered
-            ? { y: "90%", opacity: 1, scale: 1 }
-            : { y: "15%", opacity: 0, scale: 0.75 }
+          isHovered ? { y: "90%", opacity: 1, scale: 1 } : { y: "15%", opacity: 0, scale: 0.75 }
         }
         transition={{
           type: "spring",
@@ -180,22 +237,18 @@ export function GetStartedButton({
       >
         {/* Large Gihanga Logo Icon */}
         <div className="size-10 sm:size-15 rounded-2xl   p-2  flex items-center justify-center -mt-2">
-          <img
-            src={logoImg}
-            alt="Gihanga Icon"
-            className="size-full object-contain"
-          />
+          <img src={logoImg} alt="Gihanga Icon" className="size-full object-contain" />
         </div>
       </motion.div>
 
       {/* Main Interactive Button */}
       <Button
         variant={variant === "solid-blue" ? "default" : "brand"}
-        size={size}
+        size={size === "md" ? "default" : size}
         className={cn(
           "relative z-10 font-display font-extrabold tracking-widest uppercase transition-all duration-300 shadow-soft",
           isHovered && "-translate-y-0.5 shadow-md",
-          variant === "solid-blue" && "bg-blue-600 hover:bg-blue-500 text-white"
+          variant === "solid-blue" && "bg-blue-600 hover:bg-blue-500 text-white",
         )}
         asChild
       >
@@ -235,7 +288,7 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
       <div
         className={cn(
           "overflow-hidden transition-all duration-300",
-          open ? "max-h-40 pb-4 opacity-100" : "max-h-0 opacity-0"
+          open ? "max-h-40 pb-4 opacity-100" : "max-h-0 opacity-0",
         )}
       >
         <p className="text-sm leading-relaxed text-muted-foreground">{answer}</p>
@@ -295,8 +348,7 @@ export function LandingPage() {
               transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
               className="font-display text-[40px] leading-[1.08] font-extrabold tracking-tight sm:text-[52px] lg:text-[56px]"
             >
-              Welcome to your{" "}
-              <span className="text-gradient-brand">creative community</span>
+              Welcome to your <span className="text-gradient-brand">creative community</span>
             </motion.h1>
 
             <motion.p
@@ -305,8 +357,8 @@ export function LandingPage() {
               transition={{ duration: 0.5, delay: 0.1 }}
               className="mx-auto mt-5 max-w-md text-[15px] leading-relaxed text-muted-foreground lg:mx-0"
             >
-              Stories, reels and updates from the creators shaping culture across Rwanda —
-              with the tools to build an audience and get paid for it in RWF.
+              Stories, reels and updates from the creators shaping culture across Rwanda — with the
+              tools to build an audience and get paid for it in RWF.
             </motion.p>
 
             {/* Auth buttons */}
@@ -325,9 +377,14 @@ export function LandingPage() {
 
               <p className="mt-2 text-xs text-muted-foreground">
                 By continuing you agree to our{" "}
-                <a href="#" className="font-semibold text-primary hover:underline">Terms of Service</a>{" "}
+                <a href="#" className="font-semibold text-primary hover:underline">
+                  Terms of Service
+                </a>{" "}
                 and{" "}
-                <a href="#" className="font-semibold text-primary hover:underline">Privacy Policy</a>.
+                <a href="#" className="font-semibold text-primary hover:underline">
+                  Privacy Policy
+                </a>
+                .
               </p>
             </motion.div>
           </div>
@@ -431,7 +488,10 @@ export function LandingPage() {
       </section>
 
       {/* ───────────── ENABLE SECTION (Screenshot 3 — Seamless Frameless Phone) ───────────── */}
-      <section id="reels" className="border-t border-border/60 py-16 sm:py-24 relative overflow-hidden">
+      <section
+        id="reels"
+        className="border-t border-border/60 py-16 sm:py-24 relative overflow-hidden"
+      >
         <div className="mx-auto max-w-7xl px-5 sm:px-8">
           {/* Section heading */}
           <motion.div
@@ -442,12 +502,11 @@ export function LandingPage() {
             className="mb-14 text-center"
           >
             <h2 className="font-display text-[36px] leading-tight font-extrabold tracking-tight sm:text-[48px]">
-              Start{" "}
-              <span className="text-gradient-brand">creating</span>{" "}
-              on Gihanga today.
+              Start <span className="text-gradient-brand">creating</span> on Gihanga today.
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-[15px] text-muted-foreground">
-              From your first post to your first payout — everything you need to build and grow your presence.
+              From your first post to your first payout — everything you need to build and grow your
+              presence.
             </p>
           </motion.div>
 
@@ -507,8 +566,12 @@ export function LandingPage() {
               viewport={{ once: true }}
               className="text-center"
             >
-              <p className="font-display text-3xl font-extrabold text-white sm:text-4xl">{stat.value}</p>
-              <p className="mt-1 text-xs font-semibold tracking-wider text-white/80 uppercase">{stat.label}</p>
+              <p className="font-display text-3xl font-extrabold text-white sm:text-4xl">
+                {stat.value}
+              </p>
+              <p className="mt-1 text-xs font-semibold tracking-wider text-white/80 uppercase">
+                {stat.label}
+              </p>
             </motion.div>
           ))}
         </div>
@@ -520,7 +583,9 @@ export function LandingPage() {
           <div className="flex flex-col gap-12 lg:flex-row lg:gap-20">
             {/* Left — sticky heading */}
             <div className="shrink-0 lg:sticky lg:top-24 lg:self-start lg:w-64">
-              <p className="text-[11px] font-bold tracking-[0.16em] text-muted-foreground uppercase">FAQ</p>
+              <p className="text-[11px] font-bold tracking-[0.16em] text-muted-foreground uppercase">
+                FAQ
+              </p>
               <h2 className="mt-2 font-display text-[32px] leading-tight font-extrabold tracking-tight sm:text-[38px]">
                 Frequently asked questions
               </h2>
@@ -537,13 +602,17 @@ export function LandingPage() {
             {/* Right — FAQ items */}
             <div className="flex-1">
               {/* General */}
-              <p className="mb-3 text-[11px] font-bold tracking-[0.16em] text-primary uppercase">General</p>
+              <p className="mb-3 text-[11px] font-bold tracking-[0.16em] text-primary uppercase">
+                General
+              </p>
               {faqGeneral.map((item) => (
                 <FAQItem key={item.q} question={item.q} answer={item.a} />
               ))}
 
               {/* Creators */}
-              <p className="mb-3 mt-10 text-[11px] font-bold tracking-[0.16em] text-primary uppercase">For Creators</p>
+              <p className="mb-3 mt-10 text-[11px] font-bold tracking-[0.16em] text-primary uppercase">
+                For Creators
+              </p>
               {faqCreators.map((item) => (
                 <FAQItem key={item.q} question={item.q} answer={item.a} />
               ))}
@@ -564,7 +633,8 @@ export function LandingPage() {
             Ready to share your <span className="text-gradient-brand">story</span>?
           </motion.h2>
           <p className="mx-auto mt-4 max-w-md text-[15px] text-muted-foreground">
-            Join thousands of creators already building their audience on Gihanga Updates. It's free, always.
+            Join thousands of creators already building their audience on Gihanga Updates. It's
+            free, always.
           </p>
           <div className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center pb-6">
             <GetStartedButton size="lg" to="/register">
@@ -619,7 +689,14 @@ export function LandingPage() {
               <span>© {new Date().getFullYear()}</span>
             </div>
             <div className="flex flex-wrap justify-center gap-4">
-              {["About", "Accessibility", "Terms", "Privacy Policy", "Cookie Policy", "Community Guidelines"].map((item) => (
+              {[
+                "About",
+                "Accessibility",
+                "Terms",
+                "Privacy Policy",
+                "Cookie Policy",
+                "Community Guidelines",
+              ].map((item) => (
                 <a key={item} href="#" className="hover:text-foreground hover:underline">
                   {item}
                 </a>
@@ -633,7 +710,7 @@ export function LandingPage() {
 }
 
 /* ─── Enable Step Accordion Item ───────────────────────────── */
-function EnableStep({ step, index }: { step: typeof enableSteps[0]; index: number }) {
+function EnableStep({ step, index }: { step: (typeof enableSteps)[0]; index: number }) {
   const [open, setOpen] = useState(index === 5); // 06 open by default like screenshot
 
   return (
@@ -650,7 +727,12 @@ function EnableStep({ step, index }: { step: typeof enableSteps[0]; index: numbe
         className="press flex w-full items-center gap-4 py-4 text-left"
       >
         <span className="font-display text-sm font-bold text-primary">{step.number}</span>
-        <span className={cn("flex-1 text-[15px] font-semibold", open ? "text-foreground" : "text-muted-foreground")}>
+        <span
+          className={cn(
+            "flex-1 text-[15px] font-semibold",
+            open ? "text-foreground" : "text-muted-foreground",
+          )}
+        >
           {step.title}
         </span>
         <span className="shrink-0 text-muted-foreground">
@@ -660,7 +742,7 @@ function EnableStep({ step, index }: { step: typeof enableSteps[0]; index: numbe
       <div
         className={cn(
           "overflow-hidden transition-all duration-300",
-          open ? "max-h-32 pb-4 opacity-100" : "max-h-0 opacity-0"
+          open ? "max-h-32 pb-4 opacity-100" : "max-h-0 opacity-0",
         )}
       >
         <p className="pl-10 text-sm leading-relaxed text-muted-foreground">{step.body}</p>

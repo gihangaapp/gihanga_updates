@@ -23,7 +23,9 @@ export function MediaEditor({ file, onSave, onCancel }: MediaEditorProps) {
   if (file.isVideo) {
     return (
       <div className="flex flex-col items-center justify-center p-6 text-center">
-        <p className="text-sm text-muted-foreground">Video editing (crop/rotate) is only supported for photos.</p>
+        <p className="text-sm text-muted-foreground">
+          Video editing (crop/rotate) is only supported for photos.
+        </p>
         <Button variant="outline" className="mt-4" onClick={onCancel}>
           Back
         </Button>
@@ -82,7 +84,7 @@ export function MediaEditor({ file, onSave, onCancel }: MediaEditorProps) {
               "rounded-lg px-3 py-1.5 text-xs font-semibold press",
               aspectRatio === ratio
                 ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
+                : "bg-muted text-muted-foreground hover:bg-muted/80",
             )}
           >
             {ratio.toUpperCase()}
@@ -96,24 +98,23 @@ export function MediaEditor({ file, onSave, onCancel }: MediaEditorProps) {
           <span className="text-xs font-bold text-muted-foreground flex items-center gap-1.5">
             <ZoomIn className="size-4" /> Zoom
           </span>
-          <span className="text-xs font-medium text-muted-foreground">{Math.round(zoom * 100)}%</span>
+          <span className="text-xs font-medium text-muted-foreground">
+            {Math.round(zoom * 100)}%
+          </span>
         </div>
         <Slider
           value={[zoom]}
           min={1}
           max={3}
           step={0.05}
-          onValueChange={([val]) => setZoom(val)}
+          onValueChange={(vals) => {
+            const val = vals[0];
+            if (val !== undefined) setZoom(val);
+          }}
         />
 
         <div className="flex items-center justify-between pt-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={rotate}
-            className="gap-2"
-          >
+          <Button type="button" variant="outline" size="sm" onClick={rotate} className="gap-2">
             <RotateCw className="size-4" />
             Rotate 90°
           </Button>
@@ -139,7 +140,11 @@ export function MediaEditor({ file, onSave, onCancel }: MediaEditorProps) {
           Cancel
         </Button>
         <Button variant="brand" onClick={handleApply} disabled={isProcessing}>
-          {isProcessing ? <RefreshCw className="size-4 animate-spin" /> : <Check className="size-4" />}
+          {isProcessing ? (
+            <RefreshCw className="size-4 animate-spin" />
+          ) : (
+            <Check className="size-4" />
+          )}
           Apply Changes
         </Button>
       </div>
@@ -151,7 +156,7 @@ function renderEditedImage(
   imageSrc: string,
   rotation: number,
   zoom: number,
-  aspectRatio: AspectRatio
+  aspectRatio: AspectRatio,
 ): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -193,10 +198,14 @@ function renderEditedImage(
       ctx.drawImage(img, -img.width / 2, -img.height / 2);
       ctx.restore();
 
-      canvas.toBlob((blob) => {
-        if (blob) resolve(blob);
-        else reject("Blob generation failed");
-      }, "image/jpeg", 0.92);
+      canvas.toBlob(
+        (blob) => {
+          if (blob) resolve(blob);
+          else reject("Blob generation failed");
+        },
+        "image/jpeg",
+        0.92,
+      );
     };
     img.onerror = (e) => reject(e);
     img.src = imageSrc;

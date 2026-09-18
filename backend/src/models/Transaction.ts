@@ -12,7 +12,10 @@ export type TransactionKind =
   | "ad_payment"
   | "ad_points_payment"
   | "ad_refund"
-  | "ad_points_refund";
+  | "ad_points_refund"
+  | "live_like"
+  | "live_comment"
+  | "live_reaction";
 
 export type TransactionStatus = "created" | "pending" | "completed" | "failed" | "cancelled" | "expired";
 
@@ -61,6 +64,9 @@ const TransactionSchema = new Schema<ITransaction>(
         "ad_points_payment",
         "ad_refund",
         "ad_points_refund",
+        "live_like",
+        "live_comment",
+        "live_reaction",
       ],
       required: true,
     },

@@ -9,6 +9,26 @@ import { Switch } from "@/components/ui/switch";
 import { PostSkeleton } from "@/components/feed/PostSkeleton";
 import { GAvatar, UserName } from "@/components/common/GAvatar";
 import { Logo } from "@/components/common/Logo";
+import type { DisplayUser } from "@/types";
+
+// Local styleguide fixtures (the old references pointed at mock-data files
+// that no longer exist).
+const currentUser: DisplayUser = {
+  id: "u0",
+  name: "Amina Uwase",
+  username: "amina",
+  avatarHue: 250,
+  avatarUrl: null,
+  verified: true,
+};
+const users: DisplayUser[] = [
+  { id: "u1", name: "Bosco Nkusi", username: "bosco", avatarHue: 12 },
+  { id: "u2", name: "Claudine Ingabire", username: "claudine", avatarHue: 120 },
+  { id: "u3", name: "David Kalisa", username: "david", avatarHue: 200 },
+  { id: "u4", name: "Esther Mukamana", username: "esther", avatarHue: 300 },
+  { id: "u5", name: "Fabrice Habimana", username: "fabrice", avatarHue: 60 },
+  { id: "u6", name: "Grace Nyiramana", username: "grace", avatarHue: 170, verified: true },
+];
 
 export const Route = createFileRoute("/styleguide")({
   head: () => ({
@@ -82,7 +102,9 @@ function Styleguide() {
 
         <Section title="Typography">
           <div className="space-y-2">
-            <p className="font-display text-4xl font-extrabold tracking-tight">Display / Sora 800</p>
+            <p className="font-display text-4xl font-extrabold tracking-tight">
+              Display / Sora 800
+            </p>
             <p className="font-display text-2xl font-bold">Heading / Sora 700</p>
             <p className="text-lg font-semibold">Subtitle / Manrope 600</p>
             <p className="leading-relaxed text-foreground/85">

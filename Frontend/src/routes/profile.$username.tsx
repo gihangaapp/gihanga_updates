@@ -37,7 +37,10 @@ export const Route = createFileRoute("/profile/$username")({
   head: () => ({
     meta: [
       { title: "Profile — Gihanga Updates" },
-      { name: "description", content: "View this creator's posts, reels and activity on Gihanga Updates." },
+      {
+        name: "description",
+        content: "View this creator's posts, reels and activity on Gihanga Updates.",
+      },
     ],
   }),
   component: ProfilePage,
@@ -111,7 +114,9 @@ function FollowListDialog({
                   <GAvatar user={toDisplayUser(u)} size="sm" />
                   <span className="min-w-0 flex-1">
                     <UserName user={toDisplayUser(u)} className="text-sm" />
-                    <span className="block truncate text-xs text-muted-foreground">@{u.username}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      @{u.username}
+                    </span>
                   </span>
                 </Link>
                 {!isMe && (
@@ -121,7 +126,10 @@ function FollowListDialog({
                     onClick={() =>
                       followUser.mutate(
                         { username: u.username, follow: !isFollowing },
-                        { onError: (err: any) => toast.error(err.message || "Couldn't update follow status") }
+                        {
+                          onError: (err: any) =>
+                            toast.error(err.message || "Couldn't update follow status"),
+                        },
                       )
                     }
                   >
@@ -142,7 +150,9 @@ function ProfileNotFound() {
     <AppShell>
       <div className="surface-card mx-auto mt-10 max-w-md p-10 text-center">
         <h1 className="mb-2 font-display text-xl font-bold">Account not found</h1>
-        <p className="mb-4 text-sm text-muted-foreground">That handle doesn&apos;t exist on Gihanga yet.</p>
+        <p className="mb-4 text-sm text-muted-foreground">
+          That handle doesn&apos;t exist on Gihanga yet.
+        </p>
         <Button variant="brand" asChild>
           <Link to="/explore">Discover creators</Link>
         </Button>
@@ -208,12 +218,7 @@ function ProfilePage() {
   const reelsList = allPosts.filter((p) => p.kind === "reel");
   const likesList = likesQuery.data?.posts ?? [];
 
-  const grid =
-    tab === "reels"
-      ? reelsList
-      : tab === "likes"
-        ? likesList
-        : allPosts;
+  const grid = tab === "reels" ? reelsList : tab === "likes" ? likesList : allPosts;
 
   return (
     <AppShell>
@@ -229,7 +234,11 @@ function ProfilePage() {
           <div className="px-4 pb-5 sm:px-6">
             <div className="-mt-12 flex items-end gap-4 sm:-mt-14">
               <span className="rounded-full ring-4 ring-card shadow-lg">
-                <GAvatar user={displayUser} size="xl" ring={displayUser.live ? "live" : displayUser.creator ? "creator" : "none"} />
+                <GAvatar
+                  user={displayUser}
+                  size="xl"
+                  ring={displayUser.live ? "live" : displayUser.creator ? "creator" : "none"}
+                />
               </span>
               <div className="ml-auto flex gap-2 pb-1">
                 {isMe ? (
@@ -254,9 +263,13 @@ function ProfilePage() {
                       followUser.mutate(
                         { username, follow: !wasFollowing },
                         {
-                          onSuccess: () => toast.success(wasFollowing ? `Unfollowed @${username}` : `Following @${username}`),
-                          onError: (err: any) => toast.error(err.message || "Couldn't update follow status"),
-                        }
+                          onSuccess: () =>
+                            toast.success(
+                              wasFollowing ? `Unfollowed @${username}` : `Following @${username}`,
+                            ),
+                          onError: (err: any) =>
+                            toast.error(err.message || "Couldn't update follow status"),
+                        },
                       );
                     }}
                   >
@@ -276,32 +289,59 @@ function ProfilePage() {
               )}
             </h1>
             <p className="text-sm font-medium text-muted-foreground">@{displayUser.username}</p>
-            {displayUser.bio && <p className="mt-2 max-w-xl text-sm leading-relaxed text-foreground/90">{displayUser.bio}</p>}
+            {displayUser.bio && (
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-foreground/90">
+                {displayUser.bio}
+              </p>
+            )}
 
             <ul className="mt-3 flex flex-wrap gap-4 text-xs text-muted-foreground">
               <li className="flex items-center gap-1.5">
                 <CalendarDays className="size-3.5" />
-                Joined {new Date(profile.createdAt).toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+                Joined{" "}
+                {new Date(profile.createdAt).toLocaleDateString(undefined, {
+                  month: "long",
+                  year: "numeric",
+                })}
               </li>
             </ul>
 
             <ul className="mt-4 flex gap-6">
               {[
                 { label: "Posts", value: profile.postsCount, onClick: undefined },
-                { label: "Followers", value: profile.followersCount, onClick: () => setFollowTab("followers") },
-                { label: "Following", value: profile.followingCount, onClick: () => setFollowTab("following") },
+                {
+                  label: "Followers",
+                  value: profile.followersCount,
+                  onClick: () => setFollowTab("followers"),
+                },
+                {
+                  label: "Following",
+                  value: profile.followingCount,
+                  onClick: () => setFollowTab("following"),
+                },
               ].map((s) =>
                 s.onClick ? (
-                  <button key={s.label} type="button" onClick={s.onClick} className="press text-left">
-                    <span className="block font-display text-lg font-extrabold text-foreground">{formatCount(s.value)}</span>
-                    <span className="text-xs text-muted-foreground hover:text-foreground">{s.label}</span>
+                  <button
+                    key={s.label}
+                    type="button"
+                    onClick={s.onClick}
+                    className="press text-left"
+                  >
+                    <span className="block font-display text-lg font-extrabold text-foreground">
+                      {formatCount(s.value)}
+                    </span>
+                    <span className="text-xs text-muted-foreground hover:text-foreground">
+                      {s.label}
+                    </span>
                   </button>
                 ) : (
                   <li key={s.label}>
-                    <span className="block font-display text-lg font-extrabold text-foreground">{formatCount(s.value)}</span>
+                    <span className="block font-display text-lg font-extrabold text-foreground">
+                      {formatCount(s.value)}
+                    </span>
                     <span className="text-xs text-muted-foreground">{s.label}</span>
                   </li>
-                )
+                ),
               )}
             </ul>
           </div>
@@ -327,7 +367,7 @@ function ProfilePage() {
                   "press flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-xs sm:text-sm font-bold transition-all",
                   t.id === tab
                     ? "bg-primary text-primary-foreground shadow-md"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted",
                 )}
               >
                 <t.icon className="size-4" />
@@ -336,7 +376,9 @@ function ProfilePage() {
                   <span
                     className={cn(
                       "rounded-full px-1.5 py-0.2 text-[10px] font-black",
-                      t.id === tab ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
+                      t.id === tab
+                        ? "bg-primary-foreground/20 text-primary-foreground"
+                        : "bg-muted text-muted-foreground",
                     )}
                   >
                     {count}
@@ -362,7 +404,10 @@ function ProfilePage() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {grid.map((item) => {
               const mediaSrc = mediaUrl(item.mediaUrl) || mediaUrl(item.thumbnailUrl);
-              const isVideo = item.kind === "video" || item.kind === "reel" || Boolean(item.mediaUrl?.match(/\.(mp4|webm|mov)$/i));
+              const isVideo =
+                item.kind === "video" ||
+                item.kind === "reel" ||
+                Boolean(item.mediaUrl?.match(/\.(mp4|webm|mov)$/i));
               const isDeleting = deletingPostId === item._id;
 
               return (
@@ -400,7 +445,16 @@ function ProfilePage() {
                             target.style.display = "none";
                             const parent = target.parentElement;
                             if (parent) {
-                              parent.classList.add("bg-gradient-to-tr", "from-slate-900", "to-slate-800", "flex", "items-center", "justify-center", "p-4", "text-center");
+                              parent.classList.add(
+                                "bg-gradient-to-tr",
+                                "from-slate-900",
+                                "to-slate-800",
+                                "flex",
+                                "items-center",
+                                "justify-center",
+                                "p-4",
+                                "text-center",
+                              );
                             }
                           }}
                           className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
@@ -462,7 +516,11 @@ function ProfilePage() {
           </div>
         )}
       </div>
-      <FollowListDialog username={username} tab={followTab} onOpenChange={(open) => !open && setFollowTab(null)} />
+      <FollowListDialog
+        username={username}
+        tab={followTab}
+        onOpenChange={(open) => !open && setFollowTab(null)}
+      />
     </AppShell>
   );
 }

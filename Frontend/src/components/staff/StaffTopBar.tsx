@@ -2,7 +2,11 @@ import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Bell, Circle, Menu, Moon, Sun } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
-import { useStaffNotifications, useMarkStaffNotificationsRead, useOnlineDot } from "@/hooks/use-staff-notifications";
+import {
+  useStaffNotifications,
+  useMarkStaffNotificationsRead,
+  useOnlineDot,
+} from "@/hooks/use-staff-notifications";
 import { timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +35,12 @@ export function StaffTopBar({ onMenuClick }: { onMenuClick: () => void }) {
           className="flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold text-muted-foreground"
           title={online ? "Real-time connected" : "Reconnecting…"}
         >
-          <Circle className={cn("size-2 fill-current", online ? "text-success" : "text-warning animate-pulse")} />
+          <Circle
+            className={cn(
+              "size-2 fill-current",
+              online ? "text-success" : "text-warning animate-pulse",
+            )}
+          />
           {online ? "Live" : "Connecting"}
         </span>
 
@@ -84,15 +93,22 @@ export function StaffTopBar({ onMenuClick }: { onMenuClick: () => void }) {
                   </div>
                   <div className="max-h-80 overflow-y-auto">
                     {!data?.notifications.length && (
-                      <p className="p-6 text-center text-xs text-muted-foreground">No notifications yet.</p>
+                      <p className="p-6 text-center text-xs text-muted-foreground">
+                        No notifications yet.
+                      </p>
                     )}
                     {data?.notifications.map((n) => (
                       <div
                         key={n._id}
-                        className={cn("border-b border-border/60 px-4 py-3 text-sm last:border-0", !n.read && "bg-primary-soft/40")}
+                        className={cn(
+                          "border-b border-border/60 px-4 py-3 text-sm last:border-0",
+                          !n.read && "bg-primary-soft/40",
+                        )}
                       >
                         <p className="text-foreground/90">{n.text}</p>
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">{timeAgo(n.createdAt)} ago</p>
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                          {timeAgo(n.createdAt)} ago
+                        </p>
                       </div>
                     ))}
                   </div>

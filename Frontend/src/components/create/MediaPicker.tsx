@@ -32,11 +32,7 @@ interface MediaPickerProps {
   compact?: boolean;
 }
 
-function validateFile(
-  file: File,
-  accept: MediaAccept,
-  maxDuration?: number
-): string | null {
+function validateFile(file: File, accept: MediaAccept, maxDuration?: number): string | null {
   const isImage = IMAGE_TYPES.has(file.type);
   const isVideo = VIDEO_TYPES.has(file.type);
 
@@ -112,9 +108,7 @@ export function MediaPicker({
         if (mediaFile.isVideo && maxDurationSeconds) {
           const duration = await getVideoDuration(file);
           if (duration > maxDurationSeconds) {
-            toast.error(
-              `"${file.name}" is ${Math.round(duration)}s — max ${maxDurationSeconds}s`
-            );
+            toast.error(`"${file.name}" is ${Math.round(duration)}s — max ${maxDurationSeconds}s`);
             URL.revokeObjectURL(mediaFile.previewUrl);
             continue;
           }
@@ -136,7 +130,7 @@ export function MediaPicker({
         }
       }
     },
-    [files, onChange, accept, multiple, maxFiles, maxDurationSeconds]
+    [files, onChange, accept, multiple, maxFiles, maxDurationSeconds],
   );
 
   const handleDragEnter = (e: React.DragEvent) => {
@@ -224,7 +218,7 @@ export function MediaPicker({
           isDragging
             ? "border-primary bg-primary-soft/50"
             : "border-border hover:border-primary/50 hover:bg-muted/50",
-          className
+          className,
         )}
         whileHover={{ scale: 1.005 }}
         whileTap={{ scale: 0.995 }}
@@ -232,13 +226,13 @@ export function MediaPicker({
         <div
           className={cn(
             "grid size-14 place-items-center rounded-2xl transition-colors",
-            isDragging ? "bg-primary/20" : "bg-primary-soft"
+            isDragging ? "bg-primary/20" : "bg-primary-soft",
           )}
         >
           <Upload
             className={cn(
               "size-7 transition-colors",
-              isDragging ? "text-primary" : "text-primary/70"
+              isDragging ? "text-primary" : "text-primary/70",
             )}
           />
         </div>
@@ -254,9 +248,7 @@ export function MediaPicker({
                 : "Photos & Videos • JPG, PNG, WEBP, MP4, MOV"}
           </p>
           {multiple && (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Up to {maxFiles} files
-            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">Up to {maxFiles} files</p>
           )}
         </div>
       </motion.div>

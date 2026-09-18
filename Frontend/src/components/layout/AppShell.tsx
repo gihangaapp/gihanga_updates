@@ -25,7 +25,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [loading, user, pathname, navigate]);
 
   // Don't flash protected content before the redirect above fires.
-  if (!loading && (!user || !user.emailVerified || !user.onboarded) && !pathname.startsWith("/system")) {
+  if (
+    !loading &&
+    (!user || !user.emailVerified || !user.onboarded) &&
+    !pathname.startsWith("/system")
+  ) {
     return null;
   }
 

@@ -45,33 +45,100 @@ interface NavSection {
 const navSections: NavSection[] = [
   {
     label: "Overview",
-    items: [{ to: "/system/dashboard", label: "Dashboard", icon: TrendingUp, permissions: ["moderation.queue.view", "accounts.view"] }],
+    items: [
+      {
+        to: "/system/dashboard",
+        label: "Dashboard",
+        icon: TrendingUp,
+        permissions: ["moderation.queue.view", "accounts.view"],
+      },
+    ],
   },
   {
     label: "Trust & Safety",
     items: [
-      { to: "/system/dashboard/moderation", label: "Moderation Queue", icon: ShieldAlert, permissions: ["moderation.queue.view"] },
-      { to: "/system/dashboard/live", label: "Live Oversight", icon: Radio, permissions: ["live.forceEnd"] },
-      { to: "/system/dashboard/accounts", label: "User Accounts", icon: Users, permissions: ["accounts.view"] },
+      {
+        to: "/system/dashboard/moderation",
+        label: "Moderation Queue",
+        icon: ShieldAlert,
+        permissions: ["moderation.queue.view"],
+      },
+      {
+        to: "/system/dashboard/live",
+        label: "Live Oversight",
+        icon: Radio,
+        permissions: ["live.forceEnd"],
+      },
+      {
+        to: "/system/dashboard/accounts",
+        label: "User Accounts",
+        icon: Users,
+        permissions: ["accounts.view"],
+      },
     ],
   },
   {
     label: "Finance",
     items: [
-      { to: "/system/dashboard/payments", label: "Payments Queue", icon: Wallet, permissions: ["payments.view"] },
-      { to: "/system/dashboard/campaigns", label: "Ad Campaigns", icon: Target, permissions: ["ads.view"] },
-      { to: "/system/dashboard/rewards", label: "Reward Config", icon: Award, permissions: ["rewards.view"] },
+      {
+        to: "/system/dashboard/payments",
+        label: "Payments Queue",
+        icon: Wallet,
+        permissions: ["payments.view"],
+      },
+      {
+        to: "/system/dashboard/campaigns",
+        label: "Ad Campaigns",
+        icon: Target,
+        permissions: ["ads.view"],
+      },
+      {
+        to: "/system/dashboard/rewards",
+        label: "Reward Config",
+        icon: Award,
+        permissions: ["rewards.view"],
+      },
     ],
   },
   {
     label: "Platform",
     items: [
-      { to: "/system/dashboard/growth", label: "Platform Growth", icon: TrendingUp, permissions: ["analytics.view"] },
-      { to: "/system/dashboard/staff", label: "Staff Management", icon: ShieldCheck, permissions: ["staff.view"] },
-      { to: "/system/dashboard/activity", label: "Staff Activity", icon: Activity, permissions: ["audit.viewAll"] },
-      { to: "/system/dashboard/settings", label: "Platform Settings", icon: Settings, permissions: ["settings.view"] },
-      { to: "/system/dashboard/ad-settings", label: "Ad Settings & Rates", icon: Sparkles, permissions: ["settings.view"] },
-      { to: "/system/dashboard/audit", label: "Audit Log", icon: History, permissions: ["audit.viewOwn", "audit.viewAll"] },
+      {
+        to: "/system/dashboard/growth",
+        label: "Platform Growth",
+        icon: TrendingUp,
+        permissions: ["analytics.view"],
+      },
+      {
+        to: "/system/dashboard/staff",
+        label: "Staff Management",
+        icon: ShieldCheck,
+        permissions: ["staff.view"],
+      },
+      {
+        to: "/system/dashboard/activity",
+        label: "Staff Activity",
+        icon: Activity,
+        permissions: ["audit.viewAll"],
+      },
+      {
+        to: "/system/dashboard/settings",
+        label: "Platform Settings",
+        icon: Settings,
+        permissions: ["settings.view"],
+      },
+      {
+        to: "/system/dashboard/ad-settings",
+        label: "Ad Settings & Rates",
+        icon: Sparkles,
+        permissions: ["settings.view"],
+      },
+      {
+        to: "/system/dashboard/audit",
+        label: "Audit Log",
+        icon: History,
+        permissions: ["audit.viewOwn", "audit.viewAll"],
+      },
     ],
   },
 ];
@@ -97,12 +164,19 @@ function StaffDashboardLayout() {
   }, [loading, staffUser, navigate]);
 
   if (loading || !staffUser || staffUser.role === "user") {
-    return <div className="grid min-h-screen place-items-center bg-background text-muted-foreground">Loading console…</div>;
+    return (
+      <div className="grid min-h-screen place-items-center bg-background text-muted-foreground">
+        Loading console…
+      </div>
+    );
   }
 
   const role = staffUser.role as "moderator" | "admin" | "superadmin";
   const visibleSections = navSections
-    .map((section) => ({ ...section, items: section.items.filter((item) => hasAnyPermission(staffUser, item.permissions)) }))
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => hasAnyPermission(staffUser, item.permissions)),
+    }))
     .filter((section) => section.items.length > 0);
 
   const sidebarContent = (
@@ -114,7 +188,9 @@ function StaffDashboardLayout() {
       <nav className="flex-1 space-y-6 overflow-y-auto">
         {visibleSections.map((section) => (
           <div key={section.label}>
-            <p className="mb-1.5 px-2 text-[10px] font-bold tracking-wider text-muted-foreground uppercase">{section.label}</p>
+            <p className="mb-1.5 px-2 text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
+              {section.label}
+            </p>
             <div className="space-y-0.5">
               {section.items.map((item) => {
                 const active = pathname === item.to;
@@ -125,7 +201,9 @@ function StaffDashboardLayout() {
                     onClick={() => setMobileNavOpen(false)}
                     className={cn(
                       "relative flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-semibold transition-colors",
-                      active ? "bg-primary-soft text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                      active
+                        ? "bg-primary-soft text-primary"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
                     )}
                   >
                     {active && (
@@ -150,7 +228,9 @@ function StaffDashboardLayout() {
       <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-border bg-muted/40 p-2.5">
         <span
           className="grid size-9 shrink-0 place-items-center rounded-full text-xs font-bold text-primary-foreground"
-          style={{ backgroundImage: `linear-gradient(140deg, oklch(0.5 0.11 ${staffUser.avatarHue || 250}), oklch(0.72 0.1 ${(staffUser.avatarHue || 250) + 24}))` }}
+          style={{
+            backgroundImage: `linear-gradient(140deg, oklch(0.5 0.11 ${staffUser.avatarHue || 250}), oklch(0.72 0.1 ${(staffUser.avatarHue || 250) + 24}))`,
+          }}
         >
           {initials(staffUser.name)}
         </span>
@@ -215,7 +295,12 @@ function StaffDashboardLayout() {
         </AnimatePresence>
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8">
-          <motion.div key={pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+          <motion.div
+            key={pathname}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+          >
             <Outlet />
           </motion.div>
         </main>

@@ -34,6 +34,10 @@ export default tseslint.config(
       ],
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
       "@typescript-eslint/no-unused-vars": "off",
+      // The pre-existing codebase uses targeted `any` at fetch/error boundaries
+      // (~113 sites, e.g. `onError: (err: any)`); new code must still avoid it.
+      // Kept as a WARNING so it stays visible in review without failing CI.
+      "@typescript-eslint/no-explicit-any": "warn",
     },
   },
   eslintPluginPrettier,

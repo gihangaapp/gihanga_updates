@@ -2,10 +2,10 @@ import { useState } from "react";
 import { Film, Heart, MessageCircle, Music2, Share2 } from "lucide-react";
 import { GAvatar } from "@/components/common/GAvatar";
 import { Button } from "@/components/ui/button";
-import type { UserProfile } from "@/lib/api-client";
+import type { User } from "@/types";
 
 interface ReelPreviewProps {
-  user: UserProfile;
+  user: User;
   videoUrl: string;
   caption: string;
   onEdit: () => void;

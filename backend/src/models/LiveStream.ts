@@ -2,12 +2,27 @@ import { Schema, model, Document, Types } from "mongoose";
 
 export type LiveStreamStatus = "pending" | "live" | "ended" | "force_ended";
 
+/**
+ * Per-stream monetisation of likes/comments/reactions (A5). Enabled by
+ * default on staff-hosted streams (moderator/admin/superadmin hosts), off
+ * for everyone else; the host can toggle it while live via
+ * PATCH /live/:id/settings and staff can adjust the global price defaults
+ * via the Setting model (live_paid_interactions_defaults).
+ */
+export interface PaidInteractionsSettings {
+  enabled: boolean;
+  likePrice: number;
+  commentPrice: number;
+  reactionPrice: number;
+}
+
 export interface ILiveStream extends Document {
   host: Types.ObjectId;
   title: string;
   description?: string;
   subsOnly: boolean;
   giftsEnabled: boolean;
+  paidInteractions: PaidInteractionsSettings;
   viewerCount: number;
   peakViewers: number;
   totalGifts: number;
@@ -19,6 +34,10 @@ export interface ILiveStream extends Document {
   status: LiveStreamStatus;
   startedAt?: Date;
   lastHeartbeatAt?: Date;
+  /** Server-enforced end-of-stream deadline (startedAt + cap). */
+  maxEndsAt?: Date;
+  /** Which TIME_WARNING_MINUTES marks already fired for this stream. */
+  timeWarningsSent?: number[];
   endedAt?: Date;
   endedBy?: Types.ObjectId;
   endReason?: string;
@@ -34,6 +53,12 @@ const LiveStreamSchema = new Schema<ILiveStream>(
     description: { type: String, maxlength: 1000 },
     subsOnly: { type: Boolean, default: false },
     giftsEnabled: { type: Boolean, default: true },
+    paidInteractions: {
+      enabled: { type: Boolean, default: false },
+      likePrice: { type: Number, default: 2, min: 0, max: 100 },
+      commentPrice: { type: Number, default: 5, min: 0, max: 500 },
+      reactionPrice: { type: Number, default: 1, min: 0, max: 100 },
+    },
     viewerCount: { type: Number, default: 0 },
     peakViewers: { type: Number, default: 0 },
     totalGifts: { type: Number, default: 0 },
@@ -49,6 +74,8 @@ const LiveStreamSchema = new Schema<ILiveStream>(
     },
     startedAt: { type: Date },
     lastHeartbeatAt: { type: Date },
+    maxEndsAt: { type: Date, index: true },
+    timeWarningsSent: { type: [Number], default: [] },
     endedAt: { type: Date },
     endedBy: { type: Schema.Types.ObjectId, ref: "User" },
     endReason: { type: String },

@@ -38,7 +38,7 @@ export function StoryEffects({ selectedFilter, onSelectFilter }: StoryEffectsPro
               "press rounded-xl px-3 py-1.5 text-xs font-bold shrink-0 transition-all",
               selectedFilter === f.id
                 ? "bg-white text-black scale-105"
-                : "bg-white/20 text-white hover:bg-white/30"
+                : "bg-white/20 text-white hover:bg-white/30",
             )}
           >
             {f.name}

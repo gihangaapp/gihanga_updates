@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Smile, AtSign, MapPin, Hash, HelpCircle, BarChart2, Clock, Sparkles } from "lucide-react";
 import EmojiPicker, { EmojiClickData, Theme } from "emoji-picker-react";
-import { api, type UserProfile } from "@/lib/api-client";
+import { api, type PublicUser } from "@/lib/api-client";
 import { GAvatar } from "@/components/common/GAvatar";
 import { cn } from "@/lib/utils";
 
@@ -21,7 +21,12 @@ interface StoryStickerPickerProps {
   onClose: () => void;
 }
 
-const STICKER_TYPES: { id: StorySticker["type"]; label: string; icon: typeof Smile; color: string }[] = [
+const STICKER_TYPES: {
+  id: StorySticker["type"];
+  label: string;
+  icon: typeof Smile;
+  color: string;
+}[] = [
   { id: "emoji", label: "Emoji", icon: Smile, color: "text-amber-400" },
   { id: "mention", label: "Mention", icon: AtSign, color: "text-indigo-400" },
   { id: "location", label: "Location", icon: MapPin, color: "text-emerald-400" },
@@ -34,7 +39,7 @@ const STICKER_TYPES: { id: StorySticker["type"]; label: string; icon: typeof Smi
 export function StoryStickerPicker({ onSelectSticker, onClose }: StoryStickerPickerProps) {
   const [activeType, setActiveType] = useState<StorySticker["type"]>("emoji");
   const [inputText, setInputText] = useState("");
-  const [userSearchResults, setUserSearchResults] = useState<UserProfile[]>([]);
+  const [userSearchResults, setUserSearchResults] = useState<PublicUser[]>([]);
 
   // Live user search for Mentions
   useEffect(() => {
@@ -50,7 +55,9 @@ export function StoryStickerPicker({ onSelectSticker, onClose }: StoryStickerPic
 
     const timer = setTimeout(async () => {
       try {
-        const res = await api.get<{ users: UserProfile[] }>(`/search?q=${encodeURIComponent(query)}`);
+        const res = await api.get<{ users: PublicUser[] }>(
+          `/search?q=${encodeURIComponent(query)}`,
+        );
         if (isMounted) setUserSearchResults(res?.users ?? []);
       } catch {
         if (isMounted) setUserSearchResults([]);
@@ -63,7 +70,7 @@ export function StoryStickerPicker({ onSelectSticker, onClose }: StoryStickerPic
     };
   }, [inputText, activeType]);
 
-  const handleSelectMentionUser = (u: UserProfile) => {
+  const handleSelectMentionUser = (u: PublicUser) => {
     onSelectSticker({
       id: `stk_mention_${Date.now()}`,
       type: "mention",
@@ -118,7 +125,7 @@ export function StoryStickerPicker({ onSelectSticker, onClose }: StoryStickerPic
                 "press flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold shrink-0 transition-all",
                 activeType === t.id
                   ? "bg-white text-slate-950 font-extrabold shadow-md"
-                  : "bg-white/10 text-white/70 hover:bg-white/20"
+                  : "bg-white/10 text-white/70 hover:bg-white/20",
               )}
             >
               <Icon className={cn("size-3.5", activeType === t.id ? "text-slate-950" : t.color)} />

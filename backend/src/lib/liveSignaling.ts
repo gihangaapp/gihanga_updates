@@ -3,6 +3,13 @@ import { LiveStream, LiveChatMessage } from "../models/LiveStream";
 import { ModerationRule } from "../models/ModerationRule";
 import { User } from "../models/User";
 import { addLiveViewer, removeLiveViewer, clearLiveViewers, incrLiveReactions } from "./redis";
+import { endStream } from "../services/liveStreamService";
+import {
+  chargePaidInteraction,
+  resolveInteractionAccess,
+  type PaidInteractionKind,
+  type PaidInteractionResult,
+} from "./paidInteractions";
 
 async function getFlaggedKeywords(): Promise<string[]> {
   const rule = await ModerationRule.findOne({ key: "live_chat_keywords" });
@@ -92,6 +99,27 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
     socket.join(`live:${streamId}`);
     socket.data.streamId = streamId;
     socket.data.userId = userId;
+
+    // A2 — late-joiner sync: a viewer who joins AFTER co-hosts were accepted
+    // never saw the live:co-host:joined events, so their grid would be
+    // unlabelled. Snapshot the current co-host list to exactly this socket.
+    if (stream.coHosts.length > 0) {
+      const coHosts = await User.find({ _id: { $in: stream.coHosts } })
+        .select("name username avatarHue avatarUrl isCreator verified")
+        .lean();
+      socket.emit("live:co-host:snapshot", {
+        streamId,
+        coHosts: coHosts.map((c) => ({
+          _id: c._id,
+          name: c.name,
+          username: c.username,
+          avatarHue: c.avatarHue,
+          avatarUrl: c.avatarUrl,
+          isCreator: c.isCreator,
+          verified: c.verified,
+        })),
+      });
+    }
 
     const count = await addLiveViewer(streamId, socket.id);
     await LiveStream.findByIdAndUpdate(streamId, { viewerCount: count, $max: { peakViewers: count } });
@@ -249,13 +277,40 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
     io.to(targetId).emit("live:webrtc:co-host:ice", { streamId, senderId: socket.id, senderParticipantId: userId, candidate, participantId });
   });
 
-  // ── Live chat — blocked for muted/banned users, checked against the keyword list ──
-  socket.on("live:chat", async ({ streamId, body }: { streamId: string; body: string }) => {
+  // ── Live chat — paid when the stream enables paidInteractions; blocked for
+  // muted/banned users BEFORE any charge; checked against the keyword list ──
+  const handleLiveChat = async ({
+    streamId,
+    body,
+    idempotencyKey,
+  }: {
+    streamId: string;
+    body: string;
+    idempotencyKey?: string;
+  }) => {
     if (!userId || !body?.trim()) return;
     const stream = await LiveStream.findById(streamId);
     if (!stream || stream.status !== "live") return;
-    if (stream.mutedUsers.some((m) => String(m) === userId) || stream.bannedUsers.some((b) => String(b) === userId)) {
-      socket.emit("live:chat-blocked", { streamId, reason: "You've been muted in this stream" });
+
+    // A5 — charge first (server-authoritative: the price comes from the DB,
+    // never the client). Muted/banned checks happen INSIDE the charge (before
+    // money moves). Free streams and exempt roles (host/moderators/staff)
+    // pass straight through, preserving the original free path.
+    const charge = await chargePaidInteraction({
+      streamId,
+      userId,
+      kind: "comment",
+      idempotencyKey,
+      stream,
+    });
+    if (!charge.ok) {
+      // Muted/banned keep the legacy chat-blocked event (existing toasts keep
+      // working) AND get the precise live:payment-failed payload the live
+      // page listens for; payment problems only get the payment event.
+      if (charge.reason === "muted" || charge.reason === "banned") {
+        socket.emit("live:chat-blocked", { streamId, reason: charge.message });
+      }
+      socket.emit("live:payment-failed", { streamId, kind: "comment", reason: charge.reason, message: charge.message });
       return;
     }
 
@@ -285,18 +340,48 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
         createdAt: message.createdAt,
       });
     }
-  });
+  };
 
-  // ── Reactions — counted in Redis for the current room and persisted in DB ──
-  socket.on("live:react", async ({ streamId, kind }: { streamId: string; kind?: string }) => {
+  socket.on("live:chat", handleLiveChat);
+  // live:paid-chat is the same flow with an explicit idempotency key — kept
+  // as a distinct event name so clients can surface pricing and retries.
+  socket.on("live:paid-chat", handleLiveChat);
+
+  // ── Reactions — counted in Redis for the current room and persisted in DB.
+  // Paid when the stream enables paidInteractions (banned/muted checked before
+  // any charge); otherwise the original free path. ──
+  const handleLiveReact = async ({
+    streamId,
+    kind,
+    idempotencyKey,
+  }: {
+    streamId: string;
+    kind?: string;
+    idempotencyKey?: string;
+  }) => {
     if (!userId) return;
     const stream = await LiveStream.findOne({ _id: streamId, status: "live" });
     if (!stream) return;
-    if (stream.bannedUsers.some((b) => String(b) === userId)) return;
+
+    const charge = await chargePaidInteraction({
+      streamId,
+      userId,
+      kind: "reaction",
+      idempotencyKey,
+      stream,
+    });
+    if (!charge.ok) {
+      socket.emit("live:payment-failed", { streamId, kind: "reaction", reason: charge.reason, message: charge.message });
+      return;
+    }
+
     const total = await incrLiveReactions(streamId, 1);
     await LiveStream.findByIdAndUpdate(streamId, { $inc: { reactionsCount: 1 } });
     io.to(`live:${streamId}`).emit("live:reaction", { streamId, kind: kind || "heart", total, from: userId });
-  });
+  };
+
+  socket.on("live:react", handleLiveReact);
+  socket.on("live:paid-react", handleLiveReact);
 
   // ── Moderation: pin/unpin, delete comment, kick a viewer (host or a stream moderator) ──
   socket.on("live:pin-comment", async ({ streamId, commentId }: { streamId: string; commentId: string }) => {
@@ -337,25 +422,18 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
     io.to(`user:${targetUserId}`).emit("live:kicked", { streamId });
   });
 
-  // ── Host ends their own stream ──
+  // ── Host ends their own stream (funnelled through the shared endStream()
+  // service so REST / socket / staff force-end / sweeper behave identically) ──
   socket.on("live:end", async ({ streamId }: { streamId: string }) => {
     if (!userId) return;
     const stream = await LiveStream.findOne({ _id: streamId, host: userId });
     if (!stream) return;
-    const wasLive = stream.status === "live";
-    if (wasLive) {
-      stream.status = "ended";
-      stream.endedAt = new Date();
-      stream.endReason = "Host ended the stream";
-      stream.viewerCount = 0;
-      stream.coHosts = [];
-      await stream.save();
-      await clearLiveViewers(streamId);
-      io.to(`live:${streamId}`).emit("live:ended", { streamId, reason: "Host ended the stream" });
-      io.to(`live:${streamId}`).emit("live:viewer-count", { streamId, viewerCount: 0 });
-    }
-    const anotherLiveStream = await LiveStream.exists({ host: userId, status: "live" });
-    if (!anotherLiveStream) await User.findByIdAndUpdate(userId, { isLive: false });
+    await endStream({
+      streamId,
+      reason: "Host ended the stream",
+      status: "ended",
+      notifyHost: false,
+    });
   });
 
   socket.on("disconnect", async () => {

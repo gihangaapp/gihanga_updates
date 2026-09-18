@@ -89,9 +89,8 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
 
   const maxCharLimit = 160;
   const isLongCaption = post.body && post.body.length > maxCharLimit;
-  const displayCaption = isLongCaption && !isExpanded
-    ? `${post.body.slice(0, maxCharLimit)}…`
-    : post.body;
+  const displayCaption =
+    isLongCaption && !isExpanded ? `${post.body.slice(0, maxCharLimit)}…` : post.body;
 
   return (
     <motion.article
@@ -103,12 +102,12 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
     >
       {/* Header */}
       <header className="flex items-center gap-3 p-4 pb-3">
-        <Link
-          to="/profile/$username"
-          params={{ username: post.author.username }}
-          className="press"
-        >
-          <GAvatar user={toDisplayUser(post.author)} size="md" ring={post.author.isLive ? "live" : "none"} />
+        <Link to="/profile/$username" params={{ username: post.author.username }} className="press">
+          <GAvatar
+            user={toDisplayUser(post.author)}
+            size="md"
+            ring={post.author.isLive ? "live" : "none"}
+          />
         </Link>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-1.5">
@@ -147,7 +146,10 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
             onClick={() =>
               followUser.mutate(
                 { username: post.author.username, follow: !following },
-                { onError: (err: any) => toast.error(err.message || "Couldn't update follow status") }
+                {
+                  onError: (err: any) =>
+                    toast.error(err.message || "Couldn't update follow status"),
+                },
               )
             }
           >
@@ -175,7 +177,10 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
                 onClick={() => {
                   submitNotInterested.mutate(
                     { contentId: post._id, reason: "not_interested" },
-                    { onSuccess: () => toast.success("Recorded. We will show less content like this.") }
+                    {
+                      onSuccess: () =>
+                        toast.success("Recorded. We will show less content like this."),
+                    },
                   );
                 }}
               >
@@ -239,14 +244,19 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
         </div>
       )}
 
-      {/* Media Player / Carousel */}
+      {/* Media Player / Carousel — B1: pass the persisted media geometry so
+          the stage reserves the image's true height (no crop, zero CLS). */}
       <PostMediaCarousel
         mediaUrlString={post.mediaUrl}
         thumbnailUrl={post.thumbnailUrl}
+        blurDataUrl={post.blurDataUrl}
+        aspectRatio={post.aspectRatio}
+        mediaItems={post.media}
         kind={post.kind}
         body={post.body}
         liked={post.liked}
         onDoubleTapLike={handleLike}
+        priority={index < 2}
       />
 
       {/* Action Bar */}
@@ -260,7 +270,7 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
             aria-pressed={post.liked}
             className={cn(
               "press flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-colors",
-              post.liked ? "text-danger bg-danger/10" : "text-muted-foreground hover:bg-muted"
+              post.liked ? "text-danger bg-danger/10" : "text-muted-foreground hover:bg-muted",
             )}
           >
             <motion.span whileTap={{ scale: 1.4 }}>
@@ -276,7 +286,9 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
             aria-label="Comment"
             className={cn(
               "press flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-colors",
-              inlineCommentsOpen ? "text-primary bg-primary-soft" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              inlineCommentsOpen
+                ? "text-primary bg-primary-soft"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
             )}
           >
             <MessageCircle className="size-4" />
@@ -291,7 +303,9 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
             className="press flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <Share2 className="size-4" />
-            {post.sharesCount > 0 && <span className="tabular-nums">{formatCount(post.sharesCount)}</span>}
+            {post.sharesCount > 0 && (
+              <span className="tabular-nums">{formatCount(post.sharesCount)}</span>
+            )}
           </button>
         </div>
 
@@ -306,7 +320,9 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
           aria-pressed={post.bookmarked}
           className={cn(
             "press flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition-colors",
-            post.bookmarked ? "text-primary bg-primary-soft font-bold" : "text-muted-foreground hover:bg-muted"
+            post.bookmarked
+              ? "text-primary bg-primary-soft font-bold"
+              : "text-muted-foreground hover:bg-muted",
           )}
         >
           <Bookmark className={cn("size-4", post.bookmarked && "fill-current")} />

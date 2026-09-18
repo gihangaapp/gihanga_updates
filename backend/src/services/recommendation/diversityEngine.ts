@@ -10,8 +10,8 @@ export function applyDiversity(
   const result: ScoredCandidate[] = [];
   const remaining = [...rankedCandidates];
 
-  let authorCountMap = new Map<string, number>();
-  let tagCountMap = new Map<string, number>();
+  const authorCountMap = new Map<string, number>();
+  const tagCountMap = new Map<string, number>();
   let lastAuthor = "";
   let lastTag = "";
 

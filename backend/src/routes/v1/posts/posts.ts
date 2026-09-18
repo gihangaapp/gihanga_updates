@@ -60,6 +60,52 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
       return res.status(400).json({ error: "Text posts need a body" });
     }
 
+    // B1 — persist the media geometry the upload API already returns
+    // (width/height/aspectRatio/blurDataUrl) so the feed can reserve the
+    // image's true height BEFORE it loads: zero crop, zero layout shift.
+    // All numbers are bounds-checked; nothing client-supplied is trusted
+    // beyond sanity (aspectRatio must actually match a plausible image).
+    const sanitizeDim = (raw: unknown): number | undefined => {
+      const n = Number(raw);
+      return Number.isFinite(n) && n >= 1 && n <= 20000 ? Math.round(n) : undefined;
+    };
+    const sanitizeRatio = (raw: unknown): number | undefined => {
+      const n = Number(raw);
+      return Number.isFinite(n) && n >= 0.1 && n <= 10 ? n : undefined;
+    };
+    const sanitizeBlur = (raw: unknown): string | undefined => {
+      if (typeof raw !== "string") return undefined;
+      if (!raw.startsWith("data:image/") || raw.length > 200_000) return undefined;
+      return raw;
+    };
+
+    const mediaWidth = sanitizeDim(req.body.mediaWidth);
+    const mediaHeight = sanitizeDim(req.body.mediaHeight);
+    const aspectRatio = sanitizeRatio(req.body.aspectRatio);
+    const blurDataUrl = sanitizeBlur(req.body.blurDataUrl);
+
+    // Per-item metadata for multi-image posts: each entry { url, width,
+    // height, aspectRatio, kind } — validated the same way and only kept
+    // when its url is part of this post's mediaUrl list.
+    const rawMediaList: unknown[] = Array.isArray(req.body.media) ? req.body.media : [];
+    const urlWhitelist = new Set(String(mediaUrl ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+    const media = rawMediaList
+      .filter(
+        (item): item is Record<string, unknown> =>
+          item !== null &&
+          typeof item === "object" &&
+          typeof (item as Record<string, unknown>).url === "string" &&
+          urlWhitelist.has((item as Record<string, unknown>).url as string),
+      )
+      .slice(0, 10)
+      .map((item) => ({
+        url: String(item.url),
+        width: sanitizeDim(item.width),
+        height: sanitizeDim(item.height),
+        aspectRatio: sanitizeRatio(item.aspectRatio),
+        kind: item.kind === "video" ? "video" : "photo",
+      }));
+
     const cleanTags: string[] = Array.isArray(tags)
       ? tags.map((t: string) => String(t).replace(/^#/, "").trim().toLowerCase()).filter(Boolean).slice(0, 10)
       : [];
@@ -73,6 +119,11 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
       mediaMimeType,
       duration,
       thumbnailUrl,
+      mediaWidth,
+      mediaHeight,
+      aspectRatio,
+      blurDataUrl,
+      media: media.length > 0 ? media : undefined,
       location: location?.trim(),
       tags: cleanTags,
       audience: audience && ["public", "followers", "private"].includes(audience) ? audience : "public",

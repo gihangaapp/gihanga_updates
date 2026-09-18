@@ -5,7 +5,13 @@ export interface StaffReport {
   _id: string;
   reporter: { name: string; username: string; avatarHue: number; avatarUrl: string | null };
   target: { name: string; username: string; avatarHue: number; avatarUrl: string | null };
-  targetPost?: { _id: string; kind: string; mediaUrl?: string; thumbnailUrl?: string; body: string };
+  targetPost?: {
+    _id: string;
+    kind: string;
+    mediaUrl?: string;
+    thumbnailUrl?: string;
+    body: string;
+  };
   targetLive?: { _id: string; title: string; status: string };
   reason: string;
   excerpt?: string;
@@ -18,15 +24,23 @@ export interface StaffReport {
 export function useModerationQueue(status: string) {
   return useQuery({
     queryKey: ["staff", "moderation", "queue", status],
-    queryFn: () => api.get<{ reports: StaffReport[] }>(`/system/moderation/queue?status=${status}`, true),
+    queryFn: () =>
+      api.get<{ reports: StaffReport[] }>(`/system/moderation/queue?status=${status}`, true),
   });
 }
 
 export function useActionReport() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, action, reason }: { id: string; action: "remove" | "warn" | "suspend" | "dismiss"; reason?: string | undefined }) =>
-      api.post(`/system/moderation/reports/${id}/action`, { action, reason }, true),
+    mutationFn: ({
+      id,
+      action,
+      reason,
+    }: {
+      id: string;
+      action: "remove" | "warn" | "suspend" | "dismiss";
+      reason?: string | undefined;
+    }) => api.post(`/system/moderation/reports/${id}/action`, { action, reason }, true),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff", "moderation", "queue"] }),
   });
 }
@@ -51,8 +65,16 @@ export function useModerationRules() {
 export function useUpdateModerationRule() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ key, ...input }: { key: string; enabled?: boolean; config?: Record<string, any>; name?: string; description?: string }) =>
-      api.put(`/system/moderation/rules/${key}`, input, true),
+    mutationFn: ({
+      key,
+      ...input
+    }: {
+      key: string;
+      enabled?: boolean;
+      config?: Record<string, any>;
+      name?: string;
+      description?: string;
+    }) => api.put(`/system/moderation/rules/${key}`, input, true),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff", "moderation", "rules"] }),
   });
 }

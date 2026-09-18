@@ -47,7 +47,12 @@ export interface AuditEntry {
   createdAt: string;
 }
 
-export function useAuditLog(filters: { action?: string | undefined; from?: string | undefined; to?: string | undefined; page?: number | undefined }) {
+export function useAuditLog(filters: {
+  action?: string | undefined;
+  from?: string | undefined;
+  to?: string | undefined;
+  page?: number | undefined;
+}) {
   const query = new URLSearchParams();
   if (filters.action) query.set("action", filters.action);
   if (filters.from) query.set("from", filters.from);
@@ -57,10 +62,13 @@ export function useAuditLog(filters: { action?: string | undefined; from?: strin
   return useQuery({
     queryKey: ["staff", "audit", filters],
     queryFn: () =>
-      api.get<{ entries: AuditEntry[]; page: number; total: number; hasMore: boolean; scope: "own" | "all" }>(
-        `/system/audit?${query}`,
-        true,
-      ),
+      api.get<{
+        entries: AuditEntry[];
+        page: number;
+        total: number;
+        hasMore: boolean;
+        scope: "own" | "all";
+      }>(`/system/audit?${query}`, true),
   });
 }
 
@@ -69,14 +77,19 @@ export function useAuditLog(filters: { action?: string | undefined; from?: strin
 export function useStaffSettings() {
   return useQuery({
     queryKey: ["staff", "settings"],
-    queryFn: () => api.get<{ flags: { key: string; value: any }[]; momoVisible: boolean }>("/system/settings", true),
+    queryFn: () =>
+      api.get<{ flags: { key: string; value: any }[]; momoVisible: boolean }>(
+        "/system/settings",
+        true,
+      ),
   });
 }
 
 export function useSetFeatureFlag() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ key, value }: { key: string; value: boolean }) => api.put(`/system/settings/flags/${key}`, { value }, true),
+    mutationFn: ({ key, value }: { key: string; value: boolean }) =>
+      api.put(`/system/settings/flags/${key}`, { value }, true),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff", "settings"] }),
   });
 }
@@ -84,7 +97,8 @@ export function useSetFeatureFlag() {
 export function useSetMomoVisibility() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (visible: boolean) => api.put("/system/settings/momo-visibility", { visible }, true),
+    mutationFn: (visible: boolean) =>
+      api.put("/system/settings/momo-visibility", { visible }, true),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff", "settings"] }),
   });
 }
@@ -108,7 +122,8 @@ export function useStaffCategories() {
 export function useCreateCategory() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { name: string; description?: string }) => api.post("/system/settings/categories", input, true),
+    mutationFn: (input: { name: string; description?: string }) =>
+      api.post("/system/settings/categories", input, true),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff", "categories"] }),
   });
 }
@@ -116,8 +131,15 @@ export function useCreateCategory() {
 export function useUpdateCategory() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...input }: { id: string; active?: boolean; name?: string; description?: string }) =>
-      api.patch(`/system/settings/categories/${id}`, input, true),
+    mutationFn: ({
+      id,
+      ...input
+    }: {
+      id: string;
+      active?: boolean;
+      name?: string;
+      description?: string;
+    }) => api.patch(`/system/settings/categories/${id}`, input, true),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff", "categories"] }),
   });
 }

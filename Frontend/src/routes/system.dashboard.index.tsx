@@ -15,7 +15,10 @@ function useOverview() {
     queryKey: ["staff", "overview"],
     queryFn: async () => {
       try {
-        const res = await api.get<{ stats: Record<string, number>; role: string }>("/system/overview", true);
+        const res = await api.get<{ stats: Record<string, number>; role: string }>(
+          "/system/overview",
+          true,
+        );
         return res;
       } catch (err) {
         console.error("[useOverview Error]:", err);
@@ -26,14 +29,62 @@ function useOverview() {
 }
 
 const cards: { key: string; label: string; icon: typeof Users; to: string; tone: string }[] = [
-  { key: "pendingReports", label: "Pending reports", icon: AlertTriangle, to: "/system/dashboard/moderation", tone: "text-danger bg-danger/10" },
-  { key: "totalUsers", label: "Total users", icon: Users, to: "/system/dashboard/accounts", tone: "text-info bg-sky-500/10" },
-  { key: "newUsers24h", label: "New users (24h)", icon: Users, to: "/system/dashboard/accounts", tone: "text-success bg-emerald-500/10" },
-  { key: "suspendedAccounts", label: "Suspended/banned", icon: UserX, to: "/system/dashboard/accounts", tone: "text-warning bg-amber-500/10" },
-  { key: "pendingPayments", label: "Payments pending", icon: Wallet, to: "/system/dashboard/payments", tone: "text-primary bg-indigo-500/10" },
-  { key: "liveNow", label: "Live right now", icon: Radio, to: "/system/dashboard/live", tone: "text-danger bg-danger/10" },
-  { key: "pendingCampaigns", label: "Ad campaigns to review", icon: Target, to: "/system/dashboard/campaigns", tone: "text-accent bg-violet-500/10" },
-  { key: "totalPosts", label: "Total posts", icon: FileText, to: "/system/dashboard/moderation", tone: "text-muted-foreground bg-muted" },
+  {
+    key: "pendingReports",
+    label: "Pending reports",
+    icon: AlertTriangle,
+    to: "/system/dashboard/moderation",
+    tone: "text-danger bg-danger/10",
+  },
+  {
+    key: "totalUsers",
+    label: "Total users",
+    icon: Users,
+    to: "/system/dashboard/accounts",
+    tone: "text-info bg-sky-500/10",
+  },
+  {
+    key: "newUsers24h",
+    label: "New users (24h)",
+    icon: Users,
+    to: "/system/dashboard/accounts",
+    tone: "text-success bg-emerald-500/10",
+  },
+  {
+    key: "suspendedAccounts",
+    label: "Suspended/banned",
+    icon: UserX,
+    to: "/system/dashboard/accounts",
+    tone: "text-warning bg-amber-500/10",
+  },
+  {
+    key: "pendingPayments",
+    label: "Payments pending",
+    icon: Wallet,
+    to: "/system/dashboard/payments",
+    tone: "text-primary bg-indigo-500/10",
+  },
+  {
+    key: "liveNow",
+    label: "Live right now",
+    icon: Radio,
+    to: "/system/dashboard/live",
+    tone: "text-danger bg-danger/10",
+  },
+  {
+    key: "pendingCampaigns",
+    label: "Ad campaigns to review",
+    icon: Target,
+    to: "/system/dashboard/campaigns",
+    tone: "text-accent bg-violet-500/10",
+  },
+  {
+    key: "totalPosts",
+    label: "Total posts",
+    icon: FileText,
+    to: "/system/dashboard/moderation",
+    tone: "text-muted-foreground bg-muted",
+  },
 ];
 
 function DashboardIndex() {
@@ -49,7 +100,11 @@ function DashboardIndex() {
           Welcome back, {staffUser?.name?.split(" ")[0]}
         </h1>
         <p className="text-sm text-muted-foreground">
-          Signed in as <span className="font-semibold text-primary">{staffUser ? (ROLE_LABEL[staffUser.role] || staffUser.role) : ""}</span> — here's what needs attention.
+          Signed in as{" "}
+          <span className="font-semibold text-primary">
+            {staffUser ? ROLE_LABEL[staffUser.role] || staffUser.role : ""}
+          </span>{" "}
+          — here's what needs attention.
         </p>
       </div>
 
@@ -66,8 +121,12 @@ function DashboardIndex() {
               <span className={`mb-3 grid size-9 place-items-center rounded-xl ${c.tone}`}>
                 <c.icon className="size-4.5" />
               </span>
-              <p className="font-display text-2xl font-extrabold text-foreground">{formatCount(stats[c.key] ?? 0)}</p>
-              <p className="mt-0.5 text-xs font-medium text-muted-foreground group-hover:text-foreground/80">{c.label}</p>
+              <p className="font-display text-2xl font-extrabold text-foreground">
+                {formatCount(stats[c.key] ?? 0)}
+              </p>
+              <p className="mt-0.5 text-xs font-medium text-muted-foreground group-hover:text-foreground/80">
+                {c.label}
+              </p>
             </Link>
           ))}
           {!visible.length && (

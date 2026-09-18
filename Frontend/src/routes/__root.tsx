@@ -15,7 +15,6 @@ import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth-context";
 import { RealtimeProvider } from "@/components/providers/RealtimeProvider";
 
-
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -138,4 +137,3 @@ function RootComponent() {
     </QueryClientProvider>
   );
 }
-

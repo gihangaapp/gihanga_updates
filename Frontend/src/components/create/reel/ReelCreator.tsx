@@ -54,9 +54,11 @@ export function ReelCreator({ onClose }: ReelCreatorProps) {
   const handleVideoSelect = (files: MediaFile[]) => {
     if (files.length > 0) {
       const selected = files[0];
-      setVideoFile(selected);
-      setTrimStart(0);
-      setTrimEnd(selected.duration || 120);
+      if (selected) {
+        setVideoFile(selected);
+        setTrimStart(0);
+        setTrimEnd(selected.duration || 120);
+      }
       setCoverTimestamp(0);
       setStep("editor");
     }
@@ -70,15 +72,19 @@ export function ReelCreator({ onClose }: ReelCreatorProps) {
       location,
       audience,
       commentsEnabled,
-      media: [{
-        fileName: videoFile.file.name,
-        mimeType: videoFile.file.type,
-        isVideo: true,
-      }],
+      media: [
+        {
+          fileName: videoFile.file.name,
+          mimeType: videoFile.file.type,
+          isVideo: true,
+        },
+      ],
       trimStart,
       trimEnd,
       coverTimestamp,
-      tags: Array.from(caption.matchAll(/#(\w+)/g)).map((m) => m[1]),
+      tags: Array.from(caption.matchAll(/#(\w+)/g))
+        .map((m) => m[1])
+        .filter((t): t is string => t !== undefined),
       taggedPeople,
     });
     toast.success("Reel saved to drafts");
@@ -99,7 +105,9 @@ export function ReelCreator({ onClose }: ReelCreatorProps) {
       await new Promise((r) => setTimeout(r, 600)); // Processing simulation
 
       setUploadStage("publishing");
-      const tags = Array.from(caption.matchAll(/#(\w+)/g)).map((m) => m[1]);
+      const tags = Array.from(caption.matchAll(/#(\w+)/g))
+        .map((m) => m[1])
+        .filter((t): t is string => t !== undefined);
 
       await createPost.mutateAsync({
         kind: "reel",
@@ -238,11 +246,7 @@ export function ReelCreator({ onClose }: ReelCreatorProps) {
             </div>
 
             <div className="flex items-center justify-between pt-4 border-t border-border mt-auto">
-              <Button
-                variant="outline"
-                onClick={() => setStep("preview")}
-                className="gap-1.5"
-              >
+              <Button variant="outline" onClick={() => setStep("preview")} className="gap-1.5">
                 <Eye className="size-4" />
                 Preview Reel
               </Button>

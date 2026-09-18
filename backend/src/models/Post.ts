@@ -4,6 +4,14 @@ export type MediaKind = "photo" | "video" | "reel" | "text";
 export type PostStatus = "published" | "scheduled" | "draft" | "removed";
 export type PostAudience = "public" | "followers" | "private";
 
+export interface PostMediaItem {
+  url: string;
+  width?: number;
+  height?: number;
+  aspectRatio?: number;
+  kind?: "photo" | "video";
+}
+
 export interface IPost extends Document {
   author: Types.ObjectId;
   kind: MediaKind;
@@ -13,6 +21,13 @@ export interface IPost extends Document {
   mediaMimeType?: string;
   duration?: string;
   thumbnailUrl?: string;
+  /** B1 — intrinsic media geometry so the feed can size images WITHOUT cropping. */
+  mediaWidth?: number;
+  mediaHeight?: number;
+  aspectRatio?: number;
+  blurDataUrl?: string;
+  /** B1 — per-item metadata for multi-image posts (parallel to mediaUrl's comma list). */
+  media?: PostMediaItem[];
   location?: string;
   tags: string[];
   audience: PostAudience;
@@ -39,6 +54,19 @@ const PostSchema = new Schema<IPost>(
     mediaMimeType: { type: String },
     duration: { type: String },
     thumbnailUrl: { type: String },
+    mediaWidth: { type: Number, min: 1, max: 20000 },
+    mediaHeight: { type: Number, min: 1, max: 20000 },
+    aspectRatio: { type: Number, min: 0.1, max: 10 },
+    blurDataUrl: { type: String, maxlength: 200_000 },
+    media: [
+      {
+        url: { type: String, required: true },
+        width: { type: Number, min: 1, max: 20000 },
+        height: { type: Number, min: 1, max: 20000 },
+        aspectRatio: { type: Number, min: 0.1, max: 10 },
+        kind: { type: String, enum: ["photo", "video"] },
+      },
+    ],
     location: { type: String, maxlength: 100 },
     tags: [{ type: String, lowercase: true }],
     audience: { type: String, enum: ["public", "followers", "private"], default: "public" },

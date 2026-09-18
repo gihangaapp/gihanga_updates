@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, MoreHorizontal, Send, Trash2, Volume2, VolumeX, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  MoreHorizontal,
+  Send,
+  Trash2,
+  Volume2,
+  VolumeX,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { GAvatar } from "@/components/common/GAvatar";
 import { Button } from "@/components/ui/button";
@@ -61,7 +70,7 @@ export function StoryViewer({
   const replyToStory = useReplyToStory();
 
   const handleSendReply = async () => {
-    if (!replyText.trim() || !item?._id) return;
+    if (!replyText.trim() || !item?._id || !group) return;
     const msg = replyText.trim();
     setReplyText("");
     try {
@@ -124,13 +133,13 @@ export function StoryViewer({
 
   // Touch swipe handlers for switching stories
   const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.targetTouches[0].clientX;
+    touchStartX.current = e.targetTouches[0]?.clientX ?? 0;
     touchEndX.current = null;
     setPaused(true);
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    touchEndX.current = e.targetTouches[0].clientX;
+    touchEndX.current = e.targetTouches[0]?.clientX ?? 0;
   };
 
   const handleTouchEnd = () => {
@@ -277,12 +286,17 @@ export function StoryViewer({
         <div
           className={cn(
             "absolute inset-0 bg-gradient-to-b from-black/70 via-transparent to-black/80 transition-opacity",
-            paused && "opacity-0"
+            paused && "opacity-0",
           )}
         />
 
         {/* Slide Progress Bars */}
-        <div className={cn("absolute inset-x-3 top-3 z-30 flex gap-1 transition-opacity", paused && "opacity-0")}>
+        <div
+          className={cn(
+            "absolute inset-x-3 top-3 z-30 flex gap-1 transition-opacity",
+            paused && "opacity-0",
+          )}
+        >
           {Array.from({ length: count }).map((_, i) => (
             <span key={i} className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/30">
               <span
@@ -294,7 +308,12 @@ export function StoryViewer({
         </div>
 
         {/* Header Overlay */}
-        <header className={cn("absolute inset-x-3 top-7 z-30 flex items-center gap-3 pt-2 text-white transition-opacity", paused && "opacity-0")}>
+        <header
+          className={cn(
+            "absolute inset-x-3 top-7 z-30 flex items-center gap-3 pt-2 text-white transition-opacity",
+            paused && "opacity-0",
+          )}
+        >
           <GAvatar user={toDisplayUser(group.author)} size="sm" ring="story" />
           <Link
             to="/profile/$username"
@@ -317,14 +336,16 @@ export function StoryViewer({
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button type="button" aria-label="Story options" className="press grid size-8 place-items-center rounded-full bg-black/40 text-white backdrop-blur-md">
+              <button
+                type="button"
+                aria-label="Story options"
+                className="press grid size-8 place-items-center rounded-full bg-black/40 text-white backdrop-blur-md"
+              >
                 <MoreHorizontal className="size-4" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setShareOpen(true)}>
-                Share story
-              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShareOpen(true)}>Share story</DropdownMenuItem>
               {isOwnStory ? (
                 <>
                   <DropdownMenuSeparator />

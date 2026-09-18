@@ -65,7 +65,12 @@ function ResetPasswordPage() {
           <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-primary" />
           <p className="text-sm text-foreground/80">Your password has been reset successfully.</p>
         </div>
-        <Button variant="brand" size="lg" className="mt-5 w-full" onClick={() => navigate({ to: "/login" })}>
+        <Button
+          variant="brand"
+          size="lg"
+          className="mt-5 w-full"
+          onClick={() => navigate({ to: "/login" })}
+        >
           Sign in
         </Button>
       </AuthLayout>

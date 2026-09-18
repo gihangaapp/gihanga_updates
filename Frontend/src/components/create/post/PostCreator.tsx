@@ -1,6 +1,15 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Crop, Eye, Film, Image as ImageIcon, MessageSquare, Sparkles, UploadCloud, X } from "lucide-react";
+import {
+  Crop,
+  Eye,
+  Film,
+  Image as ImageIcon,
+  MessageSquare,
+  Sparkles,
+  UploadCloud,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -70,7 +79,9 @@ export function PostCreator({ onClose }: PostCreatorProps) {
         mimeType: f.file.type,
         isVideo: f.isVideo,
       })),
-      tags: Array.from(caption.matchAll(/#(\w+)/g)).map((m) => m[1]),
+      tags: Array.from(caption.matchAll(/#(\w+)/g))
+        .map((m) => m[1])
+        .filter((t): t is string => t !== undefined),
       taggedPeople,
     });
     toast.success("Draft saved");
@@ -79,7 +90,8 @@ export function PostCreator({ onClose }: PostCreatorProps) {
 
   const handleRemoveMedia = (index: number) => {
     const next = files.filter((_, i) => i !== index);
-    URL.revokeObjectURL(files[index].previewUrl);
+    const removed = files[index];
+    if (removed) URL.revokeObjectURL(removed.previewUrl);
     setFiles(next);
     if (selectedIndex >= next.length) {
       setSelectedIndex(Math.max(0, next.length - 1));
@@ -96,20 +108,49 @@ export function PostCreator({ onClose }: PostCreatorProps) {
       let mediaUrl: string | undefined;
       let mediaKey: string | undefined;
       let isVideo = false;
+      // B1 — collect the geometry the upload API returns so the feed can
+      // size this post's media without cropping and without layout shift.
+      let firstWidth: number | undefined;
+      let firstHeight: number | undefined;
+      let firstRatio: number | undefined;
+      let firstBlur: string | undefined;
+      let thumbnailUrl: string | undefined;
+      const mediaItems: {
+        url: string;
+        width?: number | undefined;
+        height?: number | undefined;
+        aspectRatio?: number | undefined;
+        kind?: "photo" | "video" | undefined;
+      }[] = [];
 
       if (files.length > 0) {
         setUploadStage("uploading");
         const uploadedUrls: string[] = [];
-        isVideo = files[0].isVideo;
+        isVideo = files[0]?.isVideo ?? false;
 
         for (let i = 0; i < files.length; i++) {
           const item = files[i];
+          if (!item) continue;
           const kind = item.isVideo ? "videos" : "photos";
           const uploaded = await uploadFile(kind, item.file, (pct) => {
             setUploadProgress(Math.round(((i + pct / 100) / files.length) * 100));
           });
           uploadedUrls.push(uploaded.url);
-          if (i === 0) mediaKey = uploaded.key;
+          if (i === 0) {
+            mediaKey = uploaded.key;
+            firstWidth = uploaded.width;
+            firstHeight = uploaded.height;
+            firstRatio = uploaded.aspectRatio;
+            firstBlur = uploaded.blurDataUrl;
+            thumbnailUrl = uploaded.thumbnailUrl;
+          }
+          mediaItems.push({
+            url: uploaded.url,
+            width: uploaded.width,
+            height: uploaded.height,
+            aspectRatio: uploaded.aspectRatio,
+            kind: item.isVideo ? "video" : "photo",
+          });
         }
 
         mediaUrl = uploadedUrls.join(",");
@@ -119,16 +160,25 @@ export function PostCreator({ onClose }: PostCreatorProps) {
       await new Promise((r) => setTimeout(r, 400)); // Smooth processing state display
 
       setUploadStage("publishing");
-      const tags = Array.from(caption.matchAll(/#(\w+)/g)).map((m) => m[1]);
+      const tags = Array.from(caption.matchAll(/#(\w+)/g))
+        .map((m) => m[1])
+        .filter((t): t is string => t !== undefined);
 
       await createPost.mutateAsync({
         kind: isVideo ? "video" : files.length > 0 ? "photo" : "text",
         body: caption.trim(),
         mediaUrl,
         mediaKey,
+        thumbnailUrl,
         location: location.trim() || undefined,
         tags,
         audience,
+        // B1 — persisted media geometry.
+        mediaWidth: firstWidth,
+        mediaHeight: firstHeight,
+        aspectRatio: firstRatio,
+        blurDataUrl: firstBlur,
+        media: mediaItems.length > 0 ? mediaItems : undefined,
       });
 
       setUploadStage("completed");
@@ -146,9 +196,10 @@ export function PostCreator({ onClose }: PostCreatorProps) {
   if (!user) return null;
 
   return (
-    <div className="flex flex-col gap-5 p-5 max-w-[720px] mx-auto w-full">
-      {/* Header */}
-      <div className="flex items-center justify-between border-b border-border pb-4">
+    <div className="flex h-full min-h-0 flex-col max-w-[720px] mx-auto w-full overscroll-contain">
+      {/* Header — fixed; the body below scrolls so the footer stays reachable
+          on short viewports (B3: header / body / footer structure). */}
+      <div className="flex shrink-0 items-center justify-between border-b border-border p-4 pb-3">
         <div className="flex items-center gap-2">
           <div className="grid size-9 place-items-center rounded-xl bg-primary-soft text-primary">
             <Sparkles className="size-5" />
@@ -174,122 +225,123 @@ export function PostCreator({ onClose }: PostCreatorProps) {
         </div>
       </div>
 
-      {/* Main Content Area */}
-      {step === "preview" ? (
-        <PostPreview
-          user={user}
-          caption={caption}
-          files={files}
-          location={location}
-          audience={audience}
-          onEdit={() => setStep("compose")}
-          onPublish={handlePublish}
-          isPublishing={uploadStage !== null}
-        />
-      ) : step === "edit-media" && files[selectedIndex] ? (
-        <MediaEditor
-          file={files[selectedIndex]}
-          onSave={(edited) => {
-            const next = [...files];
-            next[selectedIndex] = edited;
-            setFiles(next);
-            setStep("compose");
-          }}
-          onCancel={() => setStep("compose")}
-        />
-      ) : (
-        <div className="grid gap-6 lg:grid-cols-12">
-          {/* Left Column: Media Section */}
-          <div className="flex flex-col gap-4 lg:col-span-6">
-            {files.length > 0 ? (
-              <div className="flex flex-col gap-3">
-                <MediaPreview
-                  files={files}
-                  selectedIndex={selectedIndex}
-                  onSelect={setSelectedIndex}
-                  onRemove={handleRemoveMedia}
-                  onReorder={setFiles}
-                />
-                <div className="flex items-center justify-between">
-                  <MediaPicker
+      {/* Main Content Area — flex-1 min-h-0 so IT scrolls (not the dialog),
+          with the footer always visible and safe-area padded below. */}
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 lg:p-5">
+        {step === "preview" ? (
+          <PostPreview
+            user={user}
+            caption={caption}
+            files={files}
+            location={location}
+            audience={audience}
+            onEdit={() => setStep("compose")}
+            onPublish={handlePublish}
+            isPublishing={uploadStage !== null}
+          />
+        ) : step === "edit-media" && files[selectedIndex] ? (
+          <MediaEditor
+            file={files[selectedIndex]}
+            onSave={(edited) => {
+              const next = [...files];
+              next[selectedIndex] = edited;
+              setFiles(next);
+              setStep("compose");
+            }}
+            onCancel={() => setStep("compose")}
+          />
+        ) : (
+          <div className="grid gap-6 lg:grid-cols-12">
+            {/* Left Column: Media Section */}
+            <div className="flex flex-col gap-4 lg:col-span-6">
+              {files.length > 0 ? (
+                <div className="flex flex-col gap-3">
+                  <MediaPreview
                     files={files}
-                    onChange={setFiles}
-                    multiple
-                    compact
+                    selectedIndex={selectedIndex}
+                    onSelect={setSelectedIndex}
+                    onRemove={handleRemoveMedia}
+                    onReorder={setFiles}
                   />
-                  {!files[selectedIndex]?.isVideo && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setStep("edit-media")}
-                      className="gap-1.5 text-xs font-semibold"
-                    >
-                      <Crop className="size-3.5" />
-                      Edit Image
-                    </Button>
-                  )}
+                  <div className="flex items-center justify-between">
+                    <MediaPicker files={files} onChange={setFiles} multiple compact />
+                    {!files[selectedIndex]?.isVideo && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setStep("edit-media")}
+                        className="gap-1.5 text-xs font-semibold"
+                      >
+                        <Crop className="size-3.5" />
+                        Edit Image
+                      </Button>
+                    )}
+                  </div>
                 </div>
+              ) : (
+                <MediaPicker files={files} onChange={setFiles} multiple accept="all" />
+              )}
+            </div>
+
+            {/* Right Column: Composer Controls */}
+            <div className="flex flex-col gap-4 lg:col-span-6">
+              {/* User & Audience */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <GAvatar user={user} size="sm" />
+                  <span className="text-sm font-bold">{user.name}</span>
+                </div>
+                <AudienceSelector value={audience} onChange={setAudience} compact />
               </div>
-            ) : (
-              <MediaPicker
-                files={files}
-                onChange={setFiles}
-                multiple
-                accept="all"
+
+              {/* Caption Textarea */}
+              <CaptionEditor
+                value={caption}
+                onChange={setCaption}
+                placeholder={`What's the update, ${user.name.split(" ")[0]}?`}
+                className="rounded-2xl border border-border p-3 bg-surface"
               />
-            )}
-          </div>
 
-          {/* Right Column: Composer Controls */}
-          <div className="flex flex-col gap-4 lg:col-span-6">
-            {/* User & Audience */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <GAvatar user={user} size="sm" />
-                <span className="text-sm font-bold">{user.name}</span>
+              {/* Location & Tag People */}
+              <div className="grid gap-3 pt-1">
+                <LocationInput value={location} onChange={setLocation} />
+                <TagPeopleInput taggedUsers={taggedPeople} onChange={setTaggedPeople} />
               </div>
-              <AudienceSelector value={audience} onChange={setAudience} compact />
-            </div>
 
-            {/* Caption Textarea */}
-            <CaptionEditor
-              value={caption}
-              onChange={setCaption}
-              placeholder={`What's the update, ${user.name.split(" ")[0]}?`}
-              className="rounded-2xl border border-border p-3 bg-surface"
-            />
-
-            {/* Location & Tag People */}
-            <div className="grid gap-3 pt-1">
-              <LocationInput value={location} onChange={setLocation} />
-              <TagPeopleInput taggedUsers={taggedPeople} onChange={setTaggedPeople} />
-            </div>
-
-            {/* Footer Buttons */}
-            <div className="flex items-center justify-between pt-4 border-t border-border mt-auto">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setStep("preview")}
-                disabled={files.length === 0 && !caption.trim()}
-                className="gap-1.5"
-              >
-                <Eye className="size-4" />
-                Preview
-              </Button>
-              <Button
-                type="button"
-                variant="brand"
-                disabled={files.length === 0 && !caption.trim()}
-                onClick={handlePublish}
-              >
-                Publish Post
-              </Button>
+              {/* (Footer actions moved to the sticky bar below — always reachable.) */}
             </div>
           </div>
+        )}
+      </div>
+
+      {/* Sticky footer with safe-area padding — the Publish/Preview buttons
+          are ALWAYS reachable, even on 320×480 screens with the keyboard up. */}
+      <div className="sticky bottom-0 shrink-0 border-t border-border bg-surface/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur lg:static lg:border-t-0 lg:bg-transparent lg:p-4">
+        <div className="flex items-center justify-between gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setStep("preview")}
+            disabled={files.length === 0 && !caption.trim()}
+            className="gap-1.5 flex-1 sm:flex-none"
+          >
+            <Eye className="size-4" />
+            Preview
+          </Button>
+          <Button
+            type="button"
+            variant="brand"
+            size="sm"
+            disabled={files.length === 0 && !caption.trim()}
+            onClick={handlePublish}
+            className="gap-1.5 flex-1 sm:flex-none"
+          >
+            Publish Post
+          </Button>
         </div>
-      )}
+      </div>
 
       {/* Upload Progress Overlay */}
       {uploadStage && (

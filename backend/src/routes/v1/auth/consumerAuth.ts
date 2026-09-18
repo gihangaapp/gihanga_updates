@@ -176,7 +176,7 @@ router.post("/register", async (req: Request, res: Response) => {
       kingdomPoints: 100,
     });
 
-    let emailSent = true;
+    const emailSent = true;
 
     const tokens = signConsumerTokens(user);
     const refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);

@@ -18,7 +18,8 @@ export function useSearch(query: string) {
 export function useTrendingTags() {
   return useQuery({
     queryKey: ["trending-tags"],
-    queryFn: () => api.get<{ tags: { tag: string; postsCount: number; trend: number }[] }>("/search/trending"),
+    queryFn: () =>
+      api.get<{ tags: { tag: string; postsCount: number; trend: number }[] }>("/search/trending"),
   });
 }
 

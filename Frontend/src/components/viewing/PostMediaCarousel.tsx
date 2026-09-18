@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeft, ChevronRight, Heart } from "lucide-react";
 import { mediaUrl } from "@/lib/api-client";
@@ -7,14 +7,47 @@ import { ResponsiveVideo } from "@/components/media/ResponsiveVideo";
 import { cn } from "@/lib/utils";
 
 interface PostMediaCarouselProps {
-  mediaUrlString?: string;
-  thumbnailUrl?: string;
-  blurDataUrl?: string;
-  aspectRatio?: number;
+  mediaUrlString?: string | undefined;
+  thumbnailUrl?: string | undefined;
+  blurDataUrl?: string | undefined;
+  /** Intrinsic width/height ratio of the (first) media item. */
+  aspectRatio?: number | undefined;
+  /** Per-item metadata for multi-image posts (B1). */
+  mediaItems?:
+    | {
+        url: string;
+        width?: number | undefined;
+        height?: number | undefined;
+        aspectRatio?: number | undefined;
+        kind?: "photo" | "video" | undefined;
+      }[]
+    | undefined;
   kind: "photo" | "video" | "reel" | "text";
-  body?: string;
-  liked?: boolean;
-  onDoubleTapLike?: () => void;
+  body?: string | undefined;
+  liked?: boolean | undefined;
+  onDoubleTapLike?: (() => void) | undefined;
+  /** B1 — first feed items get fetchpriority=high. */
+  priority?: boolean | undefined;
+}
+
+/**
+ * B1/B2 — best-fit media stage.
+ *
+ * The container height is the image's OWN height at container width, clamped
+ * to a sensible range: aspect ratio clamped to [4:5 portrait … 1.91:1
+ * landscape] and max height ≈ min(80dvh, 720px). Nothing important is ever
+ * cropped — when the ratio or the height clamp kicks in, the media renders
+ * object-contain over a blurred backdrop of itself. Space is reserved via
+ * aspect-ratio BEFORE load (zero layout shift), with a lazy natural-size
+ * fallback for legacy posts that never persisted their geometry.
+ */
+const RATIO_MIN = 4 / 5; // portrait clamp (0.8)
+const RATIO_MAX = 1.91; // landscape clamp
+const DEFAULT_RATIO = 4 / 3; // legacy posts with no metadata at all
+
+function clampRatio(r: number | undefined): number | undefined {
+  if (!r || !Number.isFinite(r) || r <= 0) return undefined;
+  return Math.min(RATIO_MAX, Math.max(RATIO_MIN, r));
 }
 
 export function PostMediaCarousel({
@@ -22,10 +55,12 @@ export function PostMediaCarousel({
   thumbnailUrl,
   blurDataUrl,
   aspectRatio,
+  mediaItems,
   kind,
   body,
   liked,
   onDoubleTapLike,
+  priority = false,
 }: PostMediaCarouselProps) {
   const [activeIdx, setActiveIdx] = useState(0);
   const [burst, setBurst] = useState(false);
@@ -33,14 +68,40 @@ export function PostMediaCarousel({
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
 
+  // Lazy fallback (B1): legacy posts without persisted geometry report their
+  // natural size on load; the stage then adopts the true ratio once.
+  const [measuredRatio, setMeasuredRatio] = useState<number | undefined>(undefined);
+  const handleMeasured = (w: number, h: number) => {
+    if (h > 0 && measuredRatio === undefined) setMeasuredRatio(w / h);
+  };
+
   if (!mediaUrlString || kind === "text") return null;
 
   // Split comma-separated URLs for multi-media posts
-  const rawUrls = mediaUrlString.split(",").map((s) => s.trim()).filter(Boolean);
+  const rawUrls = mediaUrlString
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   if (rawUrls.length === 0) return null;
 
   const activeRawUrl = rawUrls[activeIdx] ?? rawUrls[0];
   const activeFullUrl = mediaUrl(activeRawUrl);
+
+  // B1.4 — the stage ratio is the FIRST item's ratio (or the tallest clamped
+  // one), so swiping multi-image posts never jumps the layout.
+  const firstItem = mediaItems?.find((m) => m.url === rawUrls[0]);
+  const firstItemRatio =
+    firstItem?.aspectRatio ??
+    (firstItem?.width && firstItem?.height ? firstItem.width / firstItem.height : undefined);
+  const stageRatio = clampRatio(measuredRatio ?? aspectRatio ?? firstItemRatio) ?? DEFAULT_RATIO;
+  const intrinsicRatio: number =
+    measuredRatio ??
+    aspectRatio ??
+    mediaItems?.find((m) => m.url === activeRawUrl)?.aspectRatio ??
+    stageRatio ??
+    DEFAULT_RATIO;
+  // Contain only when clamping actually applies (ratio outside the window).
+  const needsContain = intrinsicRatio < RATIO_MIN || intrinsicRatio > RATIO_MAX;
 
   const handleMediaTap = () => {
     const now = Date.now();
@@ -53,12 +114,12 @@ export function PostMediaCarousel({
   };
 
   const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.targetTouches[0].clientX;
+    touchStartX.current = e.targetTouches[0]?.clientX ?? 0;
     touchEndX.current = null;
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    touchEndX.current = e.targetTouches[0].clientX;
+    touchEndX.current = e.targetTouches[0]?.clientX ?? 0;
   };
 
   const handleTouchEnd = () => {
@@ -78,7 +139,7 @@ export function PostMediaCarousel({
   };
 
   const isVideo = (url: string) => {
-    return kind === "video" || kind === "reel" || /\.(mp4|mov|webm)$/i.test(url);
+    return kind === "video" || kind === "reel" || /\.(mp4|mov|webm|m4v)$/i.test(url);
   };
 
   const currentIsVideo = activeFullUrl ? isVideo(activeFullUrl) : false;
@@ -93,7 +154,14 @@ export function PostMediaCarousel({
       onTouchEnd={handleTouchEnd}
       onKeyDown={(e) => e.key === "Enter" && onDoubleTapLike && onDoubleTapLike()}
       aria-label="Double tap to like or swipe to view next image"
-      className="relative mx-4 mb-3 overflow-hidden rounded-2xl bg-black select-none group flex items-center justify-center aspect-[4/3] max-h-[440px] w-[calc(100%-2rem)]"
+      className="relative mx-4 mb-3 w-[calc(100%-2rem)] overflow-hidden rounded-2xl bg-black select-none group flex items-center justify-center"
+      style={{
+        // B1.3 — the image's own height at container width, clamped: ratio
+        // clamped to [4:5 … 1.91:1], max height min(80dvh, 720px). Reserved
+        // BEFORE load → zero layout shift.
+        aspectRatio: `${stageRatio ?? DEFAULT_RATIO}`,
+        maxHeight: "min(80dvh, 720px)",
+      }}
     >
       {/* Current Active Item Stage */}
       <AnimatePresence mode="wait">
@@ -103,24 +171,28 @@ export function PostMediaCarousel({
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -20 }}
           transition={{ duration: 0.2 }}
-          className="flex h-full w-full items-center justify-center overflow-hidden"
+          className="relative h-full w-full overflow-hidden"
         >
           {currentIsVideo ? (
             <ResponsiveVideo
-              src={activeFullUrl}
+              src={activeFullUrl ?? ""}
               posterUrl={mediaUrl(thumbnailUrl)}
               blurDataUrl={blurDataUrl}
-              aspectRatio={4 / 3}
               onDoubleTap={onDoubleTapLike}
-              className="h-full w-full object-cover"
+              onMeasured={handleMeasured}
+              className="h-full w-full"
+              videoClassName={cn(needsContain ? "object-contain" : "object-cover")}
             />
           ) : (
             <ResponsiveImage
-              src={activeFullUrl}
+              src={activeFullUrl ?? ""}
               alt={body || "Post media"}
               blurDataUrl={blurDataUrl}
-              aspectRatio={4 / 3}
-              className="h-full w-full object-cover"
+              onMeasured={handleMeasured}
+              loading={priority ? "eager" : "lazy"}
+              fetchPriority={priority ? "high" : undefined}
+              fit={needsContain ? "contain" : "cover"}
+              className="h-full w-full"
             />
           )}
         </motion.div>
@@ -177,7 +249,7 @@ export function PostMediaCarousel({
                 }}
                 className={cn(
                   "size-1.5 rounded-full transition-all press",
-                  i === activeIdx ? "bg-white w-3" : "bg-white/50 hover:bg-white/80"
+                  i === activeIdx ? "bg-white w-3" : "bg-white/50 hover:bg-white/80",
                 )}
               />
             ))}

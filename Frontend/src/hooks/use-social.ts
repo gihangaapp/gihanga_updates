@@ -38,7 +38,8 @@ export function useDeleteComment(postId: string) {
 export function useToggleCommentLike(postId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (commentId: string) => api.post<{ liked: boolean; likesCount: number }>(`/likes/comment/${commentId}`),
+    mutationFn: (commentId: string) =>
+      api.post<{ liked: boolean; likesCount: number }>(`/likes/comment/${commentId}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["comments", postId] }),
   });
 }
@@ -97,7 +98,9 @@ export function useFollowUser() {
         } else if (Array.isArray(data.posts)) {
           queryClient.setQueryData(key, {
             ...data,
-            posts: data.posts.map((p: FeedPost) => (p.author.username === username ? { ...p, followingAuthor: follow } : p)),
+            posts: data.posts.map((p: FeedPost) =>
+              p.author.username === username ? { ...p, followingAuthor: follow } : p,
+            ),
           });
         }
       }

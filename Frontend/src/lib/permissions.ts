@@ -101,7 +101,10 @@ export function hasPermission(staffUser: UserProfile | null, permission: Permiss
   return Boolean(rolePerms?.has(permission));
 }
 
-export function hasAnyPermission(staffUser: UserProfile | null, permissions: Permission[]): boolean {
+export function hasAnyPermission(
+  staffUser: UserProfile | null,
+  permissions: Permission[],
+): boolean {
   return permissions.some((p) => hasPermission(staffUser, p));
 }
 

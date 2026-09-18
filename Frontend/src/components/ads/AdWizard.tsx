@@ -158,7 +158,9 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                 <h3 className="text-sm font-bold text-foreground">1. Choose Content & Media</h3>
 
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Ad Title *</label>
+                  <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+                    Ad Title *
+                  </label>
                   <Input
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
@@ -167,7 +169,9 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                 </div>
 
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Caption / Description</label>
+                  <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+                    Caption / Description
+                  </label>
                   <textarea
                     value={caption}
                     onChange={(e) => setCaption(e.target.value)}
@@ -179,22 +183,37 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="mb-1 block text-xs font-semibold text-muted-foreground">Button Text</label>
-                    <Input value={ctaText} onChange={(e) => setCtaText(e.target.value)} placeholder="Learn More" />
+                    <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                      Button Text
+                    </label>
+                    <Input
+                      value={ctaText}
+                      onChange={(e) => setCtaText(e.target.value)}
+                      placeholder="Learn More"
+                    />
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-semibold text-muted-foreground">Destination Link URL</label>
-                    <Input value={ctaUrl} onChange={(e) => setCtaUrl(e.target.value)} placeholder="https://..." />
+                    <label className="mb-1 block text-xs font-semibold text-muted-foreground">
+                      Destination Link URL
+                    </label>
+                    <Input
+                      value={ctaUrl}
+                      onChange={(e) => setCtaUrl(e.target.value)}
+                      placeholder="https://..."
+                    />
                   </div>
                 </div>
 
                 {/* Media Upload */}
                 <div>
-                  <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Upload Image or Video</label>
+                  <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+                    Upload Image or Video
+                  </label>
                   <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/30 p-5 hover:bg-muted/60 transition-colors">
                     {isUploading ? (
                       <div className="flex items-center gap-2 text-xs text-muted-foreground font-semibold">
-                        <Loader2 className="size-4 animate-spin text-primary" /> Uploading media to server...
+                        <Loader2 className="size-4 animate-spin text-primary" /> Uploading media to
+                        server...
                       </div>
                     ) : mediaUrl ? (
                       <div className="text-center text-xs text-success font-semibold flex items-center gap-1.5">
@@ -204,10 +223,18 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                       <div className="flex flex-col items-center gap-1 text-center text-xs text-muted-foreground">
                         <Upload className="size-5 text-primary" />
                         <span className="font-semibold text-foreground">Click to upload media</span>
-                        <span>Supports JPG, PNG, MP4, MOV (Max video length: {config?.maxVideoDurationSeconds ?? 120}s)</span>
+                        <span>
+                          Supports JPG, PNG, MP4, MOV (Max video length:{" "}
+                          {config?.maxVideoDurationSeconds ?? 120}s)
+                        </span>
                       </div>
                     )}
-                    <input type="file" accept="image/*,video/*" onChange={handleFileUpload} className="hidden" />
+                    <input
+                      type="file"
+                      accept="image/*,video/*"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
                   </label>
                 </div>
               </div>
@@ -232,7 +259,9 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
           {/* STEP 2: PLACEMENT */}
           {step === 2 && (
             <div className="space-y-6">
-              <h3 className="text-sm font-bold text-foreground">2. Select Where Your Ad Will Appear</h3>
+              <h3 className="text-sm font-bold text-foreground">
+                2. Select Where Your Ad Will Appear
+              </h3>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 {/* Feed Placement */}
@@ -240,7 +269,9 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                   type="button"
                   onClick={() => {
                     setPlacement("feed");
-                    setAdType(mediaUrl?.includes(".mp4") || mediaUrl?.includes(".mov") ? "video" : "image");
+                    setAdType(
+                      mediaUrl?.includes(".mp4") || mediaUrl?.includes(".mov") ? "video" : "image",
+                    );
                   }}
                   className={cn(
                     "flex flex-col gap-3 rounded-2xl border p-5 text-left transition-all",
@@ -258,7 +289,8 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                   <div>
                     <h4 className="font-bold text-sm text-foreground">In-Feed Advertisement</h4>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Appears organically in users' home feeds alongside creator posts marked clearly as "Sponsored". High visibility and engagement.
+                      Appears organically in users' home feeds alongside creator posts marked
+                      clearly as "Sponsored". High visibility and engagement.
                     </p>
                   </div>
                 </button>
@@ -268,7 +300,11 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                   type="button"
                   onClick={() => {
                     setPlacement("story");
-                    setAdType(mediaUrl?.includes(".mp4") || mediaUrl?.includes(".mov") ? "story_video" : "story_image");
+                    setAdType(
+                      mediaUrl?.includes(".mp4") || mediaUrl?.includes(".mov")
+                        ? "story_video"
+                        : "story_image",
+                    );
                   }}
                   className={cn(
                     "flex flex-col gap-3 rounded-2xl border p-5 text-left transition-all",
@@ -286,7 +322,8 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                   <div>
                     <h4 className="font-bold text-sm text-foreground">Story Advertisement</h4>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Delivered full-screen between user stories with an interactive swipe-up call to action. Ideal for mobile immersion.
+                      Delivered full-screen between user stories with an interactive swipe-up call
+                      to action. Ideal for mobile immersion.
                     </p>
                   </div>
                 </button>
@@ -294,7 +331,9 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
 
               {/* Preview */}
               <div className="mt-4 rounded-2xl border border-border bg-muted/20 p-4">
-                <h4 className="mb-3 text-xs font-bold text-muted-foreground">Placement Preview ({placement.toUpperCase()})</h4>
+                <h4 className="mb-3 text-xs font-bold text-muted-foreground">
+                  Placement Preview ({placement.toUpperCase()})
+                </h4>
                 <AdPreview
                   adType={adType}
                   placement={placement}
@@ -312,7 +351,9 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
           {/* STEP 3: DURATION & ADVERTISING MINUTES */}
           {step === 3 && (
             <div className="space-y-6">
-              <h3 className="text-sm font-bold text-foreground">3. Duration & Advertising Minutes</h3>
+              <h3 className="text-sm font-bold text-foreground">
+                3. Duration & Advertising Minutes
+              </h3>
 
               <div className="grid gap-6 md:grid-cols-2">
                 <div className="space-y-4">
@@ -328,7 +369,8 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                       onChange={(e) => setAdvertisingMinutes(Number(e.target.value))}
                     />
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      1 advertising minute = 60 seconds of total active user view time delivered to your target audience.
+                      1 advertising minute = 60 seconds of total active user view time delivered to
+                      your target audience.
                     </p>
                   </div>
 
@@ -344,13 +386,16 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                       onChange={(e) => setCampaignDurationDays(Number(e.target.value))}
                     />
                     <p className="mt-1 text-[11px] text-muted-foreground">
-                      The campaign will run over this period until your advertising minutes quota is fulfilled.
+                      The campaign will run over this period until your advertising minutes quota is
+                      fulfilled.
                     </p>
                   </div>
 
                   {/* Preset Packages */}
                   <div>
-                    <label className="mb-2 block text-xs font-bold text-foreground">Quick Packages</label>
+                    <label className="mb-2 block text-xs font-bold text-foreground">
+                      Quick Packages
+                    </label>
                     <div className="grid grid-cols-3 gap-2">
                       {[10, 30, 60].map((mins) => (
                         <button
@@ -384,7 +429,10 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                   ) : priceData ? (
                     <div className="space-y-3 text-xs">
                       {priceData.breakdown.map((item, i) => (
-                        <div key={i} className="flex justify-between border-b border-border/40 pb-1.5">
+                        <div
+                          key={i}
+                          className="flex justify-between border-b border-border/40 pb-1.5"
+                        >
                           <span className="text-muted-foreground">{item.line}:</span>
                           <span className="font-semibold text-foreground">{item.value}</span>
                         </div>
@@ -393,13 +441,17 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                       {/* Payment Options Summary */}
                       <div className="mt-4 grid grid-cols-2 gap-2 pt-2">
                         <div className="rounded-xl bg-primary-soft/40 p-3 text-center">
-                          <span className="text-[10px] text-muted-foreground block font-bold">Real Money Cost</span>
+                          <span className="text-[10px] text-muted-foreground block font-bold">
+                            Real Money Cost
+                          </span>
                           <span className="font-display font-extrabold text-sm text-primary">
                             {priceData.rwfTotal.toLocaleString()} RWF
                           </span>
                         </div>
                         <div className="rounded-xl bg-amber-500/10 p-3 text-center">
-                          <span className="text-[10px] text-muted-foreground block font-bold">Gihanga Points Cost</span>
+                          <span className="text-[10px] text-muted-foreground block font-bold">
+                            Gihanga Points Cost
+                          </span>
                           <span className="font-display font-extrabold text-sm text-amber-500">
                             {formatCount(priceData.gpTotal)} GP
                           </span>
@@ -439,12 +491,16 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                   </div>
 
                   <div className="mt-4 rounded-xl border border-border/80 bg-elevated p-3 space-y-1">
-                    <span className="font-bold text-xs text-foreground block">Payment Options Available:</span>
+                    <span className="font-bold text-xs text-foreground block">
+                      Payment Options Available:
+                    </span>
                     <p className="text-muted-foreground text-[11px]">
-                      • Real Money: {priceData?.rwfTotal.toLocaleString()} RWF (Wallet Balance / MoMo)
+                      • Real Money: {priceData?.rwfTotal.toLocaleString()} RWF (Wallet Balance /
+                      MoMo)
                     </p>
                     <p className="text-muted-foreground text-[11px]">
-                      • Gihanga Points: {formatCount(priceData?.gpTotal ?? 0)} GP (Your Balance: {formatCount(walletData?.wallet?.kingdomPoints ?? 0)} GP)
+                      • Gihanga Points: {formatCount(priceData?.gpTotal ?? 0)} GP (Your Balance:{" "}
+                      {formatCount(walletData?.wallet?.kingdomPoints ?? 0)} GP)
                     </p>
                   </div>
                 </div>

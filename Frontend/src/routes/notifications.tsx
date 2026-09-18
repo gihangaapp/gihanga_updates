@@ -1,12 +1,26 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AtSign, Bell, DollarSign, Gift, Heart, MessageSquare, Radio, Sparkles, UserPlus } from "lucide-react";
+import {
+  AtSign,
+  Bell,
+  DollarSign,
+  Gift,
+  Heart,
+  MessageSquare,
+  Radio,
+  Sparkles,
+  UserPlus,
+} from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { GAvatar } from "@/components/common/GAvatar";
 import { Button } from "@/components/ui/button";
 import { mediaUrl, type AppNotification } from "@/lib/api-client";
-import { useNotifications, useMarkAllNotificationsRead, useMarkNotificationRead } from "@/hooks/use-notifications";
+import {
+  useNotifications,
+  useMarkAllNotificationsRead,
+  useMarkNotificationRead,
+} from "@/hooks/use-notifications";
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { timeAgo } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -117,10 +131,14 @@ function NotificationsPage() {
         </div>
 
         <ul className="surface-card divide-y divide-border overflow-hidden p-0">
-          {isLoading && <li className="p-10 text-center text-sm text-muted-foreground">Loading…</li>}
+          {isLoading && (
+            <li className="p-10 text-center text-sm text-muted-foreground">Loading…</li>
+          )}
           {list.map((n) => {
             const meta = iconFor[n.kind];
-            const postImage = n.relatedPost ? mediaUrl(n.relatedPost.thumbnailUrl || n.relatedPost.mediaUrl) : null;
+            const postImage = n.relatedPost
+              ? mediaUrl(n.relatedPost.thumbnailUrl || n.relatedPost.mediaUrl)
+              : null;
             return (
               <li key={n._id}>
                 <div
@@ -132,7 +150,12 @@ function NotificationsPage() {
                     !n.read && "bg-primary-soft/40",
                   )}
                 >
-                  <span className={cn("grid size-9 shrink-0 place-items-center rounded-full", meta.tone)}>
+                  <span
+                    className={cn(
+                      "grid size-9 shrink-0 place-items-center rounded-full",
+                      meta.tone,
+                    )}
+                  >
                     <meta.icon className="size-4.5" />
                   </span>
 
@@ -150,11 +173,18 @@ function NotificationsPage() {
                   <p className="min-w-0 flex-1 text-sm leading-snug">
                     {n.actor && <span className="font-semibold">{n.actor.name} </span>}
                     <span className={n.actor ? "text-muted-foreground" : ""}>{n.text}</span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">{timeAgo(n.createdAt)} ago</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      {timeAgo(n.createdAt)} ago
+                    </span>
                   </p>
 
                   {postImage ? (
-                    <img src={postImage} alt="" loading="lazy" className="size-12 shrink-0 rounded-lg object-cover" />
+                    <img
+                      src={postImage}
+                      alt=""
+                      loading="lazy"
+                      className="size-12 shrink-0 rounded-lg object-cover"
+                    />
                   ) : n.kind === "follow" && n.actor ? (
                     followingSet?.has(n.actor.username) ? (
                       <Button size="sm" variant="soft" disabled>

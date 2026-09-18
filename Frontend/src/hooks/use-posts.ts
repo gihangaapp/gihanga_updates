@@ -12,7 +12,9 @@ function useCursoredPosts(key: string, endpoint: string, enabled = true) {
   return useInfiniteQuery({
     queryKey: ["posts", key],
     queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
-      api.get<PostsPage>(`${endpoint}${pageParam ? `?before=${encodeURIComponent(pageParam)}` : ""}`),
+      api.get<PostsPage>(
+        `${endpoint}${pageParam ? `?before=${encodeURIComponent(pageParam)}` : ""}`,
+      ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled,
@@ -24,7 +26,9 @@ export function useFeed() {
   return useInfiniteQuery({
     queryKey: ["posts", "feed", user?.id],
     queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
-      api.get<PostsPage>(`/recommendations/for-you?limit=12${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`),
+      api.get<PostsPage>(
+        `/recommendations/for-you?limit=12${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
+      ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
     enabled: Boolean(user),
@@ -36,7 +40,9 @@ export function useExplore() {
   return useInfiniteQuery({
     queryKey: ["posts", "explore", user?.id],
     queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
-      api.get<PostsPage>(`/recommendations/explore?limit=12${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`),
+      api.get<PostsPage>(
+        `/recommendations/explore?limit=12${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
+      ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
@@ -47,30 +53,42 @@ export function useReelsFeed() {
   return useInfiniteQuery({
     queryKey: ["posts", "reels", user?.id],
     queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
-      api.get<PostsPage>(`/recommendations/reels?limit=10${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`),
+      api.get<PostsPage>(
+        `/recommendations/reels?limit=10${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
+      ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
 }
 
 export function useTagPosts(tag: string) {
-  const query = useCursoredPosts(`tag:${tag}`, `/posts/tag/${encodeURIComponent(tag)}`, Boolean(tag));
+  const query = useCursoredPosts(
+    `tag:${tag}`,
+    `/posts/tag/${encodeURIComponent(tag)}`,
+    Boolean(tag),
+  );
   const meta = useQuery({
     queryKey: ["tag-meta", tag],
-    queryFn: () => api.get<{ tag: string; postsCount: number }>(`/posts/tag/${encodeURIComponent(tag)}`),
+    queryFn: () =>
+      api.get<{ tag: string; postsCount: number }>(`/posts/tag/${encodeURIComponent(tag)}`),
     enabled: Boolean(tag),
   });
   return { ...query, postsCount: meta.data?.postsCount ?? 0 };
 }
 
 export function useUserPosts(username: string) {
-  return useCursoredPosts(`user:${username}`, `/posts/user/${encodeURIComponent(username)}`, Boolean(username));
+  return useCursoredPosts(
+    `user:${username}`,
+    `/posts/user/${encodeURIComponent(username)}`,
+    Boolean(username),
+  );
 }
 
 export function useLikedPosts(username: string, enabled: boolean) {
   return useQuery({
     queryKey: ["posts", "liked", username],
-    queryFn: () => api.get<{ posts: FeedPost[] }>(`/posts/user/${encodeURIComponent(username)}/liked`),
+    queryFn: () =>
+      api.get<{ posts: FeedPost[] }>(`/posts/user/${encodeURIComponent(username)}/liked`),
     enabled: enabled && Boolean(username),
   });
 }
@@ -96,6 +114,20 @@ export function useCreatePost() {
       location?: string | undefined;
       tags?: string[] | undefined;
       audience?: "public" | "followers" | "private" | undefined;
+      /** B1 — persisted media geometry so the feed sizes without cropping. */
+      mediaWidth?: number | undefined;
+      mediaHeight?: number | undefined;
+      aspectRatio?: number | undefined;
+      blurDataUrl?: string | undefined;
+      media?:
+        | {
+            url: string;
+            width?: number | undefined;
+            height?: number | undefined;
+            aspectRatio?: number | undefined;
+            kind?: "photo" | "video" | undefined;
+          }[]
+        | undefined;
     }) => api.post<{ post: FeedPost }>("/posts", input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["posts"] });
@@ -134,7 +166,8 @@ export function useDeletePost() {
 export function useToggleLike() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (postId: string) => api.post<{ liked: boolean; likesCount: number }>(`/likes/post/${postId}`),
+    mutationFn: (postId: string) =>
+      api.post<{ liked: boolean; likesCount: number }>(`/likes/post/${postId}`),
     onMutate: async (postId: string) => {
       await queryClient.cancelQueries({ queryKey: ["posts"] });
       const previous = queryClient.getQueriesData({ queryKey: ["posts"] });
@@ -158,7 +191,10 @@ export function useToggleBookmark() {
     onMutate: async (postId: string) => {
       await queryClient.cancelQueries({ queryKey: ["posts"] });
       const previous = queryClient.getQueriesData({ queryKey: ["posts"] });
-      updatePostEverywhere(queryClient, postId, (post) => ({ ...post, bookmarked: !post.bookmarked }));
+      updatePostEverywhere(queryClient, postId, (post) => ({
+        ...post,
+        bookmarked: !post.bookmarked,
+      }));
       return { previous };
     },
     onError: (_err, _postId, context) => {
@@ -211,10 +247,7 @@ function updatePostEverywhere(
   }
 }
 
-function removePostEverywhere(
-  queryClient: ReturnType<typeof useQueryClient>,
-  postId: string,
-) {
+function removePostEverywhere(queryClient: ReturnType<typeof useQueryClient>, postId: string) {
   const entries = [
     ...queryClient.getQueriesData<any>({ queryKey: ["posts"] }),
     ...queryClient.getQueriesData<any>({ queryKey: ["recommendations"] }),

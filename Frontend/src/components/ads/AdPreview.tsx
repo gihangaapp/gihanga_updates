@@ -7,13 +7,13 @@ interface AdPreviewProps {
   adType: "image" | "video" | "story_image" | "story_video";
   placement: "feed" | "story";
   title: string;
-  caption?: string;
-  ctaText?: string;
-  ctaUrl?: string;
-  mediaUrl?: string;
-  thumbnailUrl?: string;
-  creatorName?: string;
-  creatorUsername?: string;
+  caption?: string | undefined;
+  ctaText?: string | undefined;
+  ctaUrl?: string | undefined;
+  mediaUrl?: string | undefined;
+  thumbnailUrl?: string | undefined;
+  creatorName?: string | undefined;
+  creatorUsername?: string | undefined;
 }
 
 export function AdPreview({
@@ -36,7 +36,15 @@ export function AdPreview({
       <div className="relative mx-auto aspect-[9/16] w-full max-w-[260px] overflow-hidden rounded-3xl border border-border bg-slate-900 shadow-2xl">
         {resolvedMedia ? (
           adType.includes("video") ? (
-            <video src={resolvedMedia} poster={resolvedThumbnail} autoPlay loop muted playsInline className="h-full w-full object-cover" />
+            <video
+              src={resolvedMedia}
+              poster={resolvedThumbnail}
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="h-full w-full object-cover"
+            />
           ) : (
             <img src={resolvedMedia} alt={title} className="h-full w-full object-cover" />
           )
@@ -98,7 +106,13 @@ export function AdPreview({
       <div className="relative aspect-video w-full overflow-hidden bg-slate-900">
         {resolvedMedia ? (
           adType.includes("video") ? (
-            <video src={resolvedMedia} poster={resolvedThumbnail} controls muted className="h-full w-full object-cover" />
+            <video
+              src={resolvedMedia}
+              poster={resolvedThumbnail}
+              controls
+              muted
+              className="h-full w-full object-cover"
+            />
           ) : (
             <img src={resolvedMedia} alt={title} className="h-full w-full object-cover" />
           )

@@ -15,7 +15,10 @@ interface AuthState {
   user: UserProfile | null;
   staffUser: UserProfile | null;
   loading: boolean;
-  signInConsumer: (tokens: { accessToken: string; refreshToken: string }, user: UserProfile) => void;
+  signInConsumer: (
+    tokens: { accessToken: string; refreshToken: string },
+    user: UserProfile,
+  ) => void;
   signInStaff: (tokens: { accessToken: string; refreshToken: string }, user: UserProfile) => void;
   updateConsumerProfile: (user: UserProfile) => void;
   signOutConsumer: () => void;
@@ -80,7 +83,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initAuth();
   }, []);
 
-  const signInConsumer = (tokens: { accessToken: string; refreshToken: string }, profile: UserProfile) => {
+  const signInConsumer = (
+    tokens: { accessToken: string; refreshToken: string },
+    profile: UserProfile,
+  ) => {
     setConsumerTokens(tokens.accessToken, tokens.refreshToken);
     localStorage.setItem("gihanga_user_profile", JSON.stringify(profile));
     setUser(profile);
@@ -91,7 +97,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(profile);
   };
 
-  const signInStaff = (tokens: { accessToken: string; refreshToken: string }, profile: UserProfile) => {
+  const signInStaff = (
+    tokens: { accessToken: string; refreshToken: string },
+    profile: UserProfile,
+  ) => {
     setStaffTokens(tokens.accessToken, tokens.refreshToken);
     localStorage.setItem("gihanga_staff_profile", JSON.stringify(profile));
     setStaffUser(profile);

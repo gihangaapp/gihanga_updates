@@ -25,7 +25,10 @@ export function getStaffSocket(): Socket | null {
   if (!token) return null;
 
   if (!staffSocket) {
-    staffSocket = io(API_ORIGIN, { auth: { token, isStaff: true }, transports: ["websocket", "polling"] });
+    staffSocket = io(API_ORIGIN, {
+      auth: { token, isStaff: true },
+      transports: ["websocket", "polling"],
+    });
   } else if (staffSocket.auth && (staffSocket.auth as any).token !== token) {
     staffSocket.auth = { token, isStaff: true };
     staffSocket.disconnect().connect();

@@ -4,26 +4,18 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export type UploadStage =
-  | "preparing"
-  | "uploading"
-  | "processing"
-  | "publishing"
-  | "completed"
-  | "failed";
+  "preparing" | "uploading" | "processing" | "publishing" | "completed" | "failed";
 
 interface UploadProgressProps {
   stage: UploadStage;
   progress: number; // 0–100 for uploading stage
-  error?: string;
+  error?: string | undefined;
   onRetry?: () => void;
   onCancel?: () => void;
   onDone?: () => void;
 }
 
-const stageConfig: Record<
-  UploadStage,
-  { label: string; sublabel?: string; color: string }
-> = {
+const stageConfig: Record<UploadStage, { label: string; sublabel?: string; color: string }> = {
   preparing: { label: "Preparing media…", color: "text-info" },
   uploading: { label: "Uploading…", color: "text-primary" },
   processing: {
@@ -66,7 +58,7 @@ export function UploadProgress({
             "grid size-16 place-items-center rounded-2xl",
             stage === "completed" && "bg-success/15",
             stage === "failed" && "bg-danger/15",
-            isActive && "bg-primary-soft"
+            isActive && "bg-primary-soft",
           )}
         >
           {stage === "completed" ? (
@@ -86,17 +78,11 @@ export function UploadProgress({
 
         {/* Label */}
         <div className="text-center">
-          <p className={cn("text-base font-bold", config.color)}>
-            {config.label}
-          </p>
+          <p className={cn("text-base font-bold", config.color)}>{config.label}</p>
           {config.sublabel && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {config.sublabel}
-            </p>
+            <p className="mt-1 text-xs text-muted-foreground">{config.sublabel}</p>
           )}
-          {error && (
-            <p className="mt-2 text-sm text-danger">{error}</p>
-          )}
+          {error && <p className="mt-2 text-sm text-danger">{error}</p>}
         </div>
 
         {/* Progress bar — only during uploading */}
@@ -119,24 +105,22 @@ export function UploadProgress({
         {/* Stage dots */}
         {isActive && (
           <div className="flex items-center gap-2">
-            {(["preparing", "uploading", "processing", "publishing"] as const).map(
-              (s, i) => {
-                const stages = ["preparing", "uploading", "processing", "publishing"];
-                const currentIdx = stages.indexOf(stage);
-                const thisIdx = i;
-                return (
-                  <div
-                    key={s}
-                    className={cn(
-                      "size-2 rounded-full transition-all duration-300",
-                      thisIdx < currentIdx && "bg-primary",
-                      thisIdx === currentIdx && "bg-primary scale-125",
-                      thisIdx > currentIdx && "bg-muted"
-                    )}
-                  />
-                );
-              }
-            )}
+            {(["preparing", "uploading", "processing", "publishing"] as const).map((s, i) => {
+              const stages = ["preparing", "uploading", "processing", "publishing"];
+              const currentIdx = stages.indexOf(stage);
+              const thisIdx = i;
+              return (
+                <div
+                  key={s}
+                  className={cn(
+                    "size-2 rounded-full transition-all duration-300",
+                    thisIdx < currentIdx && "bg-primary",
+                    thisIdx === currentIdx && "bg-primary scale-125",
+                    thisIdx > currentIdx && "bg-muted",
+                  )}
+                />
+              );
+            })}
           </div>
         )}
 

@@ -10,13 +10,24 @@ interface AudienceSelectorProps {
   className?: string;
 }
 
-const AUDIENCES: { id: AudienceOption; label: string; description: string; icon: typeof Globe2 }[] = [
-  { id: "public", label: "Everyone", description: "Anyone on or off Gihanga", icon: Globe2 },
-  { id: "followers", label: "Followers", description: "Only your confirmed followers", icon: Users },
-  { id: "private", label: "Only me", description: "Visible only to you", icon: Lock },
-];
+const AUDIENCES: { id: AudienceOption; label: string; description: string; icon: typeof Globe2 }[] =
+  [
+    { id: "public", label: "Everyone", description: "Anyone on or off Gihanga", icon: Globe2 },
+    {
+      id: "followers",
+      label: "Followers",
+      description: "Only your confirmed followers",
+      icon: Users,
+    },
+    { id: "private", label: "Only me", description: "Visible only to you", icon: Lock },
+  ];
 
-export function AudienceSelector({ value, onChange, compact = true, className }: AudienceSelectorProps) {
+export function AudienceSelector({
+  value,
+  onChange,
+  compact = true,
+  className,
+}: AudienceSelectorProps) {
   if (compact) {
     return (
       <div className={cn("flex items-center gap-1", className)}>
@@ -32,7 +43,7 @@ export function AudienceSelector({ value, onChange, compact = true, className }:
                 "press flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors",
                 isSelected
                   ? "bg-primary-soft text-primary font-bold"
-                  : "text-muted-foreground hover:bg-muted"
+                  : "text-muted-foreground hover:bg-muted",
               )}
             >
               <Icon className="size-3.5" />
@@ -60,13 +71,17 @@ export function AudienceSelector({ value, onChange, compact = true, className }:
                 "press flex items-center gap-3 rounded-2xl border p-3 text-left transition-all",
                 isSelected
                   ? "border-primary bg-primary-soft/30 text-foreground"
-                  : "border-border hover:bg-muted"
+                  : "border-border hover:bg-muted",
               )}
             >
-              <div className={cn(
-                "grid size-9 place-items-center rounded-xl",
-                isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-              )}>
+              <div
+                className={cn(
+                  "grid size-9 place-items-center rounded-xl",
+                  isSelected
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
                 <Icon className="size-4" />
               </div>
               <div className="min-w-0 flex-1">

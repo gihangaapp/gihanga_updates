@@ -51,7 +51,10 @@ export function CoverSelector({
         min={0}
         max={duration || 10}
         step={0.2}
-        onValueChange={([val]) => onSelectTimestamp(val)}
+        onValueChange={(vals) => {
+          const val = vals[0];
+          if (val !== undefined) onSelectTimestamp(val);
+        }}
       />
 
       <p className="text-[11px] text-center text-muted-foreground">

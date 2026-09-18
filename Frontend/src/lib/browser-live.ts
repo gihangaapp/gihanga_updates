@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { getLiveSocket } from "./socket-client";
+import {
+  liveCaptureConstraints,
+  livePreviewConstraints,
+  liveIceServers,
+  MESH_VIDEO_SEND_PARAMS,
+} from "./live-video-config";
+import type { QualitySample } from "./live-quality";
 
 interface BrowserLiveOptions {
   streamId: string;
@@ -25,6 +32,90 @@ const AUDIO_CONSTRAINTS: MediaTrackConstraints = {
 };
 
 /**
+ * A1 — mesh bitrate shaping. LiveKit publishers get simulcast + explicit
+ * encoding at publish time; the mesh path gets the equivalent via
+ * RTCRtpSender.setParameters (maxBitrate + no downscaling at the source).
+ * Applied after tracks are added; failures are non-fatal (some browsers
+ * reject setParameters mid-negotiation — the default encoder still works).
+ */
+async function applyMeshVideoBitrate(pc: RTCPeerConnection): Promise<void> {
+  try {
+    for (const sender of pc.getSenders()) {
+      if (sender.track?.kind !== "video") continue;
+      const params = sender.getParameters();
+      if (!params.encodings || params.encodings.length === 0) {
+        params.encodings = [{}];
+      }
+      const primary = params.encodings[0];
+      if (primary) {
+        primary.maxBitrate = MESH_VIDEO_SEND_PARAMS.maxBitrate;
+        primary.scaleResolutionDownBy = MESH_VIDEO_SEND_PARAMS.scaleResolutionDownBy;
+      }
+      await sender.setParameters(params);
+    }
+  } catch {
+    /* non-fatal — browser may reject mid-negotiation */
+  }
+}
+
+/**
+ * A6 — mesh connection-quality sampling: poll one PeerConnection's stats
+ * every 2 s and feed loss/rtt/bitrate into the shared pure classifier.
+ */
+function startMeshQualityPolling(pc: RTCPeerConnection, onSample: (s: QualitySample) => void) {
+  let lastBytes: { inbound: number; outbound: number; at: number } | null = null;
+  const timer = setInterval(() => {
+    void pc
+      .getStats()
+      .then((report) => {
+        const at = Date.now();
+        let loss: number | undefined;
+        let rttMs: number | undefined;
+        let bitrateKbps: number | undefined;
+        let inbound = 0;
+        let outbound = 0;
+        report.forEach((raw) => {
+          const s = raw as unknown as Record<string, number | string>;
+          if (raw.type === "remote-inbound-rtp" || raw.type === "inbound-rtp") {
+            const lost = Number(s["packetsLost"] ?? 0);
+            const received = Number(s["packetsReceived"] ?? 0);
+            const total = lost + received;
+            if (total > 0) loss = lost / total;
+            const rt = s["roundTripTime"];
+            if (typeof rt === "number") rttMs = rt * 1000;
+            const br = s["bytesReceived"];
+            if (typeof br === "number") inbound += br;
+          }
+          if (raw.type === "outbound-rtp") {
+            const bs = s["bytesSent"];
+            if (typeof bs === "number") outbound += bs;
+          }
+          if (raw.type === "candidate-pair") {
+            const crt = s["currentRoundTripTime"];
+            if (typeof crt === "number") rttMs = crt * 1000;
+          }
+        });
+        const prev = lastBytes;
+        lastBytes = { inbound, outbound, at };
+        if (prev) {
+          const sec = (at - prev.at) / 1000;
+          const bytesDelta = Math.max(0, inbound + outbound - prev.inbound - prev.outbound);
+          if (sec > 0) bitrateKbps = (bytesDelta * 8) / 1000 / sec;
+        }
+        onSample({
+          at,
+          ...(loss !== undefined ? { loss } : {}),
+          ...(rttMs !== undefined ? { rttMs } : {}),
+          ...(bitrateKbps !== undefined ? { bitrateKbps } : {}),
+          online: true,
+        });
+      })
+      .catch(() => {});
+  }, 2_000);
+  return () => clearInterval(timer);
+}
+
+/**
  * Browser-native WebRTC live video. Socket.IO is used only to exchange SDP and
  * ICE candidates; media flows directly between the host and viewers.
  * This deliberately has no hosted media-server dependency.
@@ -36,12 +127,15 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
   const [error, setError] = useState<string | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
+  // A6 — connection-quality samples for the poor-connection banner.
+  const [qualitySamples, setQualitySamples] = useState<QualitySample[]>([]);
   const peerRef = useRef<RTCPeerConnection | null>(null);
   const localRef = useRef<MediaStream | null>(null);
   const pendingCandidates = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
   const targetPeerId = useRef<string | null>(null);
   const hostPeers = useRef<Map<string, RTCPeerConnection>>(new Map());
-  const readyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const readyTimerRef = useRef<number | null>(null);
+  const qualityStoppers = useRef<Array<() => void>>([]);
 
   useEffect(() => {
     if (!enabled || !streamId) return;
@@ -53,11 +147,17 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
 
     let cancelled = false;
     const peer = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      // A1: STUN + optional TURN (VITE_TURN_*) for strict/mobile NATs
+      iceServers: liveIceServers(),
     });
     peerRef.current = peer;
     setError(null);
     setConnected(false);
+    qualityStoppers.current.push(
+      startMeshQualityPolling(peer, (sample) =>
+        setQualitySamples((prev) => [...prev.slice(-31), sample]),
+      ),
+    );
 
     const sendOffer = async (viewerId: string, negotiationPeer: RTCPeerConnection = peer) => {
       if (cancelled || !publish || !viewerId || negotiationPeer.signalingState !== "stable") return;
@@ -81,12 +181,21 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
     const handleReady = ({ viewerId }: { viewerId: string }) => {
       if (!publish || cancelled || hostPeers.current.has(viewerId)) return;
       const hostPeer = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+        // A1: STUN + optional TURN (VITE_TURN_*) for strict/mobile NATs
+        iceServers: liveIceServers(),
       });
       hostPeers.current.set(viewerId, hostPeer);
       localRef.current
         ?.getTracks()
         .forEach((track) => hostPeer.addTrack(track, localRef.current as MediaStream));
+      // A1 — explicit sender bitrate so viewers receive HD, not the ~640x480
+      // default; also sample this peer's stats for the streamer-side banner.
+      void applyMeshVideoBitrate(hostPeer);
+      qualityStoppers.current.push(
+        startMeshQualityPolling(hostPeer, (sample) =>
+          setQualitySamples((prev) => [...prev.slice(-31), sample]),
+        ),
+      );
       hostPeer.onicecandidate = ({ candidate }) => {
         if (candidate) socket.emit("live:webrtc:ice", { streamId, targetId: viewerId, candidate });
       };
@@ -186,8 +295,10 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
         try {
           let media: MediaStream;
           try {
+            // A1 — constrained capture (720p30 ideal, 360p floor; 1080p on
+            // desktop) instead of the browser's ~640x480 default.
             media = await navigator.mediaDevices.getUserMedia({
-              video: true,
+              video: liveCaptureConstraints(),
               audio: AUDIO_CONSTRAINTS,
             });
           } catch {
@@ -235,6 +346,8 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
       socket.off("live:webrtc:offer", handleOffer);
       socket.off("live:webrtc:answer", handleAnswer);
       socket.off("live:webrtc:ice", handleCandidate);
+      qualityStoppers.current.forEach((stop) => stop());
+      qualityStoppers.current = [];
       peer.close();
       hostPeers.current.forEach((hostPeer) => hostPeer.close());
       hostPeers.current.clear();
@@ -275,6 +388,7 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
     error,
     micOn,
     camOn,
+    qualitySamples,
     toggleMic,
     toggleCamera,
     switchCamera,
@@ -308,6 +422,8 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
   const [error, setError] = useState<string | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
+  // A6 — connection-quality samples for the poor-connection banner.
+  const [qualitySamples, setQualitySamples] = useState<QualitySample[]>([]);
 
   // Refs that survive re-renders without restarting the effect
   const localRef = useRef<MediaStream | null>(null);
@@ -321,6 +437,7 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
   const socketParticipants = useRef<Map<string, string>>(new Map());
   const streamsMap = useRef<Map<string, MediaStream>>(new Map());
   const cancelledRef = useRef(false);
+  const qualityStoppers = useRef<Array<() => void>>([]);
 
   useEffect(() => {
     if (!enabled || !streamId) return;
@@ -336,12 +453,20 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
     /** Create a new PeerConnection to a specific target socket */
     const createMeshPeer = (targetSocketId: string) => {
       if (meshPeers.current.has(targetSocketId)) return meshPeers.current.get(targetSocketId)!;
-      const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      const pc = new RTCPeerConnection({ iceServers: liveIceServers() });
       meshPeers.current.set(targetSocketId, pc);
       // Add local tracks so this is BIDIRECTIONAL
       localRef.current
         ?.getTracks()
         .forEach((track) => pc.addTrack(track, localRef.current as MediaStream));
+      // A1 — explicit sender bitrate so everyone receives HD; also sample
+      // this peer's stats for the co-host's poor-connection banner.
+      void applyMeshVideoBitrate(pc);
+      qualityStoppers.current.push(
+        startMeshQualityPolling(pc, (sample) =>
+          setQualitySamples((prev) => [...prev.slice(-31), sample]),
+        ),
+      );
 
       pc.onicecandidate = ({ candidate }) => {
         if (candidate) {
@@ -499,7 +624,7 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
     // Acquire local media
     if (navigator.mediaDevices?.getUserMedia) {
       navigator.mediaDevices
-        .getUserMedia({ video: true, audio: AUDIO_CONSTRAINTS })
+        .getUserMedia({ video: liveCaptureConstraints(), audio: AUDIO_CONSTRAINTS })
         .catch(() => navigator.mediaDevices.getUserMedia({ video: true, audio: false }))
         .then((media) => {
           if (cancelledRef.current) {
@@ -524,6 +649,8 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
 
     return () => {
       cancelledRef.current = true;
+      qualityStoppers.current.forEach((stop) => stop());
+      qualityStoppers.current = [];
       socket.off("live:co-host:webrtc-ready", handleCoHostReady);
       socket.off("live:webrtc:co-host:offer", handleCoHostOffer);
       socket.off("live:webrtc:co-host:answer", handleCoHostAnswer);
@@ -577,6 +704,7 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
     error,
     micOn,
     camOn,
+    qualitySamples,
     toggleMic,
     toggleCamera,
     flipCamera,
@@ -618,7 +746,7 @@ export function useHostCoHostMesh({
 
     const createMeshPeer = (targetSocketId: string): RTCPeerConnection => {
       if (meshPeers.current.has(targetSocketId)) return meshPeers.current.get(targetSocketId)!;
-      const pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      const pc = new RTCPeerConnection({ iceServers: liveIceServers() });
       meshPeers.current.set(targetSocketId, pc);
       localRef.current
         ?.getTracks()
@@ -839,7 +967,7 @@ export function useCameraPreview(enabled: boolean) {
     }
     setError(null);
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: facing }, audio: AUDIO_CONSTRAINTS })
+      .getUserMedia({ video: livePreviewConstraints(facing), audio: AUDIO_CONSTRAINTS })
       .catch(() => navigator.mediaDevices.getUserMedia({ video: true, audio: false }))
       .then((media) => {
         if (cancelled) {

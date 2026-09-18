@@ -31,10 +31,14 @@ export const Route = createFileRoute("/wallet")({
       { title: "Wallet — Gihanga Updates" },
       {
         name: "description",
-        content: "See your available balance, deposit or withdraw via MTN Mobile Money, and review every transaction.",
+        content:
+          "See your available balance, deposit or withdraw via MTN Mobile Money, and review every transaction.",
       },
       { property: "og:title", content: "Wallet — Gihanga Updates" },
-      { property: "og:description", content: "Balances, MoMo deposits/withdrawals, and transaction history." },
+      {
+        property: "og:description",
+        content: "Balances, MoMo deposits/withdrawals, and transaction history.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -69,7 +73,12 @@ function TransactionRow({ tx }: { tx: WalletTransaction }) {
           {tx.status === "pending" ? "Pending" : timeAgo(tx.createdAt)}
         </p>
       </div>
-      <span className={cn("shrink-0 text-sm font-bold tabular-nums", tx.amount >= 0 ? "text-success" : "text-foreground")}>
+      <span
+        className={cn(
+          "shrink-0 text-sm font-bold tabular-nums",
+          tx.amount >= 0 ? "text-success" : "text-foreground",
+        )}
+      >
         {tx.amount >= 0 ? "+" : ""}
         {formatCount(Math.abs(tx.amount))}
       </span>
@@ -124,16 +133,31 @@ function DepositWithdrawDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[380px]">
         <DialogHeader>
-          <DialogTitle>{mode === "deposit" ? "Deposit via MTN MoMo" : "Withdraw via MTN MoMo"}</DialogTitle>
+          <DialogTitle>
+            {mode === "deposit" ? "Deposit via MTN MoMo" : "Withdraw via MTN MoMo"}
+          </DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3 px-1">
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">Amount (RWF)</label>
-            <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="5,000" />
+            <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+              Amount (RWF)
+            </label>
+            <Input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="5,000"
+            />
           </div>
           <div>
-            <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">MTN Mobile Money number</label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+250 78 000 0000" />
+            <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+              MTN Mobile Money number
+            </label>
+            <Input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+250 78 000 0000"
+            />
           </div>
           <Button variant="brand" size="lg" onClick={submit} disabled={busy}>
             <Smartphone className="size-4" />
@@ -150,7 +174,15 @@ function DepositWithdrawDialog({
   );
 }
 
-function ConvertPointsDialog({ open, onOpenChange, rate }: { open: boolean; onOpenChange: (v: boolean) => void; rate: number }) {
+function ConvertPointsDialog({
+  open,
+  onOpenChange,
+  rate,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  rate: number;
+}) {
   const [points, setPoints] = useState("");
   const convert = useConvertPoints();
   const numericPoints = Number(points) || 0;
@@ -162,9 +194,15 @@ function ConvertPointsDialog({ open, onOpenChange, rate }: { open: boolean; onOp
           <DialogTitle>Convert Kingdom Points to cash</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3 px-1">
-          <Input type="number" value={points} onChange={(e) => setPoints(e.target.value)} placeholder="Points to convert" />
+          <Input
+            type="number"
+            value={points}
+            onChange={(e) => setPoints(e.target.value)}
+            placeholder="Points to convert"
+          />
           <p className="text-sm text-muted-foreground">
-            = <strong className="text-foreground">{rwf(numericPoints / rate)}</strong> at {rate} points per RWF
+            = <strong className="text-foreground">{rwf(numericPoints / rate)}</strong> at {rate}{" "}
+            points per RWF
           </p>
           <Button
             variant="brand"
@@ -244,8 +282,12 @@ function WalletPage() {
                 <Coins className="size-6" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="font-display text-xl font-extrabold">{formatCount(wallet?.kingdomPoints ?? 0)} pts</p>
-                <p className="text-xs text-muted-foreground">Kingdom Points from gifts, likes, uploads and referrals</p>
+                <p className="font-display text-xl font-extrabold">
+                  {formatCount(wallet?.kingdomPoints ?? 0)} pts
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Kingdom Points from gifts, likes, uploads and referrals
+                </p>
               </div>
               <Button variant="outline" size="sm" onClick={() => setConvertOpen(true)}>
                 Convert
@@ -254,15 +296,17 @@ function WalletPage() {
 
             {(!data?.momo.depositConfigured || !data?.momo.withdrawConfigured) && (
               <p className="rounded-2xl bg-muted px-4 py-3 text-xs text-muted-foreground">
-                MTN MoMo isn't fully connected on this server yet, so deposits/withdrawals are held as pending
-                transactions for admin review instead of an instant phone prompt.
+                MTN MoMo isn't fully connected on this server yet, so deposits/withdrawals are held
+                as pending transactions for admin review instead of an instant phone prompt.
               </p>
             )}
 
             <div className="surface-card p-5">
               <h2 className="mb-1 text-sm font-bold">Transaction history</h2>
               {transactions.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">No transactions yet.</p>
+                <p className="py-8 text-center text-sm text-muted-foreground">
+                  No transactions yet.
+                </p>
               ) : (
                 <ul>
                   {transactions.map((tx) => (
@@ -276,9 +320,17 @@ function WalletPage() {
       </div>
 
       {dialogMode && (
-        <DepositWithdrawDialog mode={dialogMode} open={Boolean(dialogMode)} onOpenChange={(v) => !v && setDialogMode(null)} />
+        <DepositWithdrawDialog
+          mode={dialogMode}
+          open={Boolean(dialogMode)}
+          onOpenChange={(v) => !v && setDialogMode(null)}
+        />
       )}
-      <ConvertPointsDialog open={convertOpen} onOpenChange={setConvertOpen} rate={data?.pointsToCashRate ?? 100} />
+      <ConvertPointsDialog
+        open={convertOpen}
+        onOpenChange={setConvertOpen}
+        rate={data?.pointsToCashRate ?? 100}
+      />
     </AppShell>
   );
 }

@@ -19,7 +19,11 @@ export function useStaffNotifications() {
 
   const query = useQuery({
     queryKey: ["staff", "notifications"],
-    queryFn: () => api.get<{ notifications: StaffNotification[]; unreadCount: number }>("/system/notifications", true),
+    queryFn: () =>
+      api.get<{ notifications: StaffNotification[]; unreadCount: number }>(
+        "/system/notifications",
+        true,
+      ),
     enabled: Boolean(staffUser),
   });
 
@@ -62,7 +66,8 @@ export interface StaffActivityEntry {
 export function useStaffActivity() {
   return useQuery({
     queryKey: ["staff", "activity"],
-    queryFn: () => api.get<{ activity: StaffActivityEntry[]; since: string }>("/system/staff/activity", true),
+    queryFn: () =>
+      api.get<{ activity: StaffActivityEntry[]; since: string }>("/system/staff/activity", true),
   });
 }
 

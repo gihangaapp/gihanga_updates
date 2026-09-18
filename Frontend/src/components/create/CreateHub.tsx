@@ -58,7 +58,7 @@ export function CreateHost() {
     <div className="flex flex-col min-h-0 h-full w-full bg-background">
       {/* Mode Selector Tab Bar */}
       {mode !== "story" && (
-        <div className="flex items-center justify-center gap-1 border-b border-border bg-surface p-2">
+        <div className="flex shrink-0 items-center justify-center gap-1 border-b border-border bg-surface p-2">
           {modeTabs.map((t) => {
             const Icon = t.icon;
             const isActive = mode === t.id;
@@ -71,7 +71,7 @@ export function CreateHost() {
                   "press flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all",
                   isActive
                     ? "bg-primary-soft text-primary shadow-sm"
-                    : "text-muted-foreground hover:bg-muted"
+                    : "text-muted-foreground hover:bg-muted",
                 )}
               >
                 <Icon className="size-4" />
@@ -82,8 +82,14 @@ export function CreateHost() {
         </div>
       )}
 
-      {/* Creator Body */}
-      <div className="flex-1 overflow-y-auto no-scrollbar">
+      {/* Creator Body — scrollable for post/reel; full-bleed (no scroll)
+          for story so the camera area gets the entire definite height. */}
+      <div
+        className={cn(
+          "flex-1 min-h-0",
+          mode === "story" ? "overflow-hidden" : "overflow-y-auto no-scrollbar",
+        )}
+      >
         {mode === "post" && <PostCreator onClose={closeCreate} />}
         {mode === "reel" && <ReelCreator onClose={closeCreate} />}
         {mode === "story" && <StoryCreator onClose={closeCreate} />}
@@ -94,7 +100,16 @@ export function CreateHost() {
   if (isMobile) {
     return (
       <Drawer open={s.open} onOpenChange={(o) => (!o ? closeCreate() : null)}>
-        <DrawerContent className={cn("p-0 overflow-hidden border-none", mode === "story" ? "h-[100vh] max-h-[100vh] rounded-none" : "h-[96vh] max-h-[96vh] rounded-t-3xl")}>
+        {/* B3 — dvh (not vh) so mobile browser chrome doesn't clip the
+            creator; the story mode is full-bleed and safe-area aware. */}
+        <DrawerContent
+          className={cn(
+            "p-0 overflow-hidden border-none",
+            mode === "story"
+              ? "h-[100dvh] max-h-[100dvh] rounded-none pb-[env(safe-area-inset-bottom)]"
+              : "h-[96dvh] max-h-[96dvh] rounded-t-3xl",
+          )}
+        >
           {content}
         </DrawerContent>
       </Drawer>
@@ -103,7 +118,10 @@ export function CreateHost() {
 
   return (
     <Dialog open={s.open} onOpenChange={(o) => (!o ? closeCreate() : null)}>
-      <DialogContent className="max-h-[92vh] max-w-[760px] overflow-hidden p-0 gap-0 rounded-3xl border-border">
+      {/* B3 — a DEFINITE height (min(92dvh, 900px)) instead of a bare
+          max-height: the story shell renders at full size immediately, with
+          the camera fading in on top — zero layout jump. */}
+      <DialogContent className="h-[min(92dvh,900px)] max-h-[min(92dvh,900px)] max-w-[760px] overflow-hidden p-0 gap-0 rounded-3xl border-border">
         <DialogHeader className="sr-only">
           <DialogTitle>Content Creator</DialogTitle>
         </DialogHeader>

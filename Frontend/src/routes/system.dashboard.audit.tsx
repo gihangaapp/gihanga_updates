@@ -11,7 +11,11 @@ function AuditLogPage() {
   const [action, setAction] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const { data, isLoading } = useAuditLog({ action: action || undefined, from: from || undefined, to: to || undefined });
+  const { data, isLoading } = useAuditLog({
+    action: action || undefined,
+    from: from || undefined,
+    to: to || undefined,
+  });
 
   return (
     <div className="space-y-6">
@@ -20,7 +24,9 @@ function AuditLogPage() {
           <History className="size-6 text-foreground/80" /> Audit Log
         </h1>
         <p className="text-sm text-muted-foreground">
-          {data?.scope === "own" ? "Showing your own actions only." : "Showing every staff action across the platform."}
+          {data?.scope === "own"
+            ? "Showing your own actions only."
+            : "Showing every staff action across the platform."}
         </p>
       </div>
 
@@ -58,14 +64,18 @@ function AuditLogPage() {
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={4} className="p-8 text-center text-muted-foreground">Loading…</td>
+                <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                  Loading…
+                </td>
               </tr>
             )}
             {(data?.entries ?? []).map((e) => (
               <tr key={e._id} className="border-b border-white/5 last:border-0 align-top">
                 <td className="p-3 text-foreground/80">{e.actor ? `@${e.actor.username}` : "—"}</td>
                 <td className="p-3">
-                  <code className="rounded-md bg-muted px-1.5 py-0.5 text-xs text-primary">{e.action}</code>
+                  <code className="rounded-md bg-muted px-1.5 py-0.5 text-xs text-primary">
+                    {e.action}
+                  </code>
                 </td>
                 <td className="p-3 text-muted-foreground">
                   {e.targetUser ? `@${e.targetUser.username}` : e.targetId || "—"}
@@ -75,12 +85,16 @@ function AuditLogPage() {
                     </span>
                   )}
                 </td>
-                <td className="p-3 text-muted-foreground">{new Date(e.createdAt).toLocaleString()}</td>
+                <td className="p-3 text-muted-foreground">
+                  {new Date(e.createdAt).toLocaleString()}
+                </td>
               </tr>
             ))}
             {!isLoading && !data?.entries.length && (
               <tr>
-                <td colSpan={4} className="p-8 text-center text-muted-foreground">No matching entries.</td>
+                <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                  No matching entries.
+                </td>
               </tr>
             )}
           </tbody>

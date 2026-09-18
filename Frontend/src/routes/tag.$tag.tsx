@@ -35,12 +35,15 @@ const tabs = ["All", "Reels"] as const;
 function TagPage() {
   const { tag } = Route.useLoaderData();
   const [tab, setTab] = useState<(typeof tabs)[number]>("All");
-  const { data, isLoading, postsCount, fetchNextPage, hasNextPage, isFetchingNextPage } = useTagPosts(tag);
+  const { data, isLoading, postsCount, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    useTagPosts(tag);
   const trending = useTrendingTags();
 
   const allPosts = data?.pages.flatMap((p) => p.posts) ?? [];
   const list = tab === "Reels" ? allPosts.filter((p) => p.kind === "reel") : allPosts;
-  const relatedTags = (trending.data?.tags ?? []).filter((t) => t.tag.toLowerCase() !== tag.toLowerCase());
+  const relatedTags = (trending.data?.tags ?? []).filter(
+    (t) => t.tag.toLowerCase() !== tag.toLowerCase(),
+  );
 
   return (
     <AppShell>
@@ -78,14 +81,20 @@ function TagPage() {
             </p>
           )}
           {!isLoading && list.length === 0 && (
-            <p className="py-16 text-center text-sm text-muted-foreground">No posts with #{tag} yet.</p>
+            <p className="py-16 text-center text-sm text-muted-foreground">
+              No posts with #{tag} yet.
+            </p>
           )}
           {list.map((p) => (
             <PostCard key={p._id} post={p} />
           ))}
           {hasNextPage && (
             <div className="flex justify-center py-2">
-              <Button variant="outline" onClick={() => fetchNextPage()} disabled={isFetchingNextPage}>
+              <Button
+                variant="outline"
+                onClick={() => fetchNextPage()}
+                disabled={isFetchingNextPage}
+              >
                 {isFetchingNextPage && <Loader2 className="size-4 animate-spin" />}
                 Load more
               </Button>

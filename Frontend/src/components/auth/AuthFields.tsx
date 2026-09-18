@@ -22,7 +22,10 @@ export function AuthField({
 
   return (
     <div className="space-y-1.5">
-      <label htmlFor={fieldId} className="block text-xs font-bold tracking-wide uppercase text-muted-foreground">
+      <label
+        htmlFor={fieldId}
+        className="block text-xs font-bold tracking-wide uppercase text-muted-foreground"
+      >
         {label}
       </label>
       <div className="relative">

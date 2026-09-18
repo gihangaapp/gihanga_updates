@@ -15,8 +15,14 @@ export function useStories() {
 export function useCreateStory() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { mediaUrl: string; mediaKey?: string | undefined; mediaType: "image" | "video"; caption?: string | undefined; duration?: number | undefined; audience?: string }) =>
-      api.post("/stories", input),
+    mutationFn: (input: {
+      mediaUrl: string;
+      mediaKey?: string | undefined;
+      mediaType: "image" | "video";
+      caption?: string | undefined;
+      duration?: number | undefined;
+      audience?: string;
+    }) => api.post("/stories", input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["stories"] }),
   });
 }

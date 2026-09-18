@@ -1,12 +1,22 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Globe2, Heart, Lock, MapPin, MessageCircle, Share2, Users } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Globe2,
+  Heart,
+  Lock,
+  MapPin,
+  MessageCircle,
+  Share2,
+  Users,
+} from "lucide-react";
 import { GAvatar } from "@/components/common/GAvatar";
 import { Button } from "@/components/ui/button";
 import type { MediaFile } from "../MediaPicker";
-import type { UserProfile } from "@/lib/api-client";
+import type { User } from "@/types";
 
 interface PostPreviewProps {
-  user: UserProfile;
+  user: User;
   caption: string;
   files: MediaFile[];
   location?: string;
@@ -28,8 +38,7 @@ export function PostPreview({
 }: PostPreviewProps) {
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
 
-  const AudienceIcon =
-    audience === "public" ? Globe2 : audience === "followers" ? Users : Lock;
+  const AudienceIcon = audience === "public" ? Globe2 : audience === "followers" ? Users : Lock;
 
   const currentMedia = files[activeMediaIndex];
 

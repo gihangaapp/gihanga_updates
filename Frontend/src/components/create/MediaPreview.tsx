@@ -24,14 +24,16 @@ export function MediaPreview({
 }: MediaPreviewProps) {
   if (files.length === 0) return null;
 
-  const active = files[selectedIndex] ?? files[0];
+  const active: MediaFile = files[selectedIndex] ?? files[0] ?? ({} as MediaFile);
 
   const moveLeft = (index: number, e: React.MouseEvent) => {
     e.stopPropagation();
     if (index === 0 || !onReorder) return;
     const next = [...files];
     const temp = next[index - 1];
-    next[index - 1] = next[index];
+    const cur = next[index];
+    if (temp === undefined || cur === undefined) return;
+    next[index - 1] = cur;
     next[index] = temp;
     onReorder(next);
     if (selectedIndex === index) onSelect(index - 1);
@@ -43,7 +45,9 @@ export function MediaPreview({
     if (index === files.length - 1 || !onReorder) return;
     const next = [...files];
     const temp = next[index + 1];
-    next[index + 1] = next[index];
+    const cur = next[index];
+    if (temp === undefined || cur === undefined) return;
+    next[index + 1] = cur;
     next[index] = temp;
     onReorder(next);
     if (selectedIndex === index) onSelect(index + 1);
@@ -111,25 +115,18 @@ export function MediaPreview({
                   "group relative size-16 shrink-0 cursor-pointer overflow-hidden rounded-xl border-2 transition-all",
                   isSelected
                     ? "border-primary ring-2 ring-primary/30"
-                    : "border-transparent opacity-70 hover:opacity-100"
+                    : "border-transparent opacity-70 hover:opacity-100",
                 )}
               >
                 {file.isVideo ? (
                   <div className="relative h-full w-full bg-muted">
-                    <video
-                      src={file.previewUrl}
-                      className="h-full w-full object-cover"
-                    />
+                    <video src={file.previewUrl} className="h-full w-full object-cover" />
                     <div className="absolute inset-0 grid place-items-center bg-black/30">
                       <Video className="size-4 text-white" />
                     </div>
                   </div>
                 ) : (
-                  <img
-                    src={file.previewUrl}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
+                  <img src={file.previewUrl} alt="" className="h-full w-full object-cover" />
                 )}
 
                 {/* Quick reorder overlay controls */}

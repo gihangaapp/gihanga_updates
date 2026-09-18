@@ -28,7 +28,7 @@ export const API_ORIGIN = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
 /** Turns a relative `/uploads/...` path from the backend into an absolute URL. */
 export function mediaUrl(path?: string | null): string | undefined {
   if (!path) return undefined;
-  const firstPath = path.includes(",") ? path.split(",")[0].trim() : path.trim();
+  const firstPath = (path.includes(",") ? path.split(",")[0] : path)?.trim() ?? "";
   if (!firstPath) return undefined;
   if (/^https?:\/\//.test(firstPath)) return firstPath;
   if (firstPath.startsWith("data:") || firstPath.startsWith("blob:")) return firstPath;
@@ -39,7 +39,10 @@ export function mediaUrl(path?: string | null): string | undefined {
 /** Parses comma-separated media URLs into an array of absolute URLs */
 export function mediaUrls(path?: string | null): string[] {
   if (!path) return [];
-  const parts = path.split(",").map((s) => s.trim()).filter(Boolean);
+  const parts = path
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   return parts.map((p) => mediaUrl(p)).filter(Boolean) as string[];
 }
 
@@ -113,7 +116,7 @@ export function clearStaffTokens() {
 async function apiFetch<T>(
   endpoint: string,
   options: RequestInit = {},
-  isStaffRequest = false
+  isStaffRequest = false,
 ): Promise<T> {
   const token = isStaffRequest ? getStaffAccessToken() : getConsumerAccessToken();
 
@@ -132,7 +135,11 @@ async function apiFetch<T>(
   });
 
   // Handle Token Refresh on 401
-  if (response.status === 401 && !endpoint.includes("/auth/login") && !endpoint.includes("/auth/refresh")) {
+  if (
+    response.status === 401 &&
+    !endpoint.includes("/auth/login") &&
+    !endpoint.includes("/auth/refresh")
+  ) {
     const refreshed = isStaffRequest ? await refreshStaffToken() : await refreshConsumerToken();
     if (refreshed) {
       const newToken = isStaffRequest ? getStaffAccessToken() : getConsumerAccessToken();
@@ -223,11 +230,23 @@ async function refreshStaffToken(): Promise<boolean> {
 export const api = {
   get: <T>(endpoint: string, isStaff = false) => apiFetch<T>(endpoint, { method: "GET" }, isStaff),
   post: <T>(endpoint: string, body?: any, isStaff = false) =>
-    apiFetch<T>(endpoint, { method: "POST", ...(body !== undefined ? { body: JSON.stringify(body) } : {}) }, isStaff),
+    apiFetch<T>(
+      endpoint,
+      { method: "POST", ...(body !== undefined ? { body: JSON.stringify(body) } : {}) },
+      isStaff,
+    ),
   patch: <T>(endpoint: string, body?: any, isStaff = false) =>
-    apiFetch<T>(endpoint, { method: "PATCH", ...(body !== undefined ? { body: JSON.stringify(body) } : {}) }, isStaff),
+    apiFetch<T>(
+      endpoint,
+      { method: "PATCH", ...(body !== undefined ? { body: JSON.stringify(body) } : {}) },
+      isStaff,
+    ),
   put: <T>(endpoint: string, body?: any, isStaff = false) =>
-    apiFetch<T>(endpoint, { method: "PUT", ...(body !== undefined ? { body: JSON.stringify(body) } : {}) }, isStaff),
+    apiFetch<T>(
+      endpoint,
+      { method: "PUT", ...(body !== undefined ? { body: JSON.stringify(body) } : {}) },
+      isStaff,
+    ),
   delete: <T>(endpoint: string, isStaff = false) =>
     apiFetch<T>(endpoint, { method: "DELETE" }, isStaff),
 };
@@ -236,11 +255,26 @@ export const api = {
  * Uploads a single file with progress reporting (fetch can't report upload progress,
  * so this uses XHR under the hood). Used for photos/videos/reels/avatars/stories.
  */
+export interface UploadedMediaInfo {
+  url: string;
+  key: string;
+  mimeType: string;
+  sizeBytes: number;
+  kind: string;
+  /** B1 — intrinsic geometry returned by the upload API. */
+  width?: number;
+  height?: number;
+  aspectRatio?: number;
+  orientation?: string;
+  blurDataUrl?: string;
+  thumbnailUrl?: string;
+}
+
 export function uploadFile(
   kind: "photos" | "videos" | "reels" | "avatars" | "stories",
   file: File,
   onProgress?: (pct: number) => void,
-): Promise<{ url: string; key: string; mimeType: string; sizeBytes: number; kind: string }> {
+): Promise<UploadedMediaInfo> {
   return new Promise((resolve, reject) => {
     const token = getConsumerAccessToken();
     const xhr = new XMLHttpRequest();
@@ -282,6 +316,15 @@ export interface PostAuthor {
 
 export type PostKind = "photo" | "video" | "reel" | "text";
 
+/** B1 — per-item media metadata for multi-image posts. */
+export interface FeedPostMediaItem {
+  url: string;
+  width?: number;
+  height?: number;
+  aspectRatio?: number;
+  kind?: "photo" | "video";
+}
+
 export interface FeedPost {
   _id: string;
   author: PostAuthor;
@@ -290,6 +333,13 @@ export interface FeedPost {
   mediaUrl?: string;
   thumbnailUrl?: string;
   duration?: string;
+  /** B1 — intrinsic media geometry (so the feed can size without cropping). */
+  mediaWidth?: number;
+  mediaHeight?: number;
+  aspectRatio?: number;
+  blurDataUrl?: string;
+  /** B1 — per-item metadata for multi-image posts. */
+  media?: FeedPostMediaItem[];
   location?: string;
   tags: string[];
   audience: "public" | "followers" | "private";
@@ -341,7 +391,13 @@ export interface AppNotification {
   actor?: PostAuthor;
   kind: "like" | "comment" | "follow" | "mention" | "live" | "system" | "payment" | "reward";
   text: string;
-  relatedPost?: { _id: string; kind: PostKind; mediaUrl?: string; thumbnailUrl?: string; body: string };
+  relatedPost?: {
+    _id: string;
+    kind: PostKind;
+    mediaUrl?: string;
+    thumbnailUrl?: string;
+    body: string;
+  };
   read: boolean;
   createdAt: string;
 }

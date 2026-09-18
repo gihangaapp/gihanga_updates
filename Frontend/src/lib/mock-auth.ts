@@ -26,7 +26,9 @@ export function patchSession(patch: Record<string, any>) {
       const updated = { ...current, ...patch };
       localStorage.setItem("gihanga_user_profile", JSON.stringify(updated));
     }
-  } catch {}
+  } catch {
+    /* best-effort — ignore */
+  }
 }
 
 export function clearSession() {

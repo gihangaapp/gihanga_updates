@@ -36,11 +36,7 @@ export function UnsavedChangesGuard({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="mt-4 flex flex-col gap-2">
-          <Button
-            variant="brand"
-            className="w-full"
-            onClick={onSaveDraft}
-          >
+          <Button variant="brand" className="w-full" onClick={onSaveDraft}>
             Save Draft
           </Button>
           <Button
@@ -51,11 +47,7 @@ export function UnsavedChangesGuard({
             Discard
           </Button>
           <AlertDialogCancel asChild>
-            <Button
-              variant="ghost"
-              className="w-full"
-              onClick={onContinue}
-            >
+            <Button variant="ghost" className="w-full" onClick={onContinue}>
               Continue Editing
             </Button>
           </AlertDialogCancel>

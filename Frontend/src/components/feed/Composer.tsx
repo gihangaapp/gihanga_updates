@@ -5,7 +5,13 @@ import { Button } from "@/components/ui/button";
 import { useSessionUser } from "@/components/auth/AccountMenu";
 import { openCreate, type CreateMode } from "@/components/create/CreateHub";
 
-const actions: { label: string; icon: typeof Image; tone: string; mode?: CreateMode; to?: string }[] = [
+const actions: {
+  label: string;
+  icon: typeof Image;
+  tone: string;
+  mode?: CreateMode;
+  to?: string;
+}[] = [
   { label: "Photo", icon: Image, tone: "text-info", mode: "post" },
   { label: "Video", icon: Video, tone: "text-accent", mode: "reel" },
   { label: "Go live", icon: Radio, tone: "text-danger", to: "/live" },
@@ -29,7 +35,11 @@ export function Composer() {
         >
           What&apos;s the update, {user.name.split(" ")[0]}?
         </button>
-        <Button variant="brand" className="hidden sm:inline-flex" onClick={() => openCreate("post")}>
+        <Button
+          variant="brand"
+          className="hidden sm:inline-flex"
+          onClick={() => openCreate("post")}
+        >
           Post
         </Button>
       </div>

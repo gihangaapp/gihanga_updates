@@ -9,8 +9,11 @@
     "start": "node dist/server.js",
     "seed": "tsx src/scripts/seed.ts",
     "seed:users": "tsx src/scripts/seed-users.ts",
-    "lint": "eslint src --ext .ts",
-    "test:payment": "tsx --test test/payment-regression.test.ts"
+    "lint": "eslint src test",
+    "test:payment": "tsx --test test/payment-regression.test.ts",
+    "test:live": "tsx --test test/live-regression.test.ts test/idempotency.test.ts",
+    "test": "tsx --test test/payment-regression.test.ts test/live-regression.test.ts test/idempotency.test.ts",
+    "migrate:post-media": "tsx src/scripts/migrate-post-media-meta.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -43,6 +46,8 @@
     "@types/nodemailer": "^6.4.17",
     "@types/uuid": "^10.0.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "eslint": "^9.30.0",
+    "typescript-eslint": "^8.35.0"
   }
 }

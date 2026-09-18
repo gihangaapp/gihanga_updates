@@ -12,6 +12,13 @@
  * stable this flag can stay as a permanent safety switch or be removed —
  * the project owner decides.
  *
+ * A2 note: the viewer-facing split-screen grid (host + co-host tiles) is
+ * implemented on the LiveKit path — an SFU can fan every publisher out to
+ * every subscriber. The legacy mesh has no server to fan out co-host video
+ * to plain viewers, so useViewerStreams returns an empty grid there and the
+ * live page shows the classic host-only view (explicitly guarded, as the
+ * architecture allows; enable VITE_USE_LIVEKIT + LIVEKIT_* for full grids).
+ *
  * The exported hook names intentionally match browser-live.ts one-for-one so
  * consumers swap transports by changing ONLY this import path — zero JSX,
  * styling or layout changes anywhere.
@@ -23,7 +30,12 @@ import {
   useCameraPreview,
   type CoHostRemoteStream,
 } from "./browser-live";
-import { useLivekitLiveRoom, useLivekitCoHostRoom, useLivekitHostCoHostMesh } from "./livekit-live";
+import {
+  useLivekitLiveRoom,
+  useLivekitCoHostRoom,
+  useLivekitHostCoHostMesh,
+  useLivekitViewerStreams,
+} from "./livekit-live";
 
 export type { CoHostRemoteStream } from "./browser-live";
 export { useCameraPreview };
@@ -35,10 +47,13 @@ export interface LiveRoomOptions {
   /** The host's userId (LiveKit path) — viewers subscribe only to the host's stream. */
   hostId?: string | undefined;
   /** Staff hosts authenticate the token request with their staff session. */
-  asStaff?: boolean | undefined;
+  asStaff?: string | boolean | undefined;
 }
 
 const USE_LIVEKIT = import.meta.env["VITE_USE_LIVEKIT"] === "true";
+
+/** True when the viewer split-screen grid is available (SFU only). */
+export const VIEWER_GRID_AVAILABLE = USE_LIVEKIT;
 
 export function useBrowserLiveRoom(options: LiveRoomOptions) {
   const mesh = useMeshLiveRoom({
@@ -51,7 +66,7 @@ export function useBrowserLiveRoom(options: LiveRoomOptions) {
     publish: options.publish,
     enabled: USE_LIVEKIT ? options.enabled : false,
     hostId: options.hostId,
-    asStaff: options.asStaff,
+    asStaff: Boolean(options.asStaff),
   });
   return USE_LIVEKIT ? livekit : mesh;
 }
@@ -61,7 +76,7 @@ export function useCoHostLiveRoom(options: {
   hostId: string;
   myUserId: string;
   enabled: boolean;
-  asStaff?: boolean | undefined;
+  asStaff?: string | boolean | undefined;
 }) {
   const mesh = useMeshCoHostRoom({
     streamId: options.streamId,
@@ -95,4 +110,32 @@ export function useHostCoHostMesh(options: {
     enabled: USE_LIVEKIT ? options.enabled : false,
   });
   return USE_LIVEKIT ? livekit : mesh;
+}
+
+export interface ViewerStreamsOptions {
+  streamId: string;
+  hostId: string;
+  /** Host + accepted co-host user ids — the grid's authorization list. */
+  authorizedIds: string[];
+  enabled: boolean;
+  asStaff?: string | boolean | undefined;
+}
+
+/**
+ * A2 — plain viewers' split-screen source (host + every accepted co-host).
+ * LiveKit: real tiles in stable join order. Mesh: guarded — returns an empty
+ * list and the live page falls back to the classic host-only view.
+ */
+export function useViewerStreams(options: ViewerStreamsOptions) {
+  const livekit = useLivekitViewerStreams({
+    streamId: options.streamId,
+    hostId: options.hostId,
+    authorizedIds: options.authorizedIds,
+    enabled: USE_LIVEKIT ? options.enabled : false,
+    asStaff: Boolean(options.asStaff),
+  });
+  // Mesh: viewers keep the host-only view (explicit guard, see header).
+  return USE_LIVEKIT
+    ? livekit
+    : { viewerStreams: [], connected: false, error: null, qualitySamples: [] };
 }

@@ -165,7 +165,11 @@ export function useUpdateUserSettings() {
 
   return useMutation({
     mutationFn: async (updates: Partial<UserSettingsData> & Partial<UserSettingsUser>) => {
-      const res = await api.patch<{ settings: UserSettingsData; user?: UserSettingsUser; message: string }>("/users/settings", updates);
+      const res = await api.patch<{
+        settings: UserSettingsData;
+        user?: UserSettingsUser;
+        message: string;
+      }>("/users/settings", updates);
       return res;
     },
     onSuccess: (data) => {
@@ -174,7 +178,7 @@ export function useUpdateUserSettings() {
         return {
           ...prev,
           settings: data.settings || prev.settings,
-          user: data.user ? { ...prev.user, ...data.user } as UserSettingsUser : prev.user,
+          user: data.user ? ({ ...prev.user, ...data.user } as UserSettingsUser) : prev.user,
         };
       });
       queryClient.invalidateQueries({ queryKey: ["user-settings"] });
@@ -211,7 +215,10 @@ export function useToggleBlockUser() {
 export function useChangePassword() {
   return useMutation({
     mutationFn: async (data: { currentPassword: string; newPassword: string }) => {
-      return api.post<{ success: boolean; message: string }>("/users/settings/change-password", data);
+      return api.post<{ success: boolean; message: string }>(
+        "/users/settings/change-password",
+        data,
+      );
     },
   });
 }
@@ -232,7 +239,9 @@ export function useRevokeAllSessions() {
 export function useRequestAccountData() {
   return useMutation({
     mutationFn: async () => {
-      return api.post<{ success: boolean; message: string; exportData: any }>("/users/settings/request-data");
+      return api.post<{ success: boolean; message: string; exportData: any }>(
+        "/users/settings/request-data",
+      );
     },
   });
 }

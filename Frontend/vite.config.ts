@@ -17,6 +17,6 @@ export default defineConfig({
   // without this, Vercel can't find a "dist" (or its expected) output and
   // the deployment fails with "No Output Directory found".
   nitro: {
-    preset: process.env.VERCEL ? "vercel" : "node-server",
+    preset: process.env["VERCEL"] ? "vercel" : "node-server",
   },
 });

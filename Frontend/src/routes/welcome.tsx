@@ -30,7 +30,11 @@ export const Route = createFileRoute("/welcome")({
 });
 
 const highlights = [
-  { icon: Sparkles, title: "A feed with taste", body: "For you, Following and Trending — no noise." },
+  {
+    icon: Sparkles,
+    title: "A feed with taste",
+    body: "For you, Following and Trending — no noise.",
+  },
   { icon: Flame, title: "Stories & reels", body: "Go live, post vertical, keep the room warm." },
   { icon: Users, title: "Creator tools", body: "Drafts, scheduling and payouts in RWF." },
   { icon: ShieldCheck, title: "Safety first", body: "Granular controls over who sees what." },

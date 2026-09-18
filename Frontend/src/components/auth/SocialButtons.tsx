@@ -30,7 +30,9 @@ export function SocialButtons({ mode = "in" }: { mode?: "in" | "up" }) {
       <Button
         variant="outline"
         size="lg"
-        onClick={() => toast(`${label} with Google`, { description: "Social auth is mocked in this build." })}
+        onClick={() =>
+          toast(`${label} with Google`, { description: "Social auth is mocked in this build." })
+        }
       >
         <GoogleMark />
         Google
@@ -38,7 +40,9 @@ export function SocialButtons({ mode = "in" }: { mode?: "in" | "up" }) {
       <Button
         variant="outline"
         size="lg"
-        onClick={() => toast(`${label} with Apple`, { description: "Social auth is mocked in this build." })}
+        onClick={() =>
+          toast(`${label} with Apple`, { description: "Social auth is mocked in this build." })
+        }
       >
         <AppleMark />
         Apple

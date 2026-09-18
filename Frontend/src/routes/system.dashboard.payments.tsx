@@ -28,8 +28,12 @@ function PaymentsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">Payments Queue</h1>
-        <p className="text-sm text-muted-foreground">Review and settle MTN Mobile Money deposits and withdrawals.</p>
+        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
+          Payments Queue
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Review and settle MTN Mobile Money deposits and withdrawals.
+        </p>
       </div>
 
       <div className="flex gap-1 rounded-2xl border border-border bg-card p-1">
@@ -57,21 +61,33 @@ function PaymentsPage() {
               <span
                 className={cn(
                   "grid size-10 shrink-0 place-items-center rounded-full",
-                  tx.kind === "deposit" ? "bg-success/10 text-success" : "bg-rose-500/15 text-danger",
+                  tx.kind === "deposit"
+                    ? "bg-success/10 text-success"
+                    : "bg-rose-500/15 text-danger",
                 )}
               >
-                {tx.kind === "deposit" ? <ArrowDownLeft className="size-4" /> : <ArrowUpRight className="size-4" />}
+                {tx.kind === "deposit" ? (
+                  <ArrowDownLeft className="size-4" />
+                ) : (
+                  <ArrowUpRight className="size-4" />
+                )}
               </span>
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-foreground">
-                  {tx.user?.name} <span className="text-muted-foreground">@{tx.user?.username}</span>
+                  {tx.user?.name}{" "}
+                  <span className="text-muted-foreground">@{tx.user?.username}</span>
                 </p>
                 <p className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Smartphone className="size-3" /> {tx.user?.mtnMomoNumber || tx.label}
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">{timeAgo(tx.createdAt)} ago</p>
               </div>
-              <p className={cn("font-display text-lg font-extrabold", tx.kind === "deposit" ? "text-success" : "text-danger")}>
+              <p
+                className={cn(
+                  "font-display text-lg font-extrabold",
+                  tx.kind === "deposit" ? "text-success" : "text-danger",
+                )}
+              >
                 {rwf(tx.amount)}
               </p>
             </div>
@@ -104,7 +120,13 @@ function PaymentsPage() {
                       onClick={() =>
                         rejectPayment.mutate(
                           { id: tx._id, reason },
-                          { onSuccess: () => { toast.error("Payment rejected"); setRejectingId(null); setReason(""); } },
+                          {
+                            onSuccess: () => {
+                              toast.error("Payment rejected");
+                              setRejectingId(null);
+                              setReason("");
+                            },
+                          },
                         )
                       }
                     >
@@ -112,7 +134,12 @@ function PaymentsPage() {
                     </Button>
                   </>
                 ) : (
-                  <Button size="sm" variant="outline" className="border-border text-foreground/80" onClick={() => setRejectingId(tx._id)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-border text-foreground/80"
+                    onClick={() => setRejectingId(tx._id)}
+                  >
                     <X className="size-3.5" /> Reject
                   </Button>
                 )}

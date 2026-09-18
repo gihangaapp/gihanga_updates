@@ -137,7 +137,9 @@ function StudioPage() {
       image: mediaUrl(r.thumbnailUrl || r.mediaUrl),
       status: "published" as "published" | "scheduled" | "draft",
       views: r.views,
-      engagement: r.views ? Math.round(((r.likes + r.comments) / Math.max(r.views, 1)) * 1000) / 10 : 0,
+      engagement: r.views
+        ? Math.round(((r.likes + r.comments) / Math.max(r.views, 1)) * 1000) / 10
+        : 0,
       earnings: 0,
       date: new Date(r.createdAt).toLocaleDateString(),
     })),
@@ -172,9 +174,24 @@ function StudioPage() {
         </header>
 
         <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="Views (30d)" value={formatCount(data?.totals.totalViews ?? 0)} delta={`${data?.totals.posts ?? 0} posts`} icon={Eye} />
-          <Stat label="New followers" value={formatCount(data?.totals.newFollowers30d ?? 0)} delta={`${formatCount(data?.totals.followers ?? 0)} total`} icon={UserPlus} />
-          <Stat label="Likes (30d)" value={formatCount(data?.totals.totalLikes ?? 0)} delta="across all posts" icon={Heart} />
+          <Stat
+            label="Views (30d)"
+            value={formatCount(data?.totals.totalViews ?? 0)}
+            delta={`${data?.totals.posts ?? 0} posts`}
+            icon={Eye}
+          />
+          <Stat
+            label="New followers"
+            value={formatCount(data?.totals.newFollowers30d ?? 0)}
+            delta={`${formatCount(data?.totals.followers ?? 0)} total`}
+            icon={UserPlus}
+          />
+          <Stat
+            label="Likes (30d)"
+            value={formatCount(data?.totals.totalLikes ?? 0)}
+            delta="across all posts"
+            icon={Heart}
+          />
           <Stat
             label="Earnings (30d)"
             value={rwf((data?.revenueSplit ?? []).reduce((s, r) => s + r.value, 0))}
@@ -251,7 +268,13 @@ function StudioPage() {
                 <div className="h-40 w-40 shrink-0">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={data?.revenueSplit ?? []} dataKey="value" nameKey="label" innerRadius={38} outerRadius={68}>
+                      <Pie
+                        data={data?.revenueSplit ?? []}
+                        dataKey="value"
+                        nameKey="label"
+                        innerRadius={38}
+                        outerRadius={68}
+                      >
                         {(data?.revenueSplit ?? []).map((_, i) => (
                           <Cell key={i} fill={pieColors[i % pieColors.length]} />
                         ))}
@@ -263,7 +286,10 @@ function StudioPage() {
                 <ul className="min-w-0 flex-1 space-y-1.5">
                   {(data?.revenueSplit ?? []).map((c, i) => (
                     <li key={c.label} className="flex items-center gap-2 text-sm">
-                      <span className="size-2.5 rounded-full" style={{ background: pieColors[i % pieColors.length] }} />
+                      <span
+                        className="size-2.5 rounded-full"
+                        style={{ background: pieColors[i % pieColors.length] }}
+                      />
                       <span className="min-w-0 flex-1 truncate">{c.label}</span>
                       <span className="font-bold">{formatCount(c.value)} pts</span>
                     </li>
@@ -271,7 +297,9 @@ function StudioPage() {
                 </ul>
               </div>
             ) : (
-              <p className="py-8 text-center text-sm text-muted-foreground">No earnings yet this period.</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                No earnings yet this period.
+              </p>
             )}
           </section>
 
@@ -291,7 +319,9 @@ function StudioPage() {
                 onClick={() => setFilter(f)}
                 className={cn(
                   "press rounded-lg px-2.5 py-1 text-xs font-bold capitalize",
-                  filter === f ? "bg-primary-soft text-primary" : "text-muted-foreground hover:bg-muted",
+                  filter === f
+                    ? "bg-primary-soft text-primary"
+                    : "text-muted-foreground hover:bg-muted",
                 )}
               >
                 {f}
@@ -300,7 +330,9 @@ function StudioPage() {
           </header>
           <ul className="divide-y divide-border">
             {rows.length === 0 && (
-              <li className="p-8 text-center text-sm text-muted-foreground">No content yet — create your first post.</li>
+              <li className="p-8 text-center text-sm text-muted-foreground">
+                No content yet — create your first post.
+              </li>
             )}
             {rows.map((r) => (
               <li key={r.id} className="flex items-center gap-3 p-3">
@@ -350,7 +382,9 @@ function StudioPage() {
             <p className="font-display text-base font-bold">
               Go live to your {formatCount(data?.totals.followers ?? 0)} followers
             </p>
-            <p className="text-sm text-muted-foreground">Live sessions are a great way to connect in real time.</p>
+            <p className="text-sm text-muted-foreground">
+              Live sessions are a great way to connect in real time.
+            </p>
           </span>
           <Button variant="brand" asChild>
             <Link to="/live">Start setup</Link>

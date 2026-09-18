@@ -71,12 +71,7 @@ export function VideoTrimmer({
       </div>
 
       {/* Hidden Video element for playback sync */}
-      <video
-        ref={videoRef}
-        src={videoUrl}
-        onTimeUpdate={handleTimeUpdate}
-        className="hidden"
-      />
+      <video ref={videoRef} src={videoUrl} onTimeUpdate={handleTimeUpdate} className="hidden" />
 
       {/* Trimmer Sliders */}
       <div className="flex flex-col gap-3">
@@ -90,7 +85,10 @@ export function VideoTrimmer({
             min={0}
             max={Math.max(0, trimEnd - 1)}
             step={0.5}
-            onValueChange={([val]) => onTrimChange(val, trimEnd)}
+            onValueChange={(vals) => {
+              const val = vals[0];
+              if (val !== undefined) onTrimChange(val, trimEnd);
+            }}
           />
         </div>
 
@@ -104,7 +102,10 @@ export function VideoTrimmer({
             min={trimStart + 1}
             max={duration || 120}
             step={0.5}
-            onValueChange={([val]) => onTrimChange(trimStart, val)}
+            onValueChange={(vals) => {
+              const val = vals[0];
+              if (val !== undefined) onTrimChange(trimStart, val);
+            }}
           />
         </div>
       </div>

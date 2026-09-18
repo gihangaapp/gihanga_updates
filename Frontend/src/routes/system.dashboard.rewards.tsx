@@ -45,7 +45,11 @@ function RewardsConfigPage() {
   }
 
   if (isLoading || !rates) {
-    return <p className="py-10 text-center text-sm text-muted-foreground">Loading reward configuration…</p>;
+    return (
+      <p className="py-10 text-center text-sm text-muted-foreground">
+        Loading reward configuration…
+      </p>
+    );
   }
 
   return (
@@ -59,8 +63,14 @@ function RewardsConfigPage() {
             Set point accrual rates for creator actions and the point-to-cash conversion ratio.
           </p>
         </div>
-        <Button size="sm" className="bg-indigo-600 font-semibold text-foreground hover:bg-indigo-500" onClick={save} disabled={saveConfig.isPending}>
-          <Save className="mr-1.5 size-4" /> {saveConfig.isPending ? "Saving…" : "Save Configuration"}
+        <Button
+          size="sm"
+          className="bg-indigo-600 font-semibold text-foreground hover:bg-indigo-500"
+          onClick={save}
+          disabled={saveConfig.isPending}
+        >
+          <Save className="mr-1.5 size-4" />{" "}
+          {saveConfig.isPending ? "Saving…" : "Save Configuration"}
         </Button>
       </div>
 
@@ -81,7 +91,10 @@ function RewardsConfigPage() {
         <h2 className="font-display text-base font-bold text-foreground">Action Accrual Rates</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           {RATE_LABELS.map((r) => (
-            <div key={r.key} className="flex items-center justify-between rounded-2xl border border-border bg-elevated/60 p-3.5">
+            <div
+              key={r.key}
+              className="flex items-center justify-between rounded-2xl border border-border bg-elevated/60 p-3.5"
+            >
               <span className="text-xs font-semibold text-foreground/80">{r.label}</span>
               <div className="flex items-center gap-2">
                 <Input

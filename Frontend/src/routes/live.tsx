@@ -1,6 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { Flame, Gift, Lock, Mic, MicOff, Play, Radio, Search, SwitchCamera, Users, Video, VideoOff } from "lucide-react";
+import {
+  Flame,
+  Gift,
+  Lock,
+  Mic,
+  MicOff,
+  Play,
+  Radio,
+  Search,
+  SwitchCamera,
+  Users,
+  Video,
+  VideoOff,
+} from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { GAvatar } from "@/components/common/GAvatar";
@@ -11,11 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
 import { useCameraPreview, useBrowserLiveRoom } from "@/lib/live-room";
 import { formatCount } from "@/lib/format";
-import {
-  useLiveStreams,
-  useStartLive,
-  type LiveStreamData,
-} from "@/hooks/use-live";
+import { useLiveStreams, useStartLive, type LiveStreamData } from "@/hooks/use-live";
 import { getLiveSocket } from "@/lib/socket-client";
 import { cn } from "@/lib/utils";
 
@@ -25,10 +34,14 @@ export const Route = createFileRoute("/live")({
       { title: "Live Streams — Gihanga Updates" },
       {
         name: "description",
-        content: "Watch creators streaming live right now on Gihanga Updates, or start your own broadcast.",
+        content:
+          "Watch creators streaming live right now on Gihanga Updates, or start your own broadcast.",
       },
       { property: "og:title", content: "Live Streams — Gihanga Updates" },
-      { property: "og:description", content: "Watch live streams from creators on Gihanga Updates." },
+      {
+        property: "og:description",
+        content: "Watch live streams from creators on Gihanga Updates.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -64,7 +77,12 @@ function LiveVideoPreview({
   isOwnStream: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const { localStream, remoteStream, connected, error: roomError } = useBrowserLiveRoom({
+  const {
+    localStream,
+    remoteStream,
+    connected,
+    error: roomError,
+  } = useBrowserLiveRoom({
     streamId: stream._id,
     publish: isOwnStream,
     enabled,
@@ -98,13 +116,13 @@ function LiveVideoPreview({
     ? "This is your live — open it to manage and preview your broadcast"
     : !enabled
       ? "Sign in to watch this live video"
-        : roomError
-          ? `Live video unavailable: ${roomError}`
-          : !connected
-            ? "Connecting to the live camera…"
-            : !hasVideo
-              ? "Waiting for the host's video…"
-              : "";
+      : roomError
+        ? `Live video unavailable: ${roomError}`
+        : !connected
+          ? "Connecting to the live camera…"
+          : !hasVideo
+            ? "Waiting for the host's video…"
+            : "";
 
   return (
     <>
@@ -120,7 +138,15 @@ function LiveVideoPreview({
   );
 }
 
-function GoLiveDialog({ open, onOpenChange, asStaff }: { open: boolean; onOpenChange: (v: boolean) => void; asStaff: boolean }) {
+function GoLiveDialog({
+  open,
+  onOpenChange,
+  asStaff,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  asStaff: boolean;
+}) {
   const navigate = useNavigate();
   const startLive = useStartLive(asStaff);
   const [step, setStep] = useState<"details" | "preview">("details");
@@ -165,13 +191,21 @@ function GoLiveDialog({ open, onOpenChange, asStaff }: { open: boolean; onOpenCh
       const videoTrack = stream?.getVideoTracks()[0];
       sessionStorage.setItem(
         "gihanga_live_camera_preference",
-        JSON.stringify({ deviceId: cameraDeviceId, facingMode: videoTrack?.getSettings().facingMode ?? facing }),
+        JSON.stringify({
+          deviceId: cameraDeviceId,
+          facingMode: videoTrack?.getSettings().facingMode ?? facing,
+        }),
       );
     } catch {
       // Camera preference persistence is best-effort only.
     }
     startLive.mutate(
-      { title: title.trim(), description: description.trim() || undefined, subsOnly, giftsEnabled: true },
+      {
+        title: title.trim(),
+        description: description.trim() || undefined,
+        subsOnly,
+        giftsEnabled: true,
+      },
       {
         onSuccess: (data) => {
           onOpenChange(false);
@@ -217,7 +251,9 @@ function GoLiveDialog({ open, onOpenChange, asStaff }: { open: boolean; onOpenCh
               onClick={() => setSubsOnly((v) => !v)}
               className={cn(
                 "flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-left text-sm font-semibold",
-                subsOnly ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground",
+                subsOnly
+                  ? "border-primary bg-primary-soft text-primary"
+                  : "border-border text-muted-foreground",
               )}
             >
               <Lock className="size-4" />
@@ -235,16 +271,37 @@ function GoLiveDialog({ open, onOpenChange, asStaff }: { open: boolean; onOpenCh
                   {error}
                 </div>
               ) : (
-                <video ref={setVideoRef} autoPlay muted playsInline className="size-full object-contain" />
+                <video
+                  ref={setVideoRef}
+                  autoPlay
+                  muted
+                  playsInline
+                  className="size-full object-contain"
+                />
               )}
               <div className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-2">
-                <Button size="icon" variant={micOn ? "secondary" : "destructive"} onClick={toggleMic} className="rounded-full">
+                <Button
+                  size="icon"
+                  variant={micOn ? "secondary" : "destructive"}
+                  onClick={toggleMic}
+                  className="rounded-full"
+                >
                   {micOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}
                 </Button>
-                <Button size="icon" variant={camOn ? "secondary" : "destructive"} onClick={toggleCam} className="rounded-full">
+                <Button
+                  size="icon"
+                  variant={camOn ? "secondary" : "destructive"}
+                  onClick={toggleCam}
+                  className="rounded-full"
+                >
                   {camOn ? <Video className="size-4" /> : <VideoOff className="size-4" />}
                 </Button>
-                <Button size="icon" variant="secondary" onClick={flipCamera} className="rounded-full">
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  onClick={flipCamera}
+                  className="rounded-full"
+                >
                   <SwitchCamera className="size-4" />
                 </Button>
               </div>
@@ -253,7 +310,12 @@ function GoLiveDialog({ open, onOpenChange, asStaff }: { open: boolean; onOpenCh
               <Button variant="outline" className="flex-1" onClick={() => setStep("details")}>
                 Back
               </Button>
-              <Button variant="brand" className="flex-1" onClick={goLive} disabled={startLive.isPending || !stream}>
+              <Button
+                variant="brand"
+                className="flex-1"
+                onClick={goLive}
+                disabled={startLive.isPending || !stream}
+              >
                 <Radio className="size-4" />
                 {startLive.isPending ? "Starting…" : "Start streaming"}
               </Button>
@@ -291,7 +353,9 @@ function LiveDiscoveryPage() {
 
   const streams = data?.streams ?? [];
   const activeIdentity = user ?? staffUser;
-  const activeOwnStream = streams.find((candidate) => candidate.host.username === activeIdentity?.username);
+  const activeOwnStream = streams.find(
+    (candidate) => candidate.host.username === activeIdentity?.username,
+  );
   const visible = streams.filter(
     (s) =>
       !searchQuery ||
@@ -308,7 +372,9 @@ function LiveDiscoveryPage() {
         <header className="flex items-start justify-between gap-3">
           <div>
             <h1 className="font-display text-2xl font-extrabold tracking-tight">Live Streams</h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">What's happening right now on Gihanga Updates</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              What's happening right now on Gihanga Updates
+            </p>
           </div>
           {canGoLive && (
             <Button
@@ -324,7 +390,9 @@ function LiveDiscoveryPage() {
           )}
         </header>
 
-        {isLoading && <p className="py-10 text-center text-sm text-muted-foreground">Loading live streams…</p>}
+        {isLoading && (
+          <p className="py-10 text-center text-sm text-muted-foreground">Loading live streams…</p>
+        )}
 
         {!isLoading && !streams.length && (
           <div className="surface-card flex flex-col items-center gap-2 py-16 text-center">
@@ -343,7 +411,9 @@ function LiveDiscoveryPage() {
                 {activeOwnStream ? "Manage your live stream" : "Be the first to go live"}
               </Button>
             ) : (
-              <p className="text-sm text-muted-foreground">Check back soon, or follow creators to get notified.</p>
+              <p className="text-sm text-muted-foreground">
+                Check back soon, or follow creators to get notified.
+              </p>
             )}
           </div>
         )}
@@ -378,12 +448,15 @@ function LiveDiscoveryPage() {
               <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-4">
                 <div className="flex items-center gap-3">
                   <div>
-                    <p className="text-sm leading-tight font-bold text-white">{featured.host.name}</p>
+                    <p className="text-sm leading-tight font-bold text-white">
+                      {featured.host.name}
+                    </p>
                     <p className="mt-0.5 text-xs text-white/70">@{featured.host.username}</p>
                   </div>
                 </div>
                 <span className="inline-flex h-9 items-center justify-center gap-1.5 rounded-md bg-white px-3 text-sm font-bold text-black transition-colors group-hover:bg-white/90">
-                  <Play className="size-3.5 fill-black" /> {featuredIsOwnStream ? "Manage live" : "Watch Live"}
+                  <Play className="size-3.5 fill-black" />{" "}
+                  {featuredIsOwnStream ? "Manage live" : "Watch Live"}
                 </span>
               </div>
             </div>
@@ -432,7 +505,9 @@ function LiveDiscoveryPage() {
                       <GAvatar user={toDisplayUser(s.host)} size="xs" />
                       <div className="min-w-0">
                         <p className="truncate text-xs font-semibold">{s.host.name}</p>
-                        <p className="truncate text-[10px] text-muted-foreground">@{s.host.username}</p>
+                        <p className="truncate text-[10px] text-muted-foreground">
+                          @{s.host.username}
+                        </p>
                       </div>
                     </div>
                     <p className="line-clamp-2 text-sm leading-snug font-bold">{s.title}</p>
@@ -456,7 +531,9 @@ function LiveDiscoveryPage() {
             <Flame className="size-8 shrink-0 text-primary" />
             <div className="min-w-0 flex-1">
               <p className="font-bold">Ready to go live?</p>
-              <p className="text-sm text-muted-foreground">Share your moment with your followers in real time.</p>
+              <p className="text-sm text-muted-foreground">
+                Share your moment with your followers in real time.
+              </p>
             </div>
             <Button
               variant="brand"

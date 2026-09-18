@@ -7,7 +7,13 @@ import { Button } from "@/components/ui/button";
 import { formatCount } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { getStaffSocket } from "@/lib/socket-client";
-import { StaffPageHeader, StaffCard, StaffEmptyState, StaffErrorState, StaffSkeletonRows } from "@/components/staff/StaffUI";
+import {
+  StaffPageHeader,
+  StaffCard,
+  StaffEmptyState,
+  StaffErrorState,
+  StaffSkeletonRows,
+} from "@/components/staff/StaffUI";
 import {
   useStaffLiveStreams,
   useForceEndLive,
@@ -102,7 +108,9 @@ function KeywordManager() {
             </button>
           </span>
         ))}
-        {!keywords.length && <p className="text-xs text-muted-foreground">No keywords configured yet.</p>}
+        {!keywords.length && (
+          <p className="text-xs text-muted-foreground">No keywords configured yet.</p>
+        )}
       </div>
       <div className="mt-3 flex gap-2">
         <input
@@ -156,7 +164,12 @@ function LiveOversightPage() {
         accent="danger"
       />
 
-      {isError && <StaffErrorState message={(error as any)?.message || "Couldn't load live streams."} onRetry={() => refetch()} />}
+      {isError && (
+        <StaffErrorState
+          message={(error as any)?.message || "Couldn't load live streams."}
+          onRetry={() => refetch()}
+        />
+      )}
 
       {isLoading && !isError && <StaffSkeletonRows rows={3} />}
 
@@ -184,14 +197,16 @@ function LiveOversightPage() {
                   <div>
                     <p className="font-display text-base font-bold text-foreground">{s.title}</p>
                     <p className="text-xs text-muted-foreground">
-                      Host: <strong className="text-foreground">@{s.host.username}</strong> ({s.host.name})
+                      Host: <strong className="text-foreground">@{s.host.username}</strong> (
+                      {s.host.name})
                     </p>
                   </div>
 
                   <div className="flex items-center justify-between border-t border-border pt-3">
                     <span className="flex items-center gap-1 text-xs text-muted-foreground">
                       <Gift className="size-3.5 text-warning" />
-                      <strong className="text-warning">{formatCount(s.totalGifts)} pts</strong> in gifts
+                      <strong className="text-warning">{formatCount(s.totalGifts)} pts</strong> in
+                      gifts
                     </span>
                     <ForceEndButton id={s._id} username={s.host.username} />
                   </div>
@@ -202,7 +217,11 @@ function LiveOversightPage() {
 
           {!streams.length && (
             <div className="sm:col-span-2">
-              <StaffEmptyState icon={Radio} title="No live streams right now" description="Active broadcasts will show up here in real time." />
+              <StaffEmptyState
+                icon={Radio}
+                title="No live streams right now"
+                description="Active broadcasts will show up here in real time."
+              />
             </div>
           )}
         </div>

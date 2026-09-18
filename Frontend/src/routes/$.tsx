@@ -9,7 +9,8 @@ export const Route = createFileRoute("/$")({
       { title: "Page Not Found — Gihanga Updates" },
       {
         name: "description",
-        content: "This Gihanga page has moved or never existed. Head back to the feed or explore what's trending.",
+        content:
+          "This Gihanga page has moved or never existed. Head back to the feed or explore what's trending.",
       },
       { name: "robots", content: "noindex" },
       { property: "og:title", content: "Page Not Found — Gihanga Updates" },

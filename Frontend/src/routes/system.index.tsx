@@ -88,7 +88,9 @@ function StaffLoginPage() {
             <ShieldCheck className="size-4 text-primary" />
             <h1 className="font-display text-lg font-extrabold tracking-tight">Staff Console</h1>
           </div>
-          <p className="text-sm text-muted-foreground">Moderator · Admin · Super Admin access only</p>
+          <p className="text-sm text-muted-foreground">
+            Moderator · Admin · Super Admin access only
+          </p>
         </div>
 
         <form
@@ -97,7 +99,10 @@ function StaffLoginPage() {
         >
           <div className="space-y-4">
             <div>
-              <label htmlFor="staff-email" className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+              <label
+                htmlFor="staff-email"
+                className="mb-1.5 block text-xs font-semibold text-muted-foreground"
+              >
                 Staff email
               </label>
               <input
@@ -112,7 +117,10 @@ function StaffLoginPage() {
               />
             </div>
             <div>
-              <label htmlFor="staff-password" className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+              <label
+                htmlFor="staff-password"
+                className="mb-1.5 block text-xs font-semibold text-muted-foreground"
+              >
                 Password
               </label>
               <input
@@ -150,7 +158,8 @@ function StaffLoginPage() {
         </form>
 
         <p className="mt-5 text-center text-xs text-muted-foreground">
-          Regular Gihanga Updates accounts can't sign in here — this console is for platform staff only.
+          Regular Gihanga Updates accounts can't sign in here — this console is for platform staff
+          only.
         </p>
       </motion.div>
     </div>

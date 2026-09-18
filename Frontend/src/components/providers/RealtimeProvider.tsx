@@ -38,7 +38,11 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    const onPostUpdated = (payload: { postId: string; likesCount?: number; commentsCount?: number }) => {
+    const onPostUpdated = (payload: {
+      postId: string;
+      likesCount?: number;
+      commentsCount?: number;
+    }) => {
       const { postId, ...patch } = payload;
       patchPost(postId, patch);
     };
@@ -46,7 +50,10 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     const onPostCreated = (post: FeedPost) => {
       // Only the live-viewed feeds get the new post prepended — explore/reels/tag pages
       // the user isn't currently looking at will simply pick it up fresh on next visit.
-      for (const key of [["posts", "explore"], ["posts", "feed"]] as const) {
+      for (const key of [
+        ["posts", "explore"],
+        ["posts", "feed"],
+      ] as const) {
         queryClient.setQueryData<any>(key, (data: any) => {
           if (!data || !Array.isArray(data.pages) || data.pages.length === 0) return data;
           if (data.pages[0].posts.some((p: FeedPost) => p._id === post._id)) return data;

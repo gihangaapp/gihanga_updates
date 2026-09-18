@@ -16,7 +16,8 @@ export const Route = createFileRoute("/bookmarks")({
       { title: "Bookmarks — Your Saved Gihanga Posts" },
       {
         name: "description",
-        content: "Everything you saved on Gihanga, kept in one private collection you can revisit anytime.",
+        content:
+          "Everything you saved on Gihanga, kept in one private collection you can revisit anytime.",
       },
       { property: "og:title", content: "Bookmarks — Your Saved Gihanga Posts" },
       { property: "og:description", content: "Your private collection of saved Gihanga posts." },
@@ -76,7 +77,9 @@ function BookmarksPage() {
         </div>
 
         {isLoading ? (
-          <p className="p-10 text-center text-sm text-muted-foreground">Loading your saved posts…</p>
+          <p className="p-10 text-center text-sm text-muted-foreground">
+            Loading your saved posts…
+          </p>
         ) : !items.length ? (
           <div className="surface-card flex flex-col items-center gap-3 p-12 text-center">
             <ImageOff className="size-8 text-muted-foreground" />
@@ -92,9 +95,17 @@ function BookmarksPage() {
             {items.map((p) => {
               const image = mediaUrl(p.mediaUrl);
               return (
-                <div key={p._id} className="relative aspect-square overflow-hidden rounded-2xl bg-elevated">
+                <div
+                  key={p._id}
+                  className="relative aspect-square overflow-hidden rounded-2xl bg-elevated"
+                >
                   {image ? (
-                    <img src={image} alt={p.body.slice(0, 60)} loading="lazy" className="size-full object-cover" />
+                    <img
+                      src={image}
+                      alt={p.body.slice(0, 60)}
+                      loading="lazy"
+                      className="size-full object-cover"
+                    />
                   ) : (
                     <p className="p-3 text-xs leading-snug">{p.body}</p>
                   )}
@@ -128,7 +139,9 @@ function BookmarksPage() {
                     >
                       <GAvatar user={toDisplayUser(p.author)} size="xs" />
                       <UserName user={toDisplayUser(p.author)} className="text-xs" />
-                      <span className="text-xs text-muted-foreground">· {timeAgo(p.createdAt)}</span>
+                      <span className="text-xs text-muted-foreground">
+                        · {timeAgo(p.createdAt)}
+                      </span>
                     </Link>
                     <p className="mt-1 line-clamp-2 text-sm leading-snug">{p.body}</p>
                     <p className="mt-1 text-xs text-muted-foreground">

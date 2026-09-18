@@ -1,5 +1,6 @@
 import crypto from "crypto";
-import { AccessToken } from "livekit-server-sdk";
+import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
+import { LIVEKIT_TOKEN_TTL_CEILING_S } from "./liveConfig";
 
 /**
  * LiveKit Cloud join-token minting for live streaming.
@@ -39,6 +40,23 @@ export interface LiveKitTokenInput {
   identity: string;
   /** Host/co-hosts may publish; plain viewers may only subscribe. */
   canPublish: boolean;
+  /**
+   * Explicit token lifetime in seconds. When omitted the caller should use
+   * computeLiveKitTokenTtlSeconds() so the TTL can never outlive the
+   * stream's remaining time under the 5 h server-enforced cap.
+   */
+  ttlSeconds?: number;
+}
+
+/**
+ * TTL for a join token, clamped to the stream's remaining time (+ a small
+ * join grace) and the ceiling. Returns at least 60 s so a host opening the
+ * page right at the cap boundary can still authenticate long enough to
+ * receive the "stream reached the 5-hour limit" flow.
+ */
+export function computeLiveKitTokenTtlSeconds(remainingMs: number): number {
+  const remainingS = Math.ceil((remainingMs + 60_000) / 1000);
+  return Math.max(60, Math.min(remainingS, LIVEKIT_TOKEN_TTL_CEILING_S));
 }
 
 /**
@@ -52,17 +70,23 @@ export interface LiveKitTokenInput {
  * ":"), so the frontend can still map any remote participant back to a real
  * user for the co-host grid labels.
  *
- * The TTL covers joining only — an established session keeps working after
- * the token expires; 6h comfortably covers even very long streams.
+ * The TTL covers JOINING only — an established session keeps working after
+ * the token expires — and is clamped to the stream's remaining time so it
+ * can never outlive the 5 h cap (see computeLiveKitTokenTtlSeconds).
  */
-export async function createLiveKitToken({ room, identity, canPublish }: LiveKitTokenInput): Promise<string> {
+export async function createLiveKitToken({
+  room,
+  identity,
+  canPublish,
+  ttlSeconds,
+}: LiveKitTokenInput): Promise<string> {
   const connectionId = crypto.randomBytes(4).toString("hex");
   const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity: `${identity}:${connectionId}`,
     // Human-friendly fallback name; the app maps participants via identity,
     // so this is only what shows in the LiveKit dashboard/inspector.
     name: identity,
-    ttl: 6 * 60 * 60,
+    ttl: ttlSeconds ?? LIVEKIT_TOKEN_TTL_CEILING_S,
     metadata: JSON.stringify({ userId: identity }),
   });
   token.addGrant({
@@ -76,4 +100,22 @@ export async function createLiveKitToken({ room, identity, canPublish }: LiveKit
     canPublishData: true,
   });
   return token.toJwt();
+}
+
+/**
+ * Server-side room teardown, used by the shared endStream() service so the
+ * sweeper / REST end / socket end / staff force-end all drop every publisher
+ * and subscriber still connected to the SFU. No-op when LiveKit isn't
+ * configured (the mesh path has no rooms).
+ */
+export async function deleteLiveKitRoom(roomName: string): Promise<void> {
+  if (!isLiveKitConfigured()) return;
+  try {
+    const client = new RoomServiceClient(LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
+    await client.deleteRoom(roomName);
+  } catch (err) {
+    // A missing room (already deleted, or the stream never used LiveKit)
+    // is not an error worth failing the end-of-stream flow for.
+    console.warn(`[LiveKit] deleteRoom(${roomName}) failed (continuing):`, err);
+  }
 }

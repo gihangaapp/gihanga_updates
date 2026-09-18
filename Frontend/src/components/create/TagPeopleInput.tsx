@@ -46,32 +46,37 @@ export function TagPeopleInput({ taggedUsers, onChange, className }: TagPeopleIn
       </div>
 
       {/* Autocomplete dropdown */}
-      {isOpen && query.trim().length > 0 && searchResults?.users && searchResults.users.length > 0 && (
-        <div className="absolute top-full left-0 z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-2xl border border-border bg-popover p-1.5 shadow-float no-scrollbar">
-          {searchResults.users.map((user) => {
-            const isAlreadyTagged = taggedUsers.includes(user.username);
-            return (
-              <button
-                key={user._id}
-                type="button"
-                disabled={isAlreadyTagged}
-                onClick={() => addTag(user.username)}
-                className={cn(
-                  "press flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left text-xs hover:bg-muted",
-                  isAlreadyTagged && "opacity-50"
-                )}
-              >
-                <GAvatar user={user} size="xs" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-bold text-foreground">{user.name}</p>
-                  <p className="truncate text-muted-foreground">@{user.username}</p>
-                </div>
-                {isAlreadyTagged && <span className="text-[10px] text-muted-foreground">Tagged</span>}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {isOpen &&
+        query.trim().length > 0 &&
+        searchResults?.users &&
+        searchResults.users.length > 0 && (
+          <div className="absolute top-full left-0 z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-2xl border border-border bg-popover p-1.5 shadow-float no-scrollbar">
+            {searchResults.users.map((user) => {
+              const isAlreadyTagged = taggedUsers.includes(user.username);
+              return (
+                <button
+                  key={user._id}
+                  type="button"
+                  disabled={isAlreadyTagged}
+                  onClick={() => addTag(user.username)}
+                  className={cn(
+                    "press flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left text-xs hover:bg-muted",
+                    isAlreadyTagged && "opacity-50",
+                  )}
+                >
+                  <GAvatar user={user} size="xs" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-bold text-foreground">{user.name}</p>
+                    <p className="truncate text-muted-foreground">@{user.username}</p>
+                  </div>
+                  {isAlreadyTagged && (
+                    <span className="text-[10px] text-muted-foreground">Tagged</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
       {/* Tagged users chips */}
       {taggedUsers.length > 0 && (

@@ -14,7 +14,7 @@ export function SettingsSection({
 }: {
   title: string;
   description?: string;
-  icon?: LucideIcon;
+  icon?: LucideIcon | undefined;
   children: React.ReactNode;
   badge?: string;
   danger?: boolean;
@@ -23,7 +23,7 @@ export function SettingsSection({
     <section
       className={cn(
         "surface-card rounded-3xl p-5 sm:p-6 border transition-all shadow-soft space-y-5",
-        danger ? "border-danger/30 bg-danger/5" : "border-border"
+        danger ? "border-danger/30 bg-danger/5" : "border-border",
       )}
     >
       <div className="flex items-start justify-between gap-3 border-b border-border/50 pb-4">
@@ -32,14 +32,19 @@ export function SettingsSection({
             <div
               className={cn(
                 "grid size-10 place-items-center rounded-2xl shadow-sm",
-                danger ? "bg-danger/20 text-danger" : "bg-primary-soft text-primary"
+                danger ? "bg-danger/20 text-danger" : "bg-primary-soft text-primary",
               )}
             >
               <Icon className="size-5" />
             </div>
           )}
           <div>
-            <h2 className={cn("font-display text-base font-extrabold tracking-tight", danger ? "text-danger" : "text-foreground")}>
+            <h2
+              className={cn(
+                "font-display text-base font-extrabold tracking-tight",
+                danger ? "text-danger" : "text-foreground",
+              )}
+            >
               {title}
             </h2>
             {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
@@ -66,20 +71,28 @@ export function SettingsRow({
   children,
   className,
 }: {
-  id?: string;
+  id?: string | undefined;
   label: string;
-  hint?: string;
-  icon?: LucideIcon;
+  hint?: string | undefined;
+  icon?: LucideIcon | undefined;
   children: React.ReactNode;
-  className?: string;
+  className?: string | undefined;
 }) {
   return (
-    <div className={cn("flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-1.5", className)}>
+    <div
+      className={cn(
+        "flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-1.5",
+        className,
+      )}
+    >
       <div className="flex items-start gap-3 min-w-0 flex-1">
         {Icon && <Icon className="size-4.5 text-muted-foreground mt-0.5 shrink-0" />}
         <div className="min-w-0 flex-1">
           {id ? (
-            <Label htmlFor={id} className="text-sm font-bold text-foreground cursor-pointer block truncate">
+            <Label
+              htmlFor={id}
+              className="text-sm font-bold text-foreground cursor-pointer block truncate"
+            >
               {label}
             </Label>
           ) : (
@@ -104,11 +117,11 @@ export function SettingsToggle({
 }: {
   id: string;
   label: string;
-  hint?: string;
+  hint?: string | undefined;
   checked: boolean;
   onChange: (val: boolean) => void;
   disabled?: boolean;
-  icon?: LucideIcon;
+  icon?: LucideIcon | undefined;
 }) {
   return (
     <SettingsRow id={id} label={label} hint={hint} icon={icon}>
@@ -126,11 +139,11 @@ export function SettingsSelect<T extends string>({
   icon,
 }: {
   label: string;
-  hint?: string;
+  hint?: string | undefined;
   value: T;
   options: Array<{ value: T; label: string }>;
   onChange: (val: T) => void;
-  icon?: LucideIcon;
+  icon?: LucideIcon | undefined;
 }) {
   return (
     <SettingsRow label={label} hint={hint} icon={icon}>

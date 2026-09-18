@@ -103,7 +103,7 @@ export function useForYouFeed(limit = 12) {
     queryKey: ["recommendations", "for-you", user?.id],
     queryFn: ({ pageParam }) =>
       api.get<RecommendationFeedResponse>(
-        `/recommendations/for-you?limit=${limit}${pageParam ? `&cursor=${pageParam}` : ""}`
+        `/recommendations/for-you?limit=${limit}${pageParam ? `&cursor=${pageParam}` : ""}`,
       ),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
@@ -117,7 +117,7 @@ export function useReelsRecFeed(limit = 10) {
     queryKey: ["recommendations", "reels", user?.id],
     queryFn: ({ pageParam }) =>
       api.get<RecommendationFeedResponse>(
-        `/recommendations/reels?limit=${limit}${pageParam ? `&cursor=${pageParam}` : ""}`
+        `/recommendations/reels?limit=${limit}${pageParam ? `&cursor=${pageParam}` : ""}`,
       ),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
@@ -131,7 +131,7 @@ export function useExploreRecFeed(limit = 12) {
     queryKey: ["recommendations", "explore", user?.id],
     queryFn: ({ pageParam }) =>
       api.get<RecommendationFeedResponse>(
-        `/recommendations/explore?limit=${limit}${pageParam ? `&cursor=${pageParam}` : ""}`
+        `/recommendations/explore?limit=${limit}${pageParam ? `&cursor=${pageParam}` : ""}`,
       ),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
@@ -145,7 +145,7 @@ export function useTrendingRecFeed(limit = 12) {
     queryKey: ["recommendations", "trending", user?.id],
     queryFn: ({ pageParam }) =>
       api.get<RecommendationFeedResponse>(
-        `/recommendations/trending?limit=${limit}${pageParam ? `&cursor=${pageParam}` : ""}`
+        `/recommendations/trending?limit=${limit}${pageParam ? `&cursor=${pageParam}` : ""}`,
       ),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,

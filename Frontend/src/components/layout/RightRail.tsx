@@ -64,7 +64,11 @@ export function RightRail() {
   const { data: followingSet } = useFollowingSet();
   const tags = (tagsData?.tags ?? []).slice(0, 5);
   const suggested = (suggestedData?.users ?? []).filter(
-    (u) => u.isCreator && (u as any).role !== "admin" && (u as any).role !== "superadmin" && (u as any).role !== "moderator"
+    (u) =>
+      u.isCreator &&
+      (u as any).role !== "admin" &&
+      (u as any).role !== "superadmin" &&
+      (u as any).role !== "moderator",
   );
 
   return (
@@ -137,12 +141,7 @@ export function RightRail() {
         <p className="mt-1 text-sm text-muted-foreground">
           Reach viewers and creators across Rwanda with campaign budgets from 5,000 RWF.
         </p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="mt-3"
-          asChild
-        >
+        <Button variant="outline" size="sm" className="mt-3" asChild>
           <Link to="/ads">
             Start a campaign
             <ArrowUpRight />

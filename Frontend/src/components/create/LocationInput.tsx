@@ -48,7 +48,9 @@ export function LocationInput({ value, onChange, className }: LocationInputProps
       {/* Popular locations dropdown suggestions */}
       {showSuggestions && !value && (
         <div className="absolute top-full left-0 z-50 mt-1 max-h-40 w-full overflow-y-auto rounded-xl border border-border bg-popover p-1.5 shadow-float no-scrollbar">
-          <p className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">Popular Places</p>
+          <p className="px-2 py-1 text-[10px] font-bold text-muted-foreground uppercase">
+            Popular Places
+          </p>
           {POPULAR_LOCATIONS.map((loc) => (
             <button
               key={loc}

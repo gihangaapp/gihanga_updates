@@ -30,7 +30,9 @@ function StaffManagementPage() {
         <h1 className="flex items-center gap-2 font-display text-2xl font-bold tracking-tight text-foreground">
           <ShieldCheck className="size-6 text-warning" /> Staff Management
         </h1>
-        <p className="text-sm text-muted-foreground">Promote existing accounts to Moderator or Admin, or remove staff access.</p>
+        <p className="text-sm text-muted-foreground">
+          Promote existing accounts to Moderator or Admin, or remove staff access.
+        </p>
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-5">
@@ -61,7 +63,8 @@ function StaffManagementPage() {
                     toast.success(`Promoted to ${ROLE_LABEL[role]}`);
                     setIdentifier("");
                   },
-                  onError: (err: any) => toast.error(err.message || "Couldn't promote that account"),
+                  onError: (err: any) =>
+                    toast.error(err.message || "Couldn't promote that account"),
                 },
               )
             }
@@ -84,19 +87,32 @@ function StaffManagementPage() {
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={4} className="p-8 text-center text-muted-foreground">Loading…</td>
+                <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                  Loading…
+                </td>
               </tr>
             )}
             {(data?.staff ?? []).map((s) => (
               <tr key={s._id} className="border-b border-white/5 last:border-0">
                 <td className="p-3">
                   <p className="font-semibold text-foreground">{s.name}</p>
-                  <p className="text-xs text-muted-foreground">@{s.username} · {s.email}</p>
+                  <p className="text-xs text-muted-foreground">
+                    @{s.username} · {s.email}
+                  </p>
                 </td>
                 <td className="p-3">
-                  <span className={cn("rounded-md px-1.5 py-0.5 text-[11px] font-bold", roleTone[s.role])}>{ROLE_LABEL[s.role]}</span>
+                  <span
+                    className={cn(
+                      "rounded-md px-1.5 py-0.5 text-[11px] font-bold",
+                      roleTone[s.role],
+                    )}
+                  >
+                    {ROLE_LABEL[s.role]}
+                  </span>
                 </td>
-                <td className="p-3 text-muted-foreground">{new Date(s.createdAt).toLocaleDateString()}</td>
+                <td className="p-3 text-muted-foreground">
+                  {new Date(s.createdAt).toLocaleDateString()}
+                </td>
                 <td className="p-3">
                   {s.role !== "superadmin" && (
                     <Button

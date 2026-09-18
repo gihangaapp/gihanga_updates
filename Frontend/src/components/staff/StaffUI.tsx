@@ -3,9 +3,17 @@ import { type LucideIcon, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Base surface card used everywhere in the staff console — theme-aware. */
-export function StaffCard({ className, children }: { className?: string; children: React.ReactNode }) {
+export function StaffCard({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className={cn("rounded-2xl border border-border bg-card/60 backdrop-blur-sm", className)}>{children}</div>
+    <div className={cn("rounded-2xl border border-border bg-card/60 backdrop-blur-sm", className)}>
+      {children}
+    </div>
   );
 }
 
@@ -37,11 +45,18 @@ export function StaffPageHeader({
       className="flex flex-wrap items-start justify-between gap-3"
     >
       <div className="flex items-start gap-3">
-        <span className={cn("mt-0.5 grid size-10 shrink-0 place-items-center rounded-2xl", tones[accent])}>
+        <span
+          className={cn(
+            "mt-0.5 grid size-10 shrink-0 place-items-center rounded-2xl",
+            tones[accent],
+          )}
+        >
           <Icon className="size-5" />
         </span>
         <div>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight text-foreground">{title}</h1>
+          <h1 className="font-display text-2xl font-extrabold tracking-tight text-foreground">
+            {title}
+          </h1>
           {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
         </div>
       </div>
@@ -118,13 +133,27 @@ export function StaffBadge({
     info: "bg-info/10 text-info",
   };
   return (
-    <span className={cn("rounded-md px-1.5 py-0.5 text-[11px] font-bold capitalize", tones[tone], className)}>
+    <span
+      className={cn(
+        "rounded-md px-1.5 py-0.5 text-[11px] font-bold capitalize",
+        tones[tone],
+        className,
+      )}
+    >
       {children}
     </span>
   );
 }
 
-export function StaffEmptyState({ icon: Icon, title, description }: { icon: LucideIcon; title: string; description?: string }) {
+export function StaffEmptyState({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description?: string;
+}) {
   return (
     <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border py-14 text-center">
       <Icon className="size-7 text-muted-foreground" />
@@ -151,7 +180,15 @@ export function StaffErrorState({ message, onRetry }: { message: string; onRetry
   );
 }
 
-export function StaffToggle({ checked, onChange, disabled }: { checked: boolean; onChange: () => void; disabled?: boolean }) {
+export function StaffToggle({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"

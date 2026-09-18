@@ -54,7 +54,9 @@ function LoginPage() {
       const data = await api.post<any>("/auth/login", { email, password });
       signInConsumer(data.tokens, data.user);
       if (!data.user.emailVerified) {
-        toast("Verify your email to continue", { description: "We sent you a code when you signed up." });
+        toast("Verify your email to continue", {
+          description: "We sent you a code when you signed up.",
+        });
         navigate({ to: "/verify" });
       } else {
         toast.success("Welcome back", { description: "You're signed in to Gihanga Updates." });

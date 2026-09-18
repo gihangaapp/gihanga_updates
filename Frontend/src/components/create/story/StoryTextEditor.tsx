@@ -6,7 +6,7 @@ import type { StoryTextElement } from "../DraftManager";
 interface StoryTextEditorProps {
   onSave: (textElement: StoryTextElement) => void;
   onCancel: () => void;
-  initialText?: StoryTextElement;
+  initialText?: StoryTextElement | undefined;
 }
 
 export const STORY_FONTS = [
@@ -15,8 +15,16 @@ export const STORY_FONTS = [
   { id: "bold", label: "BOLD", fontClass: "font-display font-black tracking-tight" },
   { id: "serif", label: "ELEGANT", fontClass: "font-serif italic font-semibold" },
   { id: "mono", label: "TYPEWRITER", fontClass: "font-mono font-medium" },
-  { id: "fun", label: "PLAYFUL", fontClass: "font-display font-extrabold tracking-wider uppercase" },
-  { id: "minimal", label: "MINIMAL", fontClass: "font-sans font-medium uppercase tracking-widest text-xs" },
+  {
+    id: "fun",
+    label: "PLAYFUL",
+    fontClass: "font-display font-extrabold tracking-wider uppercase",
+  },
+  {
+    id: "minimal",
+    label: "MINIMAL",
+    fontClass: "font-sans font-medium uppercase tracking-widest text-xs",
+  },
 ];
 
 export const STORY_TEXT_COLORS = [
@@ -35,21 +43,17 @@ export const STORY_TEXT_COLORS = [
   "#FF2D55",
 ];
 
-export function StoryTextEditor({
-  onSave,
-  onCancel,
-  initialText,
-}: StoryTextEditorProps) {
+export function StoryTextEditor({ onSave, onCancel, initialText }: StoryTextEditorProps) {
   const [text, setText] = useState(initialText?.text || "");
   const [font, setFont] = useState(initialText?.font || "classic");
   const [fontSize, setFontSize] = useState(initialText?.fontSize || 28);
   const [color, setColor] = useState(initialText?.color || "#FFFFFF");
   const [bgColor, setBgColor] = useState(initialText?.bgColor || "transparent");
   const [alignment, setAlignment] = useState<"left" | "center" | "right">(
-    initialText?.alignment || "center"
+    initialText?.alignment || "center",
   );
 
-  const selectedFontObj = STORY_FONTS.find((f) => f.id === font) || STORY_FONTS[0];
+  const selectedFontObj = STORY_FONTS.find((f) => f.id === font) ?? STORY_FONTS[0];
 
   const handleDone = () => {
     if (!text.trim()) {
@@ -74,7 +78,8 @@ export function StoryTextEditor({
   const cycleAlignment = () => {
     const alignments: ("left" | "center" | "right")[] = ["left", "center", "right"];
     const nextIdx = (alignments.indexOf(alignment) + 1) % 3;
-    setAlignment(alignments[nextIdx]);
+    const next = alignments[nextIdx];
+    if (next) setAlignment(next);
   };
 
   const cycleBgColor = () => {
@@ -83,7 +88,7 @@ export function StoryTextEditor({
         ? "rgba(0,0,0,0.75)"
         : prev === "rgba(0,0,0,0.75)"
           ? "rgba(255,255,255,0.9)"
-          : "transparent"
+          : "transparent",
     );
   };
 
@@ -109,7 +114,7 @@ export function StoryTextEditor({
             onClick={cycleBgColor}
             className={cn(
               "press flex size-9 items-center justify-center rounded-full border border-white/30 text-xs font-black transition-colors",
-              bgColor !== "transparent" ? "bg-white text-black" : "bg-white/20 text-white"
+              bgColor !== "transparent" ? "bg-white text-black" : "bg-white/20 text-white",
             )}
           >
             A
@@ -118,7 +123,7 @@ export function StoryTextEditor({
 
         {/* Center Font Selector Pill */}
         <div className="flex items-center rounded-full border border-white/30 bg-black/60 px-3 py-1 text-xs font-extrabold uppercase tracking-widest text-white shadow-lg backdrop-blur-md">
-          {selectedFontObj.label}
+          {selectedFontObj?.label ?? ""}
         </div>
 
         {/* Top Right Done Button */}
@@ -169,7 +174,7 @@ export function StoryTextEditor({
           }}
           className={cn(
             "w-full max-w-md resize-none border-0 bg-transparent p-4 leading-snug shadow-none focus:outline-none focus:ring-0 rounded-2xl transition-all",
-            selectedFontObj.fontClass
+            selectedFontObj?.fontClass ?? "",
           )}
         />
       </div>
@@ -187,7 +192,7 @@ export function StoryTextEditor({
                 "press shrink-0 rounded-full px-3.5 py-1 text-[11px] font-extrabold tracking-wider transition-all",
                 font === f.id
                   ? "bg-white text-black scale-105 shadow-md"
-                  : "bg-white/20 text-white hover:bg-white/30"
+                  : "bg-white/20 text-white hover:bg-white/30",
               )}
             >
               {f.label}
@@ -204,7 +209,7 @@ export function StoryTextEditor({
               onClick={() => setColor(c)}
               className={cn(
                 "press size-7 shrink-0 rounded-full border-2 transition-transform",
-                color === c ? "border-white scale-125 shadow-lg" : "border-transparent"
+                color === c ? "border-white scale-125 shadow-lg" : "border-transparent",
               )}
               style={{ backgroundColor: c }}
             />

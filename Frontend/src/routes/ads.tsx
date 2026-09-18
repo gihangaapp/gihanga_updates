@@ -1,6 +1,15 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus, Eye, MousePointerClick, Wallet, Coins, Sparkles, Target, Layers } from "lucide-react";
+import {
+  Plus,
+  Eye,
+  MousePointerClick,
+  Wallet,
+  Coins,
+  Sparkles,
+  Target,
+  Layers,
+} from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { AdCard } from "@/components/ads/AdCard";
@@ -20,7 +29,10 @@ export const Route = createFileRoute("/ads")({
           "Launch campaigns, pay with Real Money or Gihanga Points, choose feed or story placement, and track impressions, clicks and reach across Rwanda.",
       },
       { property: "og:title", content: "Ad Center — Gihanga Updates" },
-      { property: "og:description", content: "Create and manage promotional advertising campaigns on Gihanga Updates." },
+      {
+        property: "og:description",
+        content: "Create and manage promotional advertising campaigns on Gihanga Updates.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -69,7 +81,8 @@ function AdsPage() {
               <Sparkles className="size-6 text-amber-500" /> Advertising Center
             </h1>
             <p className="text-sm text-muted-foreground">
-              Promote your content, products, or brand across Rwanda using Real Money or Gihanga Points.
+              Promote your content, products, or brand across Rwanda using Real Money or Gihanga
+              Points.
             </p>
           </div>
 
@@ -88,19 +101,25 @@ function AdsPage() {
 
           <div className="surface-card p-4 text-center">
             <Eye className="mx-auto mb-1 size-5 text-primary" />
-            <p className="font-display text-xl font-extrabold text-foreground">{formatCount(totalImpressions)}</p>
+            <p className="font-display text-xl font-extrabold text-foreground">
+              {formatCount(totalImpressions)}
+            </p>
             <p className="text-xs text-muted-foreground font-medium">Total Impressions</p>
           </div>
 
           <div className="surface-card p-4 text-center">
             <Coins className="mx-auto mb-1 size-5 text-amber-500" />
-            <p className="font-display text-xl font-extrabold text-foreground">{formatCount(totalPointsSpent)} GP</p>
+            <p className="font-display text-xl font-extrabold text-foreground">
+              {formatCount(totalPointsSpent)} GP
+            </p>
             <p className="text-xs text-muted-foreground font-medium">Points Spent</p>
           </div>
 
           <div className="surface-card p-4 text-center">
             <Wallet className="mx-auto mb-1 size-5 text-primary" />
-            <p className="font-display text-xl font-extrabold text-foreground">{rwf(totalSpentRwf)}</p>
+            <p className="font-display text-xl font-extrabold text-foreground">
+              {rwf(totalSpentRwf)}
+            </p>
             <p className="text-xs text-muted-foreground font-medium">Cash Spent</p>
           </div>
         </div>
@@ -112,9 +131,15 @@ function AdsPage() {
               GP
             </div>
             <div>
-              <p className="text-sm font-bold text-foreground">Gihanga Points Advertising Enabled</p>
+              <p className="text-sm font-bold text-foreground">
+                Gihanga Points Advertising Enabled
+              </p>
               <p className="text-xs text-muted-foreground">
-                Current Superadmin Rate: <strong className="text-foreground">1 Advertising Minute = {formatCount(config?.gpPerMinute ?? 2000)} GP</strong> or <strong className="text-foreground">{rwf(config?.rwfPerMinute ?? 2000)}</strong>
+                Current Superadmin Rate:{" "}
+                <strong className="text-foreground">
+                  1 Advertising Minute = {formatCount(config?.gpPerMinute ?? 2000)} GP
+                </strong>{" "}
+                or <strong className="text-foreground">{rwf(config?.rwfPerMinute ?? 2000)}</strong>
               </p>
             </div>
           </div>
@@ -141,7 +166,9 @@ function AdsPage() {
               onClick={() => setTab(t.id)}
               className={cn(
                 "flex-1 rounded-xl px-3 py-2 text-xs font-bold transition-all",
-                tab === t.id ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:bg-muted",
+                tab === t.id
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "text-muted-foreground hover:bg-muted",
               )}
             >
               {t.label}
@@ -157,7 +184,8 @@ function AdsPage() {
             <Layers className="size-10 text-muted-foreground/60" />
             <p className="font-bold text-base text-foreground">No campaigns found</p>
             <p className="max-w-md text-xs text-muted-foreground">
-              Launch your first advertisement to reach thousands of users across Rwanda in feed and story placements.
+              Launch your first advertisement to reach thousands of users across Rwanda in feed and
+              story placements.
             </p>
             <Button variant="brand" size="sm" onClick={() => setWizardOpen(true)}>
               <Plus className="mr-1 size-4" /> Launch Campaign Now

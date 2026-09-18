@@ -3,7 +3,13 @@ import { Heart, CornerDownRight, Send, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { GAvatar } from "@/components/common/GAvatar";
 import { Button } from "@/components/ui/button";
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerDescription,
+} from "@/components/ui/drawer";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { formatCount, timeAgo } from "@/lib/format";
@@ -51,7 +57,7 @@ export function InlineComments({ post }: { post: FeedPost }) {
           setReplyTo(null);
         },
         onError: (err: any) => toast.error(err.message || "Couldn't post comment"),
-      }
+      },
     );
   };
 
@@ -111,11 +117,7 @@ export function InlineComments({ post }: { post: FeedPost }) {
             disabled={!draft.trim() || createComment.isPending}
             className="rounded-full shrink-0"
           >
-            {createComment.isPending ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : (
-              "Post"
-            )}
+            {createComment.isPending ? <Loader2 className="size-3.5 animate-spin" /> : "Post"}
           </Button>
         </div>
       </div>
@@ -141,7 +143,7 @@ export function CommentSheet({ post, open, onOpenChange }: CommentSheetProps) {
           setReplyTo(null);
         },
         onError: (err: any) => toast.error(err.message || "Couldn't post comment"),
-      }
+      },
     );
   };
 
@@ -219,7 +221,9 @@ export function CommentSheet({ post, open, onOpenChange }: CommentSheetProps) {
       <Drawer open={open} onOpenChange={onOpenChange}>
         <DrawerContent className="p-0 rounded-t-3xl max-h-[85vh]">
           <DrawerHeader className="border-b border-border px-5 py-3">
-            <DrawerTitle className="font-display text-base font-bold text-center">Comments</DrawerTitle>
+            <DrawerTitle className="font-display text-base font-bold text-center">
+              Comments
+            </DrawerTitle>
             <DrawerDescription className="text-center text-xs">
               {formatCount(post.commentsCount)} comments on @{post.author.username}&apos;s post
             </DrawerDescription>
@@ -256,13 +260,20 @@ function CommentRow({
   const toggleLike = useToggleCommentLike(postId);
 
   return (
-    <div className={cn("flex items-start gap-3", depth > 0 && "ml-7 mt-3 border-l-2 border-border/40 pl-3")}>
+    <div
+      className={cn(
+        "flex items-start gap-3",
+        depth > 0 && "ml-7 mt-3 border-l-2 border-border/40 pl-3",
+      )}
+    >
       <GAvatar user={toDisplayUser(comment.author)} size="xs" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
           <span className="truncate text-xs font-bold text-foreground">{comment.author.name}</span>
           <span className="text-[11px] text-muted-foreground">@{comment.author.username}</span>
-          <span aria-hidden className="text-[11px] text-muted-foreground">·</span>
+          <span aria-hidden className="text-[11px] text-muted-foreground">
+            ·
+          </span>
           <span className="text-[11px] text-muted-foreground">{timeAgo(comment.createdAt)}</span>
         </div>
         <p className="mt-0.5 text-xs leading-relaxed text-foreground/90 whitespace-pre-wrap">
@@ -271,7 +282,10 @@ function CommentRow({
         <div className="mt-1.5 flex items-center gap-4 text-[11px] font-semibold text-muted-foreground">
           <button
             type="button"
-            className={cn("press flex items-center gap-1 hover:text-danger", comment.liked && "text-danger")}
+            className={cn(
+              "press flex items-center gap-1 hover:text-danger",
+              comment.liked && "text-danger",
+            )}
             onClick={() => toggleLike.mutate(comment._id)}
           >
             <Heart className={cn("size-3", comment.liked && "fill-current")} />
@@ -287,7 +301,13 @@ function CommentRow({
           </button>
         </div>
         {comment.replies?.map((reply) => (
-          <CommentRow key={reply._id} comment={reply} postId={postId} onReply={onReply} depth={depth + 1} />
+          <CommentRow
+            key={reply._id}
+            comment={reply}
+            postId={postId}
+            onReply={onReply}
+            depth={depth + 1}
+          />
         ))}
       </div>
     </div>

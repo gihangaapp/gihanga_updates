@@ -72,7 +72,9 @@ export function MoneyCheckout({ open, onOpenChange, campaign, onSuccess }: Money
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Type & Placement:</span>
-                <span className="capitalize text-foreground">{campaign.adType.replace("_", " ")} · {campaign.placement}</span>
+                <span className="capitalize text-foreground">
+                  {campaign.adType.replace("_", " ")} · {campaign.placement}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Advertising Minutes:</span>
@@ -108,7 +110,8 @@ export function MoneyCheckout({ open, onOpenChange, campaign, onSuccess }: Money
                 <div>
                   <p className="font-bold">Insufficient Wallet Balance</p>
                   <p className="mt-0.5 opacity-90">
-                    You need {rwf(Math.abs(remainingRwf))} more in your wallet. Deposit funds via MTN Mobile Money or choose Gihanga Points.
+                    You need {rwf(Math.abs(remainingRwf))} more in your wallet. Deposit funds via
+                    MTN Mobile Money or choose Gihanga Points.
                   </p>
                 </div>
               </div>

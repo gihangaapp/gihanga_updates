@@ -1,7 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { Activity, Clock } from "lucide-react";
-import { StaffPageHeader, StaffCard, StaffEmptyState, StaffSkeletonRows, StaffBadge } from "@/components/staff/StaffUI";
+import {
+  StaffPageHeader,
+  StaffCard,
+  StaffEmptyState,
+  StaffSkeletonRows,
+  StaffBadge,
+} from "@/components/staff/StaffUI";
 import { useStaffActivity } from "@/hooks/use-staff-notifications";
 import { timeAgo } from "@/lib/format";
 import { ROLE_LABEL } from "@/lib/permissions";
@@ -27,17 +33,28 @@ function StaffActivityPage() {
       {isLoading && <StaffSkeletonRows rows={5} />}
 
       {!isLoading && !activity.length && (
-        <StaffEmptyState icon={Activity} title="No staff activity yet" description="Actions taken by staff will show up here." />
+        <StaffEmptyState
+          icon={Activity}
+          title="No staff activity yet"
+          description="Actions taken by staff will show up here."
+        />
       )}
 
       <div className="space-y-3">
         {activity.map((a, i) => (
-          <motion.div key={a.staffId} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.25, delay: i * 0.03 }}>
+          <motion.div
+            key={a.staffId}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.25, delay: i * 0.03 }}
+          >
             <StaffCard className="p-4">
               <div className="flex flex-wrap items-center gap-3">
                 <span
                   className="grid size-10 shrink-0 place-items-center rounded-full text-sm font-bold text-primary-foreground"
-                  style={{ backgroundImage: `linear-gradient(140deg, oklch(0.55 0.11 ${(i * 47) % 360}), oklch(0.75 0.1 ${((i * 47) % 360) + 24}))` }}
+                  style={{
+                    backgroundImage: `linear-gradient(140deg, oklch(0.55 0.11 ${(i * 47) % 360}), oklch(0.75 0.1 ${((i * 47) % 360) + 24}))`,
+                  }}
                 >
                   {a.name.slice(0, 2).toUpperCase()}
                 </span>
@@ -49,7 +66,9 @@ function StaffActivityPage() {
                   <p className="truncate text-xs text-muted-foreground">@{a.username}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-display text-xl font-extrabold text-foreground">{a.actionCount}</p>
+                  <p className="font-display text-xl font-extrabold text-foreground">
+                    {a.actionCount}
+                  </p>
                   <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
                     <Clock className="size-3" /> {timeAgo(a.lastActionAt)} ago
                   </p>
@@ -70,7 +89,10 @@ function StaffActivityPage() {
                   .sort(([, x], [, y]) => y - x)
                   .slice(0, 6)
                   .map(([action, count]) => (
-                    <span key={action} className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                    <span
+                      key={action}
+                      className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground"
+                    >
                       {action} × {count}
                     </span>
                   ))}

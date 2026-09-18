@@ -2,14 +2,23 @@ import { useEffect, useRef, useState } from "react";
 import {
   Room,
   RoomEvent,
+  Track,
+  AudioPresets,
   type LocalAudioTrack,
   type LocalVideoTrack,
   type RemoteParticipant,
   type RemoteTrack,
   type RemoteTrackPublication,
+  type RemoteVideoTrack,
 } from "livekit-client";
 import { api, getConsumerAccessToken, getStaffAccessToken } from "./api-client";
 import type { CoHostRemoteStream } from "./browser-live";
+import {
+  LIVE_VIDEO_QUALITY,
+  liveCaptureConstraints,
+  QUALITY_THRESHOLDS,
+} from "./live-video-config";
+import type { QualitySample } from "./live-quality";
 
 /**
  * LiveKit Cloud SFU transport — drop-in replacement for browser-live.ts.
@@ -25,10 +34,18 @@ import type { CoHostRemoteStream } from "./browser-live";
  * Chat, reactions, gifts, viewer counts, co-host REQUESTS and moderation all
  * stay on the existing Socket.IO backend — LiveKit carries video/audio only.
  *
- * NOTE FOR THE PROJECT OWNER: LiveKit Cloud's free plan has a real monthly
- * usage quota (WebRTC participant-minutes, egress, concurrent connections —
- * verify current numbers at livekit.io/pricing). Exceeding that quota — not
- * licensing cost — is the actual ceiling on this "free" setup.
+ * A1 (quality): capture is constrained (720p30 ideal, 360p floor; 1080p
+ * desktop), publishing uses simulcast layers + explicit videoEncoding +
+ * degradationPreference "maintain-resolution", and dynacast is on so the
+ * SFU drops/raises layers per-viewer as their bandwidth allows.
+ *
+ * A2 (split screen for every role): viewers subscribe to the host AND every
+ * accepted co-host (de-duplicated per user via the deterministic
+ * earliest-joined rule), exposed through useLivekitViewerStreams.
+ *
+ * A6 (connection quality): ConnectionQualityChanged / Reconnecting /
+ * Reconnected / Disconnected + periodic getStats are surfaced through a
+ * subscription API the live page feeds into the pure classifier.
  */
 
 /**
@@ -76,7 +93,8 @@ async function fetchLiveKitToken(
     } catch (err) {
       lastError = err;
       const message = String((err as Error)?.message ?? "");
-      if (/authentication|banned|ended|not found|not configured/i.test(message)) throw err;
+      if (/authentication|banned|ended|not found|not configured|5-hour limit/i.test(message))
+        throw err;
       if (attempt < TOKEN_FETCH_ATTEMPTS) await delay(1500 * attempt);
     }
   }
@@ -85,6 +103,7 @@ async function fetchLiveKitToken(
 
 type StateListener = () => void;
 type RemoteListener = () => void;
+type QualityListener = (sample: QualitySample) => void;
 
 interface SessionStartOptions {
   publish: boolean;
@@ -115,6 +134,8 @@ class LiveKitSession {
   error: string | null = null;
   micOn = true;
   camOn = true;
+  /** A6 — connection-level signals for the poor-connection banner. */
+  reconnecting = false;
 
   private localVideo: LocalVideoTrack | null = null;
   private localAudio: LocalAudioTrack | null = null;
@@ -123,14 +144,16 @@ class LiveKitSession {
   private readonly remoteStreams = new Map<string, MediaStream>();
   private readonly stateListeners = new Set<StateListener>();
   private readonly remoteListeners = new Set<RemoteListener>();
+  private readonly qualityListeners = new Set<QualityListener>();
+  private statsTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(streamId: string) {
     this.streamId = streamId;
-    // adaptiveStream right-sizes video to the attached element (cheap on
-    // mobile data); autoSubscribe:false is passed at connect() time below —
-    // roles pick tracks explicitly (viewers take only the host's stream;
-    // publishers take every co-host).
-    this.room = new Room({ adaptiveStream: true });
+    // adaptiveStream right-sizes video to the attached element; dynacast (A1)
+    // lets the SFU pause/resume simulcast layers per-subscriber bandwidth, so
+    // a viewer on a strong connection gets the high layer and a throttled one
+    // steps down WITHOUT the host re-encoding anything.
+    this.room = new Room({ adaptiveStream: true, dynacast: true });
     this.wireRoomEvents();
   }
 
@@ -152,12 +175,25 @@ class LiveKitSession {
     };
   }
 
+  /** A6 — subscribe to connection-quality samples (loss/rtt/bitrate/reconnecting). */
+  onQuality(listener: QualityListener): () => void {
+    this.qualityListeners.add(listener);
+    return () => {
+      this.qualityListeners.delete(listener);
+    };
+  }
+
   private notifyState() {
     this.stateListeners.forEach((listener) => listener());
   }
 
   private notifyRemote() {
     this.remoteListeners.forEach((listener) => listener());
+  }
+
+  private emitQuality(sample: QualitySample) {
+    if (this.tornDown) return;
+    this.qualityListeners.forEach((listener) => listener(sample));
   }
 
   /** The subscribed remote stream belonging to a user (by identity prefix). */
@@ -178,6 +214,30 @@ class LiveKitSession {
       out.push({ participantId: prefix, stream });
     });
     return out;
+  }
+
+  /**
+   * A2 — host + every accepted co-host, in stable join order, one stream per
+   * USER (earliest connection wins when the same user has two connections).
+   * This is what plain viewers render as their split-screen grid.
+   */
+  listViewerStreams(authorizedUserIds: Set<string> | null): CoHostRemoteStream[] {
+    const perUser = new Map<string, { joinedAt: number; entry: CoHostRemoteStream }>();
+    this.remoteStreams.forEach((stream, identity) => {
+      const prefix = identityPrefix(identity);
+      if (authorizedUserIds && !authorizedUserIds.has(prefix)) return;
+      const participant = Array.from(this.room.remoteParticipants.values()).find(
+        (p) => identityPrefix(p.identity) === prefix,
+      );
+      const joinedAt = participant?.joinedAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const existing = perUser.get(prefix);
+      if (!existing || joinedAt < existing.joinedAt) {
+        perUser.set(prefix, { joinedAt, entry: { participantId: prefix, stream } });
+      }
+    });
+    return Array.from(perUser.values())
+      .sort((a, b) => a.joinedAt - b.joinedAt)
+      .map(({ entry }) => entry);
   }
 
   /** Host-side removal (co-host left / was evicted) — mirrors the mesh API. */
@@ -257,6 +317,7 @@ class LiveKitSession {
     // 1) Camera/mic first for publishers — mirrors the mesh flow: the local
     //    preview appears before any signaling and the permission prompt shows
     //    immediately. Same audio:false fallback as browser-live.ts.
+    //    A1: constrained capture (720p30 ideal, 360p floor, 1080p desktop).
     if (this.wantPublish) {
       if (!navigator.mediaDevices?.getUserMedia) {
         this.fail("Camera access is unavailable. Open the site over HTTPS or localhost.");
@@ -265,7 +326,7 @@ class LiveKitSession {
       let media: MediaStream;
       try {
         media = await navigator.mediaDevices.getUserMedia({
-          video: true,
+          video: liveCaptureConstraints(),
           audio: AUDIO_CONSTRAINTS,
         });
       } catch {
@@ -283,7 +344,8 @@ class LiveKitSession {
     }
 
     // 2) Mint a short-lived join token via the backend (retries absorb Render
-    //    cold starts). The backend decides canPublish from host/co-host state.
+    //    cold starts). The backend decides canPublish from host/co-host state
+    //    and clamps the TTL to the stream's remaining 5h-cap time.
     const { url, token } = await fetchLiveKitToken(this.streamId, this.asStaff);
     if (this.tornDown) return;
 
@@ -301,18 +363,33 @@ class LiveKitSession {
     this.myPrefix = identityPrefix(this.room.localParticipant.identity);
 
     // 4) Publishers push their existing tracks into the room; viewers pick
-    //    the host's tracks per the subscription policy.
+    //    the host's + co-hosts' tracks per the subscription policy.
     if (this.wantPublish) {
       const videoTrack = this.localMedia?.getVideoTracks()[0];
       const audioTrack = this.localMedia?.getAudioTracks()[0];
       if (videoTrack) {
-        // Publish the raw MediaStreamTrack (the SDK wraps it) and keep the
-        // published LocalVideoTrack for mute/camera controls below.
-        const publication = await this.room.localParticipant.publishTrack(videoTrack);
+        // A1 — publish with simulcast + explicit encoding. The defaults give
+        // 180p/360p additional layers with our 720p primary; explicit
+        // videoEncoding pins the top layer's bitrate. degradationPreference
+        // "maintain-resolution" keeps a talking-head stream sharp (drop
+        // frames) instead of blurry (drop resolution) under pressure.
+        const publication = await this.room.localParticipant.publishTrack(videoTrack, {
+          simulcast: true,
+          videoEncoding: {
+            maxBitrate: LIVE_VIDEO_QUALITY.maxBitrate,
+            maxFramerate: 30,
+          },
+          videoCodec: LIVE_VIDEO_QUALITY.preferredCodecs[0],
+          degradationPreference: "maintain-resolution",
+          source: Track.Source.Camera,
+        });
         this.localVideo = (publication.track as LocalVideoTrack | undefined) ?? null;
       }
       if (audioTrack) {
-        const publication = await this.room.localParticipant.publishTrack(audioTrack);
+        const publication = await this.room.localParticipant.publishTrack(audioTrack, {
+          audioPreset: AudioPresets.speech,
+          source: Track.Source.Microphone,
+        });
         this.localAudio = (publication.track as LocalAudioTrack | undefined) ?? null;
       }
       if (this.tornDown) return;
@@ -320,15 +397,25 @@ class LiveKitSession {
     } else {
       this.refreshSubscriptions();
     }
+
+    // A6 — poll sender/receiver stats so the classifier gets loss/rtt/bitrate.
+    this.startStatsPolling();
   }
 
   /**
-   * Subscription policy. Publishers subscribe to every other publisher (all
-   * co-hosts). Viewers subscribe ONLY to the host's earliest-joined
-   * connection — deterministic if the host ever has a second simultaneous
-   * connection (e.g. the discovery-page preview card), so viewers never get
-   * duplicated streams or flicker between copies.
+   * A2 subscription policy. Publishers subscribe to every other publisher
+   * (all co-hosts). Viewers subscribe to the host AND every ACCEPTED
+   * co-host (authorization list passed in via setViewerAuthorization);
+   * multiple connections of the same user are de-duplicated deterministically
+   * by the earliest-joined rule (listViewerStreams above).
    */
+  private viewerAuthorized: Set<string> | null = null;
+
+  setViewerAuthorization(userIds: string[] | null) {
+    this.viewerAuthorized = userIds ? new Set(userIds) : null;
+    if (!this.wantPublish) this.refreshSubscriptions();
+  }
+
   private refreshSubscriptions() {
     const remotes = Array.from(this.room.remoteParticipants.values());
     if (this.wantPublish) {
@@ -337,11 +424,36 @@ class LiveKitSession {
       );
       return;
     }
+    if (this.viewerAuthorized) {
+      const authorized = this.viewerAuthorized;
+      // A2: host + co-hosts (one connection per user, earliest joined wins).
+      const perUser = new Map<string, { participant: RemoteParticipant; joinedAt: number }>();
+      remotes.forEach((p) => {
+        const prefix = identityPrefix(p.identity);
+        if (prefix === this.myPrefix) return;
+        if (!authorized.has(prefix)) return;
+        const joinedAt = p.joinedAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+        const existing = perUser.get(prefix);
+        if (!existing || joinedAt < existing.joinedAt)
+          perUser.set(prefix, { participant: p, joinedAt });
+      });
+      // Unsubscribe everyone first, then subscribe the chosen set.
+      remotes.forEach((p) => {
+        const prefix = identityPrefix(p.identity);
+        const chosen = perUser.get(prefix)?.participant;
+        this.applySubscription(p, chosen === p);
+      });
+      return;
+    }
+    // Legacy fallback (no authorization list yet): host's earliest connection.
     const hostRemotes = this.hostId
       ? remotes.filter((p) => identityPrefix(p.identity) === this.hostId)
       : [];
     hostRemotes.sort((a, b) => (a.joinedAt?.getTime() ?? 0) - (b.joinedAt?.getTime() ?? 0));
-    hostRemotes.forEach((p, index) => this.applySubscription(p, index === 0));
+    remotes.forEach((p) => {
+      const isHostEarliest = hostRemotes[0] === p;
+      this.applySubscription(p, Boolean(isHostEarliest));
+    });
   }
 
   private applySubscription(participant: RemoteParticipant, want: boolean) {
@@ -374,6 +486,102 @@ class LiveKitSession {
     this.remoteStreams.set(identity, new MediaStream(tracks));
   }
 
+  // ── A6: quality sampling ──────────────────────────────────────────────────
+
+  private startStatsPolling() {
+    if (this.statsTimer) return;
+    this.statsTimer = setInterval(() => {
+      void this.sampleStats();
+    }, 2_000);
+  }
+
+  private async sampleStats() {
+    if (this.tornDown) return;
+    const at = Date.now();
+    if (this.reconnecting) {
+      this.emitQuality({ at, online: false });
+      return;
+    }
+
+    if (this.wantPublish) {
+      // Sender stats: real RTT + packet loss + bitrate for the uplink.
+      try {
+        const statsList = this.localVideo ? await this.localVideo.getSenderStats() : [];
+        const s = statsList.find((x) => x.rid === "q") ?? statsList[0];
+        if (s) {
+          const packets = (s.packetsSent ?? 0) + (s.packetsLost ?? 0);
+          const loss = packets > 0 ? (s.packetsLost ?? 0) / packets : 0;
+          let bitrateKbps: number | undefined;
+          if (typeof s.bytesSent === "number") {
+            const prev = this.lastSenderBytes;
+            if (prev && s.bytesSent >= prev.bytes) {
+              const sec = (at - prev.at) / 1000;
+              if (sec > 0) bitrateKbps = ((s.bytesSent - prev.bytes) * 8) / 1000 / sec;
+            }
+            this.lastSenderBytes = { bytes: s.bytesSent, at };
+          }
+          this.emitQuality({
+            at,
+            loss,
+            ...(typeof s.roundTripTime === "number" ? { rttMs: s.roundTripTime * 1000 } : {}),
+            ...(bitrateKbps !== undefined ? { bitrateKbps } : {}),
+            online: true,
+          });
+          return;
+        }
+      } catch {
+        /* fall through */
+      }
+      this.emitQuality({ at, online: true });
+      return;
+    }
+
+    // Viewer: receiver stats from the first subscribed remote video track.
+    try {
+      let receiverStats: Awaited<ReturnType<RemoteVideoTrack["getReceiverStats"]>> | undefined;
+      for (const participant of this.room.remoteParticipants.values()) {
+        for (const publication of participant.trackPublications.values()) {
+          if (
+            publication.isSubscribed &&
+            publication.kind === Track.Kind.Video &&
+            publication.track
+          ) {
+            receiverStats = await (publication.track as RemoteVideoTrack).getReceiverStats();
+            break;
+          }
+        }
+        if (receiverStats) break;
+      }
+      if (receiverStats) {
+        const packets = (receiverStats.packetsReceived ?? 0) + (receiverStats.packetsLost ?? 0);
+        const loss = packets > 0 ? (receiverStats.packetsLost ?? 0) / packets : 0;
+        let bitrateKbps: number | undefined;
+        if (typeof receiverStats.bytesReceived === "number") {
+          const prev = this.lastReceiverBytes;
+          if (prev && receiverStats.bytesReceived >= prev.bytes) {
+            const sec = (at - prev.at) / 1000;
+            if (sec > 0)
+              bitrateKbps = ((receiverStats.bytesReceived - prev.bytes) * 8) / 1000 / sec;
+          }
+          this.lastReceiverBytes = { bytes: receiverStats.bytesReceived, at };
+        }
+        this.emitQuality({
+          at,
+          loss,
+          ...(bitrateKbps !== undefined ? { bitrateKbps } : {}),
+          online: true,
+        });
+        return;
+      }
+    } catch {
+      /* stats unavailable this tick — the next one will retry */
+    }
+    this.emitQuality({ at, online: true });
+  }
+
+  private lastSenderBytes: { bytes: number; at: number } | null = null;
+  private lastReceiverBytes: { bytes: number; at: number } | null = null;
+
   private wireRoomEvents() {
     this.room.on(RoomEvent.Connected, () => {
       if (this.tornDown) return;
@@ -385,13 +593,44 @@ class LiveKitSession {
       this.connected = false;
       this.notifyState();
     });
+    this.room.on(RoomEvent.Reconnecting, () => {
+      if (this.tornDown) return;
+      this.reconnecting = true;
+      this.emitQuality({ at: Date.now(), online: false });
+      this.notifyState();
+    });
+    this.room.on(RoomEvent.Reconnected, () => {
+      if (this.tornDown) return;
+      this.reconnecting = false;
+      this.connected = true;
+      this.refreshSubscriptions();
+      this.notifyState();
+    });
+    this.room.on(RoomEvent.SignalReconnecting, () => {
+      if (this.tornDown) return;
+      this.reconnecting = true;
+      this.notifyState();
+    });
+    // A6 — LiveKit's own connection-quality signal for the LOCAL participant:
+    // "excellent"/"good" → fine, "poor"/"lost" → feed the classifier.
+    this.room.on(RoomEvent.ConnectionQualityChanged, (quality: string, participant) => {
+      if (this.tornDown) return;
+      if (participant.isLocal) {
+        const poor = quality === "poor" || quality === "lost";
+        this.emitQuality({
+          at: Date.now(),
+          online: quality !== "lost",
+          ...(poor ? { rttMs: QUALITY_THRESHOLDS.poorRttMs + 50 } : {}),
+        });
+      }
+    });
     this.room.on(RoomEvent.ParticipantConnected, () => {
       if (this.tornDown) return;
       this.refreshSubscriptions();
     });
     this.room.on(
       RoomEvent.TrackPublished,
-      (_publication: RemoteTrackPublication, participant: RemoteParticipant) => {
+      (_publication: RemoteTrackPublication, _participant: RemoteParticipant) => {
         if (this.tornDown) return;
         this.refreshSubscriptions();
       },
@@ -425,12 +664,12 @@ class LiveKitSession {
       (_publication: RemoteTrackPublication, participant: RemoteParticipant) => {
         if (this.tornDown) return;
         this.rebuildRemote(participant.identity);
-        this.notifyRemote();
       },
     );
     this.room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
       if (this.tornDown) return;
       if (this.remoteStreams.delete(participant.identity)) this.notifyRemote();
+      this.refreshSubscriptions();
     });
   }
 
@@ -442,6 +681,10 @@ class LiveKitSession {
   }
 
   private teardownConnection() {
+    if (this.statsTimer) {
+      clearInterval(this.statsTimer);
+      this.statsTimer = null;
+    }
     try {
       void this.room.disconnect();
     } catch {
@@ -456,7 +699,10 @@ class LiveKitSession {
     this.teardownConnection();
     this.stateListeners.clear();
     this.remoteListeners.clear();
+    this.qualityListeners.clear();
     this.remoteStreams.clear();
+    this.lastSenderBytes = null;
+    this.lastReceiverBytes = null;
   }
 }
 
@@ -530,6 +776,8 @@ export function useLivekitLiveRoom({
   const [error, setError] = useState<string | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
+  // A6 — connection-quality samples (same return key as the mesh hook).
+  const [qualitySamples, setQualitySamples] = useState<QualitySample[]>([]);
   const sessionRef = useRef<LiveKitSession | null>(null);
 
   useEffect(() => {
@@ -558,12 +806,16 @@ export function useLivekitLiveRoom({
       const found = hostId ? session.findRemoteByUser(hostId) : null;
       setRemoteStream(found ? new MediaStream(found.getTracks()) : null);
     });
+    const offQuality = session.onQuality((sample) => {
+      setQualitySamples((prev) => [...prev.slice(-31), sample]);
+    });
 
     void session.start({ publish, hostId, asStaff });
 
     return () => {
       offState();
       offRemote();
+      offQuality();
       sessionRef.current = null;
       releaseSession(streamId, publish);
     };
@@ -586,6 +838,7 @@ export function useLivekitLiveRoom({
     error,
     micOn,
     camOn,
+    qualitySamples,
     toggleMic,
     toggleCamera,
     switchCamera,
@@ -597,7 +850,7 @@ export interface LivekitCoHostOptions {
   hostId: string;
   myUserId: string;
   enabled: boolean;
-  asStaff?: boolean | undefined;
+  asStaff?: string | boolean | undefined;
 }
 
 export function useLivekitCoHostRoom({
@@ -613,6 +866,8 @@ export function useLivekitCoHostRoom({
   const [error, setError] = useState<string | null>(null);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
+  // A6 — connection-quality samples (same return key as the mesh hook).
+  const [qualitySamples, setQualitySamples] = useState<QualitySample[]>([]);
   const sessionRef = useRef<LiveKitSession | null>(null);
 
   useEffect(() => {
@@ -639,12 +894,16 @@ export function useLivekitCoHostRoom({
       // publishers, which replaces the whole manual co-host mesh. Skip self.
       setCoHostStreams(session.listRemoteByUser(myUserId || null));
     });
+    const offQuality = session.onQuality((sample) => {
+      setQualitySamples((prev) => [...prev.slice(-31), sample]);
+    });
 
-    void session.start({ publish: true, hostId, asStaff });
+    void session.start({ publish: true, hostId, asStaff: Boolean(asStaff) });
 
     return () => {
       offState();
       offRemote();
+      offQuality();
       sessionRef.current = null;
       releaseSession(streamId, true);
     };
@@ -670,6 +929,7 @@ export function useLivekitCoHostRoom({
     error,
     micOn,
     camOn,
+    qualitySamples,
     toggleMic,
     toggleCamera,
     flipCamera,
@@ -713,4 +973,95 @@ export function useLivekitHostCoHostMesh({ streamId, enabled }: LivekitHostMeshO
   }
 
   return { coHostStreams, removeCoHostStream };
+}
+
+// ── A2: viewer-facing hooks ─────────────────────────────────────────────────
+
+export interface LivekitViewerOptions {
+  streamId: string;
+  hostId: string;
+  /** Host + accepted co-host user ids (from GET /live/:id + live:co-host events). */
+  authorizedIds: string[];
+  enabled: boolean;
+  asStaff?: boolean | undefined;
+}
+
+/**
+ * A2 — the plain viewer's split-screen source: the host AND every accepted
+ * co-host, stable join order, one tile per user. The live page passes the
+ * authorization list (host + coHostList ids) so the SFU subscription policy
+ * and the UI can never disagree about who is on screen.
+ */
+export function useLivekitViewerStreams({
+  streamId,
+  hostId,
+  authorizedIds,
+  enabled,
+  asStaff = false,
+}: LivekitViewerOptions) {
+  const [viewerStreams, setViewerStreams] = useState<CoHostRemoteStream[]>([]);
+  const [connected, setConnected] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [qualitySamples, setQualitySamples] = useState<QualitySample[]>([]);
+  const sessionRef = useRef<LiveKitSession | null>(null);
+  const authorizedKey = authorizedIds.join(",");
+
+  useEffect(() => {
+    if (!enabled || !streamId) return;
+    const hasToken = asStaff ? Boolean(getStaffAccessToken()) : Boolean(getConsumerAccessToken());
+    if (!hasToken) {
+      setError("Sign in to connect to live video.");
+      return;
+    }
+
+    const session = acquireSession(streamId, false);
+    sessionRef.current = session;
+
+    const offState = session.onState(() => {
+      setConnected(session.connected);
+      setError(session.error);
+    });
+    const offRemote = session.onRemote(() => {
+      const allowed = new Set<string>([hostId, ...authorizedKey.split(",").filter(Boolean)]);
+      setViewerStreams(session.listViewerStreams(allowed));
+    });
+    const offQuality = session.onQuality((sample) => {
+      setQualitySamples((prev) => [...prev.slice(-31), sample]);
+    });
+
+    session.setViewerAuthorization([hostId, ...authorizedKey.split(",").filter(Boolean)]);
+    void session.start({ publish: false, hostId, asStaff });
+
+    return () => {
+      offState();
+      offRemote();
+      offQuality();
+      sessionRef.current = null;
+      releaseSession(streamId, false);
+    };
+  }, [streamId, hostId, authorizedKey, enabled, asStaff]);
+
+  return { viewerStreams, connected, error, qualitySamples };
+}
+
+/** A6 — quality samples for the publisher session (streamer-side banner). */
+export function useLivekitPublisherQuality(streamId: string, enabled: boolean) {
+  const [qualitySamples, setQualitySamples] = useState<QualitySample[]>([]);
+  const sessionRef = useRef<LiveKitSession | null>(null);
+
+  useEffect(() => {
+    if (!enabled || !streamId) return;
+    const session = acquireSession(streamId, true);
+    sessionRef.current = session;
+    const offQuality = session.onQuality((sample) => {
+      setQualitySamples((prev) => [...prev.slice(-31), sample]);
+    });
+    return () => {
+      offQuality();
+      sessionRef.current = null;
+      releaseSession(streamId, true);
+    };
+  }, [streamId, enabled]);
+
+  return qualitySamples;
 }

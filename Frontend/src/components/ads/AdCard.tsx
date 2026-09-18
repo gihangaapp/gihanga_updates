@@ -111,13 +111,15 @@ export function AdCard({ campaign }: AdCardProps) {
       <div className="mt-3.5 grid grid-cols-4 gap-1.5 rounded-xl border border-border/60 bg-card p-2 text-center text-xs">
         <div>
           <p className="flex items-center justify-center gap-1 font-extrabold text-foreground">
-            <Eye className="size-3 text-primary" /> {formatCount(campaign.analytics?.impressions ?? 0)}
+            <Eye className="size-3 text-primary" />{" "}
+            {formatCount(campaign.analytics?.impressions ?? 0)}
           </p>
           <p className="text-[10px] text-muted-foreground">Impressions</p>
         </div>
         <div>
           <p className="flex items-center justify-center gap-1 font-extrabold text-foreground">
-            <MousePointerClick className="size-3 text-primary" /> {formatCount(campaign.analytics?.clicks ?? 0)}
+            <MousePointerClick className="size-3 text-primary" />{" "}
+            {formatCount(campaign.analytics?.clicks ?? 0)}
           </p>
           <p className="text-[10px] text-muted-foreground">Clicks</p>
         </div>
@@ -126,7 +128,9 @@ export function AdCard({ campaign }: AdCardProps) {
           <p className="text-[10px] text-muted-foreground">CTR</p>
         </div>
         <div>
-          <p className="font-extrabold text-foreground">{formatCount(campaign.analytics?.views ?? 0)}</p>
+          <p className="font-extrabold text-foreground">
+            {formatCount(campaign.analytics?.views ?? 0)}
+          </p>
           <p className="text-[10px] text-muted-foreground">Views</p>
         </div>
       </div>
@@ -134,11 +138,17 @@ export function AdCard({ campaign }: AdCardProps) {
       {/* Quota Delivery Progress */}
       <div className="mt-3.5">
         <div className="mb-1 flex justify-between text-[11px] text-muted-foreground">
-          <span>Delivery Quota: {campaign.advertisingMinutesDelivered} / {campaign.advertisingMinutes} min</span>
+          <span>
+            Delivery Quota: {campaign.advertisingMinutesDelivered} / {campaign.advertisingMinutes}{" "}
+            min
+          </span>
           <span className="font-bold text-foreground">{Math.round(deliveryProgress)}%</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-muted">
-          <div className="gradient-brand h-full transition-all duration-300" style={{ width: `${deliveryProgress}%` }} />
+          <div
+            className="gradient-brand h-full transition-all duration-300"
+            style={{ width: `${deliveryProgress}%` }}
+          />
         </div>
       </div>
 
@@ -147,10 +157,20 @@ export function AdCard({ campaign }: AdCardProps) {
         {/* Checkout Button if Unpaid */}
         {campaign.paymentStatus !== "paid" && (
           <div className="flex flex-1 gap-2">
-            <Button size="sm" variant="brand" className="flex-1" onClick={() => setPointsModalOpen(true)}>
+            <Button
+              size="sm"
+              variant="brand"
+              className="flex-1"
+              onClick={() => setPointsModalOpen(true)}
+            >
               <Coins className="mr-1 size-3.5" /> Pay GP
             </Button>
-            <Button size="sm" variant="outline" className="flex-1" onClick={() => setMoneyModalOpen(true)}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1"
+              onClick={() => setMoneyModalOpen(true)}
+            >
               <Wallet className="mr-1 size-3.5" /> Pay Cash
             </Button>
           </div>
@@ -170,7 +190,11 @@ export function AdCard({ campaign }: AdCardProps) {
               })
             }
           >
-            {campaign.status === "active" ? <Pause className="mr-1 size-3.5" /> : <Play className="mr-1 size-3.5" />}
+            {campaign.status === "active" ? (
+              <Pause className="mr-1 size-3.5" />
+            ) : (
+              <Play className="mr-1 size-3.5" />
+            )}
             {campaign.status === "active" ? "Pause" : "Resume"}
           </Button>
         )}

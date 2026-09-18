@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -24,7 +23,12 @@ import {
   X,
 } from "lucide-react";
 import { AuthLayout } from "@/components/auth/AuthLayout";
-import { AuthField, PasswordField, PasswordStrength, StepProgress } from "@/components/auth/AuthFields";
+import {
+  AuthField,
+  PasswordField,
+  PasswordStrength,
+  StepProgress,
+} from "@/components/auth/AuthFields";
 import { AuthDivider, SocialButtons } from "@/components/auth/SocialButtons";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -104,9 +108,9 @@ function RegisterPage() {
   };
   const [errors, setErrors] = useState<FieldErrors>({});
 
-  const [availability, setAvailability] = useState<"idle" | "checking" | "invalid" | "taken" | "free" | "error">(
-    "idle"
-  );
+  const [availability, setAvailability] = useState<
+    "idle" | "checking" | "invalid" | "taken" | "free" | "error"
+  >("idle");
   const [formError, setFormError] = useState<string | null>(null);
 
   // Live username availability check
@@ -124,7 +128,7 @@ function RegisterPage() {
     const t = window.setTimeout(() => {
       api
         .get<{ username: string; status: "invalid" | "taken" | "free" }>(
-          `/auth/check-username?username=${encodeURIComponent(clean)}`
+          `/auth/check-username?username=${encodeURIComponent(clean)}`,
         )
         .then((data) => setAvailability(data.status))
         .catch(() => setAvailability("error"));
@@ -138,7 +142,9 @@ function RegisterPage() {
       setLoadingCreators(true);
       const queryInterests = selectedInterests.join(",");
       api
-        .get<{ users: PublicUser[] }>(`/users/top-creators?interests=${encodeURIComponent(queryInterests)}`)
+        .get<{ users: PublicUser[] }>(
+          `/users/top-creators?interests=${encodeURIComponent(queryInterests)}`,
+        )
         .then((res) => {
           const list = res.users || [];
           setTopCreators(list);
@@ -178,7 +184,9 @@ function RegisterPage() {
       setUploadedAvatarUrl(res.url);
       toast.success("Profile photo uploaded!");
     } catch (err: any) {
-      toast.error(err?.message || "Failed to upload profile photo. You can try again or use a colour.");
+      toast.error(
+        err?.message || "Failed to upload profile photo. You can try again or use a colour.",
+      );
     } finally {
       setUploadingAvatar(false);
     }
@@ -195,13 +203,13 @@ function RegisterPage() {
 
   const toggleInterest = (topic: string) => {
     setSelectedInterests((prev) =>
-      prev.includes(topic) ? prev.filter((t) => t !== topic) : [...prev, topic]
+      prev.includes(topic) ? prev.filter((t) => t !== topic) : [...prev, topic],
     );
   };
 
   const toggleFollowCreator = (uname: string) => {
     setSelectedCreators((prev) =>
-      prev.includes(uname) ? prev.filter((u) => u !== uname) : [...prev, uname]
+      prev.includes(uname) ? prev.filter((u) => u !== uname) : [...prev, uname],
     );
   };
 
@@ -215,7 +223,8 @@ function RegisterPage() {
     if (step === 2) {
       if (availability === "error")
         e.username = "Couldn't check that handle — check your connection and try again.";
-      else if (availability !== "free") e.username = "Pick an available handle (3–20 letters, numbers or _).";
+      else if (availability !== "free")
+        e.username = "Pick an available handle (3–20 letters, numbers or _).";
       if (!dob) e.dob = "Add your date of birth.";
       else if (new Date(dob) > new Date(Date.now() - 13 * 365.25 * 864e5))
         e.dob = "You must be at least 13 years old.";
@@ -308,15 +317,15 @@ function RegisterPage() {
         step === 4
           ? "What are you into?"
           : step === 3
-          ? "Build your profile"
-          : "Create your account"
+            ? "Build your profile"
+            : "Create your account"
       }
       subtitle={
         step === 4
           ? `Pick topics and follow at least ${MIN_CREATORS_TO_FOLLOW} creators to shape your feed.`
           : step === 3
-          ? "Choose your account type, avatar and write a short bio."
-          : "Four short steps and your personalized feed is ready."
+            ? "Choose your account type, avatar and write a short bio."
+            : "Four short steps and your personalized feed is ready."
       }
       back={{ to: "/welcome", label: "Back to welcome" }}
     >
@@ -397,7 +406,8 @@ function RegisterPage() {
                         "3–20 characters: letters, numbers or underscores."
                       ) : availability === "error" ? (
                         <span className="flex items-center gap-1.5 text-danger">
-                          <X className="size-3" /> Couldn't check availability — retype to try again.
+                          <X className="size-3" /> Couldn't check availability — retype to try
+                          again.
                         </span>
                       ) : (
                         "This is how people will find and mention you."
@@ -424,7 +434,7 @@ function RegisterPage() {
                   <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
                     Account Type
                   </p>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
                     <button
                       type="button"
                       onClick={() => setIsCreator(false)}
@@ -432,7 +442,7 @@ function RegisterPage() {
                         "press rounded-2xl border p-3.5 text-left transition-all",
                         !isCreator
                           ? "border-primary bg-primary-soft text-primary font-bold shadow-soft"
-                          : "border-border bg-surface text-muted-foreground hover:bg-muted"
+                          : "border-border bg-surface text-muted-foreground hover:bg-muted",
                       )}
                     >
                       <User2 className="size-5 mb-1.5" />
@@ -448,7 +458,7 @@ function RegisterPage() {
                         "press rounded-2xl border p-3.5 text-left transition-all",
                         isCreator
                           ? "border-primary bg-primary-soft text-primary font-bold shadow-soft"
-                          : "border-border bg-surface text-muted-foreground hover:bg-muted"
+                          : "border-border bg-surface text-muted-foreground hover:bg-muted",
                       )}
                     >
                       <Sparkles className="size-5 mb-1.5" />
@@ -462,11 +472,11 @@ function RegisterPage() {
 
                 {/* Profile Avatar Selection: Color vs Photo Upload */}
                 <div className="space-y-3 rounded-2xl border border-border/80 bg-surface/70 p-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
                       Profile Picture
                     </p>
-                    <div className="flex items-center rounded-xl bg-muted p-0.5 text-xs font-semibold">
+                    <div className="flex shrink-0 items-center rounded-xl bg-muted p-0.5 text-xs font-semibold">
                       <button
                         type="button"
                         onClick={() => setAvatarMode("color")}
@@ -474,7 +484,7 @@ function RegisterPage() {
                           "rounded-lg px-2.5 py-1 transition-all",
                           avatarMode === "color"
                             ? "bg-card text-foreground shadow-xs font-bold"
-                            : "text-muted-foreground hover:text-foreground"
+                            : "text-muted-foreground hover:text-foreground",
                         )}
                       >
                         Colour
@@ -491,7 +501,7 @@ function RegisterPage() {
                           "rounded-lg px-2.5 py-1 transition-all",
                           avatarMode === "image"
                             ? "bg-card text-foreground shadow-xs font-bold"
-                            : "text-muted-foreground hover:text-foreground"
+                            : "text-muted-foreground hover:text-foreground",
                         )}
                       >
                         Upload Photo
@@ -541,7 +551,8 @@ function RegisterPage() {
                         {name || "Your name"}
                       </p>
                       <p className="truncate text-xs text-muted-foreground">
-                        @{username || "yourhandle"} · {isCreator ? "Creator Account" : "Regular User"}
+                        @{username || "yourhandle"} ·{" "}
+                        {isCreator ? "Creator Account" : "Regular User"}
                       </p>
 
                       {avatarMode === "image" && avatarPreview && (
@@ -585,8 +596,12 @@ function RegisterPage() {
                         <UploadCloud className="size-5" />
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-foreground">Click to upload your profile photo</p>
-                        <p className="text-[11px] text-muted-foreground">PNG, JPG or WEBP up to 10MB</p>
+                        <p className="text-xs font-bold text-foreground">
+                          Click to upload your profile photo
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">
+                          PNG, JPG or WEBP up to 10MB
+                        </p>
                       </div>
                     </div>
                   )}
@@ -606,7 +621,7 @@ function RegisterPage() {
                             onClick={() => setHue(h)}
                             className={cn(
                               "press grid size-8 place-items-center rounded-full",
-                              hue === h && "ring-2 ring-ring ring-offset-2 ring-offset-background"
+                              hue === h && "ring-2 ring-ring ring-offset-2 ring-offset-background",
                             )}
                             style={{
                               backgroundImage: `linear-gradient(140deg, oklch(0.5 0.11 ${h}), oklch(0.74 0.1 ${h + 24}))`,
@@ -675,7 +690,7 @@ function RegisterPage() {
                                   "press inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-all",
                                   on
                                     ? "gradient-brand border-transparent text-primary-foreground shadow-xs font-bold"
-                                    : "border-border bg-card text-foreground/80 hover:bg-muted"
+                                    : "border-border bg-card text-foreground/80 hover:bg-muted",
                                 )}
                               >
                                 {on && <Check className="size-3" />}
@@ -698,7 +713,8 @@ function RegisterPage() {
                         Follow Top Creators & Users
                       </p>
                       <p className="text-[11px] text-muted-foreground">
-                        Follow at least {MIN_CREATORS_TO_FOLLOW} creators to see their stories & posts
+                        Follow at least {MIN_CREATORS_TO_FOLLOW} creators to see their stories &
+                        posts
                       </p>
                     </div>
                     <span
@@ -706,7 +722,7 @@ function RegisterPage() {
                         "rounded-full px-2.5 py-0.5 text-xs font-bold",
                         selectedCreators.length >= MIN_CREATORS_TO_FOLLOW
                           ? "bg-success/15 text-success"
-                          : "bg-warning/15 text-warning"
+                          : "bg-warning/15 text-warning",
                       )}
                     >
                       {selectedCreators.length} / {MIN_CREATORS_TO_FOLLOW}
@@ -738,7 +754,9 @@ function RegisterPage() {
                             key={creator._id || creator.username}
                             className={cn(
                               "flex items-center justify-between gap-3 rounded-xl p-2.5 transition-colors",
-                              isFollowing ? "bg-primary-soft/40 border border-primary/20" : "bg-card/70 hover:bg-muted/60"
+                              isFollowing
+                                ? "bg-primary-soft/40 border border-primary/20"
+                                : "bg-card/70 hover:bg-muted/60",
                             )}
                           >
                             <div className="flex items-center gap-2.5 min-w-0 flex-1">
@@ -756,7 +774,8 @@ function RegisterPage() {
                                   )}
                                 </div>
                                 <p className="truncate text-[11px] text-muted-foreground">
-                                  @{creator.username} · {formatCount(creator.followersCount || 0)} followers
+                                  @{creator.username} · {formatCount(creator.followersCount || 0)}{" "}
+                                  followers
                                 </p>
                               </div>
                             </div>
@@ -766,17 +785,22 @@ function RegisterPage() {
                               size="sm"
                               variant={isFollowing ? "brand" : "outline"}
                               onClick={() => toggleFollowCreator(creator.username)}
-                              className="h-8 shrink-0 px-3 text-xs font-bold gap-1 rounded-xl"
+                              className="h-11 min-h-11 max-[360px]:px-2.5 shrink-0 px-3 text-xs font-bold gap-1 rounded-xl"
+                              aria-label={
+                                isFollowing
+                                  ? `Unfollow ${creator.username}`
+                                  : `Follow ${creator.username}`
+                              }
                             >
                               {isFollowing ? (
                                 <>
-                                  <UserCheck className="size-3.5" />
-                                  Following
+                                  <UserCheck className="size-4 shrink-0" />
+                                  <span className="max-[360px]:hidden">Following</span>
                                 </>
                               ) : (
                                 <>
-                                  <UserPlus className="size-3.5" />
-                                  Follow
+                                  <UserPlus className="size-4 shrink-0" />
+                                  <span className="max-[360px]:hidden">Follow</span>
                                 </>
                               )}
                             </Button>
@@ -793,25 +817,42 @@ function RegisterPage() {
       </div>
 
       {formError && (
-        <p className="mt-4 rounded-xl bg-danger/10 px-3.5 py-2.5 text-xs font-medium text-danger">{formError}</p>
+        <p className="mt-4 rounded-xl bg-danger/10 px-3.5 py-2.5 text-xs font-medium text-danger">
+          {formError}
+        </p>
       )}
 
-      {/* Navigation Buttons */}
-      <div className="mt-6 flex gap-2.5">
+      {/* Navigation Buttons — B6: stacks (primary first) below 360px, full
+          width when stacked, min-w-0 so nothing overflows. */}
+      <div className="mt-6 flex flex-col-reverse gap-2.5 max-[360px]:flex-col-reverse min-[361px]:flex-row">
         {step > 1 && (
-          <Button variant="outline" size="lg" onClick={back} className="flex-1" disabled={busy}>
-            <ArrowLeft />
-            Back
+          <Button
+            variant="outline"
+            size="lg"
+            onClick={back}
+            className="min-w-0 flex-1 max-[360px]:w-full"
+            disabled={busy}
+          >
+            <ArrowLeft className="shrink-0" />
+            <span className="truncate">Back</span>
           </Button>
         )}
-        <Button variant="brand" size="lg" onClick={next} className="flex-[2]" disabled={busy}>
+        <Button
+          variant="brand"
+          size="lg"
+          onClick={next}
+          className="min-w-0 flex-[2] max-[360px]:w-full"
+          disabled={busy}
+        >
           {busy ? (
-            <Loader2 className="animate-spin" />
+            <Loader2 className="shrink-0 animate-spin" />
           ) : step === TOTAL ? (
-            <Sparkles className="size-4" />
+            <Sparkles className="shrink-0 size-4" />
           ) : null}
-          {step === TOTAL ? (busy ? "Creating account…" : "Create account") : "Continue"}
-          {!busy && step < TOTAL && <ArrowRight />}
+          <span className="min-w-0">
+            {step === TOTAL ? (busy ? "Creating account…" : "Create account") : "Continue"}
+          </span>
+          {!busy && step < TOTAL && <ArrowRight className="shrink-0" />}
         </Button>
       </div>
 

@@ -83,12 +83,7 @@ export function ShareSheet({
           value={targetUrl}
           className="flex-1 min-w-0 bg-transparent px-2 text-xs font-medium text-foreground truncate focus:outline-none"
         />
-        <Button
-          variant="brand"
-          size="sm"
-          onClick={handleCopyLink}
-          className="shrink-0 gap-1.5"
-        >
+        <Button variant="brand" size="sm" onClick={handleCopyLink} className="shrink-0 gap-1.5">
           {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
           {copied ? "Copied" : "Copy"}
         </Button>
@@ -107,7 +102,9 @@ export function ShareSheet({
               onClick={() => onOpenChange(false)}
               className="press flex flex-col items-center gap-2"
             >
-              <div className={`grid size-12 place-items-center rounded-2xl ${item.color} shadow-sm`}>
+              <div
+                className={`grid size-12 place-items-center rounded-2xl ${item.color} shadow-sm`}
+              >
                 <Icon className="size-5" />
               </div>
               <span className="text-[11px] font-semibold text-muted-foreground">{item.name}</span>
@@ -135,7 +132,9 @@ export function ShareSheet({
       <Drawer open={open} onOpenChange={onOpenChange}>
         <DrawerContent className="p-0">
           <DrawerHeader className="border-b border-border px-5 py-3">
-            <DrawerTitle className="font-display text-base font-bold text-center">Share</DrawerTitle>
+            <DrawerTitle className="font-display text-base font-bold text-center">
+              Share
+            </DrawerTitle>
           </DrawerHeader>
           {content}
         </DrawerContent>

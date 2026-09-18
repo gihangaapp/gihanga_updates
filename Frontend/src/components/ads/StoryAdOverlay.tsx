@@ -40,7 +40,15 @@ export function StoryAdOverlay({ ad, onClose }: StoryAdOverlayProps) {
       {/* Background Media */}
       {resolvedMedia ? (
         ad.adType.includes("video") ? (
-          <video src={resolvedMedia} poster={resolvedThumbnail} autoPlay loop muted playsInline className="h-full w-full object-cover" />
+          <video
+            src={resolvedMedia}
+            poster={resolvedThumbnail}
+            autoPlay
+            loop
+            muted
+            playsInline
+            className="h-full w-full object-cover"
+          />
         ) : (
           <img src={resolvedMedia} alt={ad.title} className="h-full w-full object-cover" />
         )
@@ -79,7 +87,9 @@ export function StoryAdOverlay({ ad, onClose }: StoryAdOverlayProps) {
       {/* Bottom CTA Overlay */}
       <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/95 via-black/60 to-transparent p-5 space-y-3">
         <h3 className="font-extrabold text-base line-clamp-2">{ad.title}</h3>
-        {ad.caption && <p className="text-xs text-white/80 line-clamp-3 leading-relaxed">{ad.caption}</p>}
+        {ad.caption && (
+          <p className="text-xs text-white/80 line-clamp-3 leading-relaxed">{ad.caption}</p>
+        )}
 
         <button
           type="button"

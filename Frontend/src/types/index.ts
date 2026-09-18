@@ -4,6 +4,27 @@
 
 export type MediaKind = "photo" | "video" | "reel" | "text";
 
+/**
+ * Structural subset satisfied by EVERY user-shaped object in the app — the
+ * domain User, the API's UserProfile and PublicUser. Display components
+ * (GAvatar/UserName/…) accept this so callers can pass any of the three
+ * without adapter boilerplate.
+ */
+export interface DisplayUser {
+  id?: string;
+  name: string;
+  bio?: string;
+  creator?: boolean;
+  live?: boolean;
+  followers?: number;
+  following?: number;
+  posts?: number;
+  username: string;
+  avatarHue: number;
+  avatarUrl?: string | null;
+  verified?: boolean;
+}
+
 export interface User {
   id: string;
   name: string;

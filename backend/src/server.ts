@@ -8,6 +8,7 @@ import { connectDB } from "./config/db";
 import { verifyConsumerAccessToken, verifyStaffAccessToken } from "./lib/jwt";
 import { setIO } from "./lib/socket";
 import { attachLiveHandlers } from "./lib/liveSignaling";
+import { startLiveSweeper } from "./lib/liveSweeper";
 import { verifyMailer } from "./lib/mailer";
 
 const PORT = process.env.PORT || 4000;
@@ -93,6 +94,10 @@ async function startServer() {
 
   server.listen(PORT, () => {
     console.log(`[Server] Gihanga Updates Backend running on http://localhost:${PORT}`);
+    // A4 — server-enforced live-stream hygiene: 5 h duration cap + stale-host
+    // sweep + remaining-time warnings. Single-instance safe via a Redis lock
+    // (or the in-memory shim's lock on dev); every action is idempotent anyway.
+    startLiveSweeper();
   });
 }
 

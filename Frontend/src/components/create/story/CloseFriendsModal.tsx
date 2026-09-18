@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Star, Check, Search, X, Loader2 } from "lucide-react";
-import { api, type UserProfile } from "@/lib/api-client";
+import { api, type PublicUser } from "@/lib/api-client";
 import { GAvatar } from "@/components/common/GAvatar";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -12,16 +12,16 @@ interface CloseFriendsModalProps {
 }
 
 export function CloseFriendsModal({ onClose, onDone }: CloseFriendsModalProps) {
-  const [followingUsers, setFollowingUsers] = useState<UserProfile[]>([]);
+  const [followingUsers, setFollowingUsers] = useState<PublicUser[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    let isMounted = true;
+    const isMounted = true;
     async function loadFollowing() {
       try {
-        const res = await api.get<{ users: UserProfile[] }>("/social/following");
+        const res = await api.get<{ users: PublicUser[] }>("/social/following");
         if (isMounted) {
           setFollowingUsers(res?.users ?? []);
         }
@@ -44,7 +44,7 @@ export function CloseFriendsModal({ onClose, onDone }: CloseFriendsModalProps) {
   const filtered = followingUsers.filter(
     (u) =>
       u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.username.toLowerCase().includes(search.toLowerCase())
+      u.username.toLowerCase().includes(search.toLowerCase()),
   );
 
   const handleSave = () => {
@@ -88,7 +88,8 @@ export function CloseFriendsModal({ onClose, onDone }: CloseFriendsModalProps) {
         <div className="flex flex-col gap-1.5 max-h-64 overflow-y-auto no-scrollbar">
           {isLoading && (
             <div className="flex items-center justify-center py-8 text-xs text-white/60 gap-2">
-              <Loader2 className="size-4 animate-spin text-emerald-400" /> Loading people you follow…
+              <Loader2 className="size-4 animate-spin text-emerald-400" /> Loading people you
+              follow…
             </div>
           )}
 
@@ -107,7 +108,7 @@ export function CloseFriendsModal({ onClose, onDone }: CloseFriendsModalProps) {
                 onClick={() => toggleSelect(u._id)}
                 className={cn(
                   "flex items-center justify-between rounded-2xl p-2.5 transition-colors text-left",
-                  selected ? "bg-emerald-500/20 border border-emerald-500/40" : "hover:bg-white/10"
+                  selected ? "bg-emerald-500/20 border border-emerald-500/40" : "hover:bg-white/10",
                 )}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
@@ -120,7 +121,9 @@ export function CloseFriendsModal({ onClose, onDone }: CloseFriendsModalProps) {
                 <div
                   className={cn(
                     "grid size-6 place-items-center rounded-full border transition-all",
-                    selected ? "border-emerald-500 bg-emerald-500 text-slate-950" : "border-white/30"
+                    selected
+                      ? "border-emerald-500 bg-emerald-500 text-slate-950"
+                      : "border-white/30",
                   )}
                 >
                   {selected && <Check className="size-3.5 stroke-[3]" />}
@@ -131,7 +134,11 @@ export function CloseFriendsModal({ onClose, onDone }: CloseFriendsModalProps) {
         </div>
 
         {/* Action Button */}
-        <Button variant="brand" onClick={handleSave} className="w-full rounded-2xl font-bold bg-emerald-500 hover:bg-emerald-600 text-slate-950">
+        <Button
+          variant="brand"
+          onClick={handleSave}
+          className="w-full rounded-2xl font-bold bg-emerald-500 hover:bg-emerald-600 text-slate-950"
+        >
           Save Close Friends ({selectedIds.size})
         </Button>
       </div>

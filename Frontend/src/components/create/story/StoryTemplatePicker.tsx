@@ -5,7 +5,15 @@ import { cn } from "@/lib/utils";
 export interface StoryTemplate {
   id: string;
   name: string;
-  category: "simple" | "collage" | "birthday" | "memories" | "announcement" | "quote" | "music" | "community";
+  category:
+    | "simple"
+    | "collage"
+    | "birthday"
+    | "memories"
+    | "announcement"
+    | "quote"
+    | "music"
+    | "community";
   background: string;
   defaultText: string;
   font: string;
@@ -83,9 +91,10 @@ export function StoryTemplatePicker({ onSelectTemplate, onClose }: StoryTemplate
     { id: "community", label: "Community" },
   ];
 
-  const filtered = activeCategory === "all"
-    ? STORY_TEMPLATES
-    : STORY_TEMPLATES.filter((t) => t.category === activeCategory);
+  const filtered =
+    activeCategory === "all"
+      ? STORY_TEMPLATES
+      : STORY_TEMPLATES.filter((t) => t.category === activeCategory);
 
   return (
     <div className="flex flex-col gap-4 rounded-3xl border border-border bg-card p-5 shadow-float max-w-sm w-full mx-auto">
@@ -93,7 +102,11 @@ export function StoryTemplatePicker({ onSelectTemplate, onClose }: StoryTemplate
         <h3 className="font-display text-sm font-bold flex items-center gap-1.5">
           <Layout className="size-4 text-primary" /> Story Templates
         </h3>
-        <button type="button" onClick={onClose} className="text-xs text-muted-foreground hover:text-foreground">
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-xs text-muted-foreground hover:text-foreground"
+        >
           Cancel
         </button>
       </div>
@@ -109,7 +122,7 @@ export function StoryTemplatePicker({ onSelectTemplate, onClose }: StoryTemplate
               "press rounded-full px-3 py-1 text-xs font-semibold shrink-0",
               activeCategory === c.id
                 ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
+                : "bg-muted text-muted-foreground hover:bg-muted/80",
             )}
           >
             {c.label}

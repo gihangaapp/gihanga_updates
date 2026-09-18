@@ -19,7 +19,8 @@ export type AdStatus =
   | "refunded";
 
 export type PaymentMethod = "real_money" | "gihanga_points";
-export type PaymentStatus = "unpaid" | "pending" | "processing" | "paid" | "refund_pending" | "refunded";
+export type PaymentStatus =
+  "unpaid" | "pending" | "processing" | "paid" | "refund_pending" | "refunded";
 
 export interface AdConfig {
   enabled: boolean;
@@ -62,7 +63,17 @@ export interface AdAnalytics {
 
 export interface Advertisement {
   _id: string;
-  creator: string | { _id: string; name: string; username: string; email: string; avatarHue?: number; avatarUrl?: string; isCreator?: boolean };
+  creator:
+    | string
+    | {
+        _id: string;
+        name: string;
+        username: string;
+        email: string;
+        avatarHue?: number;
+        avatarUrl?: string;
+        isCreator?: boolean;
+      };
   isCreator: boolean;
   adType: AdType;
   placement: AdPlacement;
@@ -177,14 +188,14 @@ export function useCreateAd() {
       adType: AdType;
       placement: AdPlacement;
       title: string;
-      caption?: string;
-      ctaText?: string;
-      ctaUrl?: string;
-      mediaUrl?: string;
-      mediaKey?: string;
-      mediaType?: "image" | "video";
-      videoDurationSeconds?: number;
-      thumbnailUrl?: string;
+      caption?: string | undefined;
+      ctaText?: string | undefined;
+      ctaUrl?: string | undefined;
+      mediaUrl?: string | undefined;
+      mediaKey?: string | undefined;
+      mediaType?: "image" | "video" | undefined;
+      videoDurationSeconds?: number | undefined;
+      thumbnailUrl?: string | undefined;
       campaignDurationDays: number;
       advertisingMinutes: number;
       targeting?: { interests?: string[]; location?: string };
@@ -302,13 +313,19 @@ export function useRecordClick() {
 
 export function useRecordView() {
   return useMutation({
-    mutationFn: ({ adId, seconds }: { adId: string; seconds: number }) => api.post(`/ads/${adId}/view`, { seconds }),
+    mutationFn: ({ adId, seconds }: { adId: string; seconds: number }) =>
+      api.post(`/ads/${adId}/view`, { seconds }),
   });
 }
 
 // ── Staff Oversight & Admin Hooks ────────────────────────────────────────────
 
-export function useStaffAds(filters?: { status?: string; placement?: string; adType?: string; paymentMethod?: string }) {
+export function useStaffAds(filters?: {
+  status?: string | undefined;
+  placement?: string | undefined;
+  adType?: string | undefined;
+  paymentMethod?: string | undefined;
+}) {
   const params = new URLSearchParams();
   if (filters?.status) params.set("status", filters.status);
   if (filters?.placement) params.set("placement", filters.placement);
@@ -320,7 +337,10 @@ export function useStaffAds(filters?: { status?: string; placement?: string; adT
     queryKey: ["staff", "ads", filters],
     queryFn: async () => {
       try {
-        const res = await api.get<{ campaigns: Advertisement[] }>(`/system/ads${queryString}`, true);
+        const res = await api.get<{ campaigns: Advertisement[] }>(
+          `/system/ads${queryString}`,
+          true,
+        );
         return res?.campaigns ?? [];
       } catch (err) {
         console.error("[useStaffAds Error]:", err);
@@ -362,7 +382,8 @@ export function useStaffAdSummary() {
 export function useApproveAd() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.post<{ campaign: Advertisement }>(`/system/ads/${id}/approve`, undefined, true),
+    mutationFn: (id: string) =>
+      api.post<{ campaign: Advertisement }>(`/system/ads/${id}/approve`, undefined, true),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["staff", "ads"] });
     },
@@ -372,8 +393,20 @@ export function useApproveAd() {
 export function useRejectAd() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, reason, autoRefund }: { id: string; reason: string; autoRefund?: boolean }) =>
-      api.post<{ campaign: Advertisement }>(`/system/ads/${id}/reject`, { reason, autoRefund }, true),
+    mutationFn: ({
+      id,
+      reason,
+      autoRefund,
+    }: {
+      id: string;
+      reason: string;
+      autoRefund?: boolean;
+    }) =>
+      api.post<{ campaign: Advertisement }>(
+        `/system/ads/${id}/reject`,
+        { reason, autoRefund },
+        true,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["staff", "ads"] });
     },
@@ -383,7 +416,8 @@ export function useRejectAd() {
 export function usePauseAd() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.post<{ campaign: Advertisement }>(`/system/ads/${id}/pause`, undefined, true),
+    mutationFn: (id: string) =>
+      api.post<{ campaign: Advertisement }>(`/system/ads/${id}/pause`, undefined, true),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff", "ads"] }),
   });
 }
@@ -391,7 +425,8 @@ export function usePauseAd() {
 export function useResumeAd() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.post<{ campaign: Advertisement }>(`/system/ads/${id}/resume`, undefined, true),
+    mutationFn: (id: string) =>
+      api.post<{ campaign: Advertisement }>(`/system/ads/${id}/resume`, undefined, true),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff", "ads"] }),
   });
 }
@@ -399,7 +434,8 @@ export function useResumeAd() {
 export function useDisableAd() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.post<{ campaign: Advertisement }>(`/system/ads/${id}/disable`, undefined, true),
+    mutationFn: (id: string) =>
+      api.post<{ campaign: Advertisement }>(`/system/ads/${id}/disable`, undefined, true),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff", "ads"] }),
   });
 }
@@ -407,7 +443,12 @@ export function useDisableAd() {
 export function useRefundAd() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.post<{ success: boolean; message: string; campaign: Advertisement }>(`/system/ads/${id}/refund`, undefined, true),
+    mutationFn: (id: string) =>
+      api.post<{ success: boolean; message: string; campaign: Advertisement }>(
+        `/system/ads/${id}/refund`,
+        undefined,
+        true,
+      ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff", "ads"] }),
   });
 }

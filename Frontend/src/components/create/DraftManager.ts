@@ -114,7 +114,8 @@ export function saveDraft(data: DraftData, existingId?: string): string {
   if (existingId) {
     const idx = drafts.findIndex((d) => d.id === existingId);
     if (idx >= 0) {
-      drafts[idx] = { ...drafts[idx], data, updatedAt: now };
+      const existing = drafts[idx];
+      if (existing) drafts[idx] = { ...existing, data, updatedAt: now };
       writeAll(drafts);
       return existingId;
     }
@@ -169,12 +170,18 @@ export async function createThumbnail(file: File, maxSize = 120): Promise<string
       canvas.width = img.width * scale;
       canvas.height = img.height * scale;
       const ctx = canvas.getContext("2d");
-      if (!ctx) { resolve(undefined); return; }
+      if (!ctx) {
+        resolve(undefined);
+        return;
+      }
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       resolve(canvas.toDataURL("image/webp", 0.6));
       URL.revokeObjectURL(img.src);
     };
-    img.onerror = () => { resolve(undefined); URL.revokeObjectURL(img.src); };
+    img.onerror = () => {
+      resolve(undefined);
+      URL.revokeObjectURL(img.src);
+    };
     img.src = URL.createObjectURL(file);
   });
 }
@@ -197,13 +204,20 @@ function createVideoThumbnail(file: File, maxSize: number): Promise<string | und
       canvas.width = video.videoWidth * scale;
       canvas.height = video.videoHeight * scale;
       const ctx = canvas.getContext("2d");
-      if (!ctx) { resolve(undefined); URL.revokeObjectURL(url); return; }
+      if (!ctx) {
+        resolve(undefined);
+        URL.revokeObjectURL(url);
+        return;
+      }
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       resolve(canvas.toDataURL("image/webp", 0.6));
       URL.revokeObjectURL(url);
     };
 
-    video.onerror = () => { resolve(undefined); URL.revokeObjectURL(url); };
+    video.onerror = () => {
+      resolve(undefined);
+      URL.revokeObjectURL(url);
+    };
     video.src = url;
   });
 }

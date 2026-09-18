@@ -29,13 +29,7 @@ export function TopBar() {
         </div>
 
         <div className="ml-auto flex items-center gap-1.5">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            aria-label="Search"
-            asChild
-          >
+          <Button variant="ghost" size="icon" className="md:hidden" aria-label="Search" asChild>
             <Link to="/explore">
               <Search />
             </Link>
@@ -56,12 +50,12 @@ export function TopBar() {
             asChild
           >
             <Link to="/notifications">
-            <Bell />
-            {unread > 0 && (
-              <span className="absolute top-1.5 right-1 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-bold text-danger-foreground">
-                {unread > 99 ? "99+" : unread}
-              </span>
-            )}
+              <Bell />
+              {unread > 0 && (
+                <span className="absolute top-1.5 right-1 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-bold text-danger-foreground">
+                  {unread > 99 ? "99+" : unread}
+                </span>
+              )}
             </Link>
           </Button>
           <span className="ml-1">

@@ -16,7 +16,11 @@ export interface StaffAccount {
   createdAt: string;
 }
 
-export function useStaffAccounts(params: { q?: string | undefined; status?: string | undefined; page?: number | undefined }) {
+export function useStaffAccounts(params: {
+  q?: string | undefined;
+  status?: string | undefined;
+  page?: number | undefined;
+}) {
   const query = new URLSearchParams();
   if (params.q) query.set("q", params.q);
   if (params.status) query.set("status", params.status);
@@ -24,7 +28,11 @@ export function useStaffAccounts(params: { q?: string | undefined; status?: stri
 
   return useQuery({
     queryKey: ["staff", "accounts", params],
-    queryFn: () => api.get<{ users: StaffAccount[]; page: number; total: number; hasMore: boolean }>(`/system/users?${query}`, true),
+    queryFn: () =>
+      api.get<{ users: StaffAccount[]; page: number; total: number; hasMore: boolean }>(
+        `/system/users?${query}`,
+        true,
+      ),
   });
 }
 
@@ -46,8 +54,15 @@ export const useMakeCreator = () => useAccountAction("make-creator");
 export function useGrantPoints() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, points, reason }: { id: string; points: number; reason?: string | undefined }) =>
-      api.post(`/system/users/${id}/grant-points`, { points, reason }, true),
+    mutationFn: ({
+      id,
+      points,
+      reason,
+    }: {
+      id: string;
+      points: number;
+      reason?: string | undefined;
+    }) => api.post(`/system/users/${id}/grant-points`, { points, reason }, true),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff", "accounts"] }),
   });
 }

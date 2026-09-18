@@ -2,16 +2,16 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight, Send, X } from "lucide-react";
 import { GAvatar } from "@/components/common/GAvatar";
 import { Button } from "@/components/ui/button";
-import type { UserProfile } from "@/lib/api-client";
+import type { User } from "@/types";
 import type { StorySlideData } from "../DraftManager";
 import { StoryCanvas } from "./StoryCanvas";
 import type { StorySticker } from "./StoryStickerPicker";
 
 interface StoryPreviewProps {
-  user: UserProfile;
+  user: User;
   slides: StorySlideData[];
   stickers: StorySticker[];
-  drawingUrl?: string;
+  drawingUrl?: string | undefined;
   onEdit: () => void;
   onPublish: () => void;
   isPublishing?: boolean;
@@ -28,7 +28,8 @@ export function StoryPreview({
 }: StoryPreviewProps) {
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
 
-  const currentSlide = slides[activeSlideIndex] ?? slides[0];
+  const currentSlide: StorySlideData = slides[activeSlideIndex] ??
+    slides[0] ?? { background: "#0c0c0e", textElements: [], filter: "normal" };
 
   return (
     <div className="flex flex-col gap-4 max-w-[360px] mx-auto w-full">
@@ -41,19 +42,12 @@ export function StoryPreview({
 
       {/* Simulated Viewer Container */}
       <div className="relative aspect-[9/16] w-full overflow-hidden rounded-3xl bg-black shadow-float">
-        <StoryCanvas
-          slide={currentSlide}
-          stickers={stickers}
-          drawingUrl={drawingUrl}
-        />
+        <StoryCanvas slide={currentSlide} stickers={stickers} drawingUrl={drawingUrl} />
 
         {/* Top Progress Bars */}
         <div className="absolute top-3 inset-x-3 z-30 flex gap-1">
           {slides.map((_, i) => (
-            <div
-              key={i}
-              className="h-1 flex-1 overflow-hidden rounded-full bg-white/30"
-            >
+            <div key={i} className="h-1 flex-1 overflow-hidden rounded-full bg-white/30">
               <div
                 className={`h-full bg-white transition-all ${
                   i <= activeSlideIndex ? "w-full" : "w-0"

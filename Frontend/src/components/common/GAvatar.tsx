@@ -1,7 +1,7 @@
 import { BadgeCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { mediaUrl } from "@/lib/api-client";
-import type { User } from "@/types";
+import type { DisplayUser } from "@/types";
 
 const sizes = {
   xs: "h-7 w-7 text-[10px]",
@@ -29,9 +29,9 @@ export function GAvatar({
   ring,
   className,
 }: {
-  user: User;
+  user: DisplayUser;
   size?: AvatarSize;
-  ring?: "story" | "seen" | "live" | "add" | "none";
+  ring?: "story" | "seen" | "live" | "add" | "creator" | "none";
   className?: string;
 }) {
   const resolvedUrl = user?.avatarUrl ? mediaUrl(user.avatarUrl) : undefined;
@@ -41,7 +41,11 @@ export function GAvatar({
       src={resolvedUrl}
       alt={user.name || "User avatar"}
       loading="lazy"
-      className={cn("shrink-0 rounded-full object-cover object-center select-none overflow-hidden aspect-square", sizes[size], className)}
+      className={cn(
+        "shrink-0 rounded-full object-cover object-center select-none overflow-hidden aspect-square",
+        sizes[size],
+        className,
+      )}
     />
   ) : (
     <span
@@ -71,7 +75,9 @@ export function GAvatar({
         ring === "seen" && "bg-border-strong",
       )}
     >
-      <span className="rounded-full bg-surface p-[2px] shrink-0 flex items-center justify-center">{inner}</span>
+      <span className="rounded-full bg-surface p-[2px] shrink-0 flex items-center justify-center">
+        {inner}
+      </span>
     </span>
   );
 }
@@ -90,7 +96,7 @@ export function UserName({
   className,
   showHandle,
 }: {
-  user: User;
+  user: DisplayUser;
   className?: string;
   showHandle?: boolean;
 }) {
