@@ -15,11 +15,11 @@ import { notify } from "../../../lib/notify";
 import { notifyStaff } from "../../../lib/staffNotify";
 import { clearLiveViewers } from "../../../lib/redis";
 import { endStream } from "../../../services/liveStreamService";
-import { getPaidInteractionDefaults, PAID_INTERACTION_BOUNDS } from "../../../lib/paidInteractions";
+import { getPaidInteractionDefaults, isStaffRole, PAID_INTERACTION_BOUNDS } from "../../../lib/paidInteractions";
 import { MAX_LIVE_DURATION_MS } from "../../../lib/liveConfig";
 
 const router = Router();
-const HOST_FIELDS = "name username avatarHue avatarUrl isCreator verified followersCount";
+const HOST_FIELDS = "name username avatarHue avatarUrl isCreator verified followersCount role";
 
 // PATCH /api/v1/live/:id/settings — host adjusts gifts/subsOnly/paidInteractions while live
 router.patch("/:id/settings", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
@@ -36,20 +36,33 @@ router.patch("/:id/settings", authenticateConsumerOrStaff, async (req: Authentic
     // client nor a compromised one can set absurd prices.
     if (paidInteractions && typeof paidInteractions === "object") {
       const { enabled, likePrice, commentPrice, reactionPrice } = paidInteractions as Record<string, unknown>;
-      if (enabled !== undefined) stream.paidInteractions.enabled = Boolean(enabled);
-      const priceFields: ["likePrice" | "commentPrice" | "reactionPrice", number][] = [
-        ["likePrice", PAID_INTERACTION_BOUNDS.maxLikePrice],
-        ["commentPrice", PAID_INTERACTION_BOUNDS.maxCommentPrice],
-        ["reactionPrice", PAID_INTERACTION_BOUNDS.maxReactionPrice],
-      ];
-      for (const [field, max] of priceFields) {
-        const raw = paidInteractions[field];
-        if (raw === undefined) continue;
-        const n = Number(raw);
-        if (!Number.isFinite(n) || n < 0 || n > max) {
-          return res.status(400).json({ error: `${field} must be a number between 0 and ${max}` });
+      // Moderator-only privilege: only staff hosts (moderator/admin/superadmin)
+      // may run paid streams. Normal creators' streams are always free — a
+      // request to enable is rejected, and any legacy enabled flag is forced
+      // back off so old data self-heals.
+      const hostUser = await User.findById(req.user!.userId).select("role").lean();
+      const staffHost = isStaffRole(hostUser?.role);
+      if (!staffHost) {
+        if (enabled === true) {
+          return res.status(403).json({ error: "Paid interactions are only available on moderator-hosted streams" });
         }
-        stream.paidInteractions[field] = Math.floor(n);
+        if (enabled !== undefined) stream.paidInteractions.enabled = false;
+      } else {
+        if (enabled !== undefined) stream.paidInteractions.enabled = Boolean(enabled);
+        const priceFields: ["likePrice" | "commentPrice" | "reactionPrice", number][] = [
+          ["likePrice", PAID_INTERACTION_BOUNDS.maxLikePrice],
+          ["commentPrice", PAID_INTERACTION_BOUNDS.maxCommentPrice],
+          ["reactionPrice", PAID_INTERACTION_BOUNDS.maxReactionPrice],
+        ];
+        for (const [field, max] of priceFields) {
+          const raw = paidInteractions[field];
+          if (raw === undefined) continue;
+          const n = Number(raw);
+          if (!Number.isFinite(n) || n < 0 || n > max) {
+            return res.status(400).json({ error: `${field} must be a number between 0 and ${max}` });
+          }
+          stream.paidInteractions[field] = Math.floor(n);
+        }
       }
     }
     await stream.save();
@@ -83,16 +96,16 @@ router.post("/start", authenticateConsumerOrStaff, async (req: AuthenticatedRequ
     const startedAt = new Date();
     const maxEndsAt = new Date(startedAt.getTime() + MAX_LIVE_DURATION_MS);
 
-    // A5 — paid interactions default ON for staff-hosted streams (the brief's
-    // pinned interpretation of "moderators' live streams"), OFF for everyone
-    // else. Staff-settable global price defaults via the Setting model.
-    const staffHost = user.role === "moderator" || user.role === "admin" || user.role === "superadmin";
+    // A5 — paid interactions are a moderator-stream exclusive (v2 policy):
+    // default ON for staff-hosted streams (moderator/admin/superadmin), and
+    // FORCED OFF for normal creators regardless of what the client sends.
+    // The charge path re-checks the host role, so this is defence in depth.
+    const staffHost = isStaffRole(user.role);
     const defaultPrices = await getPaidInteractionDefaults();
     const requestedPaid =
       paidInteractions && typeof paidInteractions === "object" ? (paidInteractions as Record<string, unknown>) : {};
     const paidEnabledRaw = requestedPaid.enabled;
-    const paidEnabled =
-      paidEnabledRaw === undefined ? staffHost : Boolean(paidEnabledRaw);
+    const paidEnabled = staffHost ? (paidEnabledRaw === undefined ? true : Boolean(paidEnabledRaw)) : false;
     const clampPriceField = (raw: unknown, fallback: number, max: number) => {
       if (raw === undefined) return fallback;
       const n = Number(raw);

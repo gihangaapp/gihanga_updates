@@ -10,7 +10,12 @@ export interface PaidInteractionsData {
 
 export interface LiveStreamData {
   _id: string;
-  host: PostAuthor & { followersCount: number };
+  /** `role` is included so the UI can apply the moderator-only paid-stream
+   * policy (paid interactions only exist on staff-hosted streams). */
+  host: PostAuthor & {
+    followersCount: number;
+    role?: "user" | "moderator" | "admin" | "superadmin";
+  };
   title: string;
   subsOnly: boolean;
   giftsEnabled: boolean;

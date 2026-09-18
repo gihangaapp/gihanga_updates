@@ -33,6 +33,13 @@ import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { useAuth } from "@/lib/auth-context";
 import { logRecommendationEvent } from "@/hooks/use-recommendations";
 import { cn } from "@/lib/utils";
+import {
+  ReelWheelArbiter,
+  WHEEL_SILENCE_MS,
+  clampReelIndex,
+  normaliseWheelDelta,
+  reelIndexFromScroll,
+} from "@/lib/reel-scroll";
 
 export const Route = createFileRoute("/reels")({
   validateSearch: (search: Record<string, unknown>): { reel?: string | undefined } => ({
@@ -203,11 +210,11 @@ function ReelCard({
     <article
       data-reel-id={reel._id}
       className="relative flex h-full w-full shrink-0 flex-col justify-center overflow-hidden rounded-3xl bg-black select-none shadow-float"
-      style={{
-        scrollSnapAlign: "start",
-        scrollSnapStop: "always",
-      }}
     >
+      {/* B5.8 — snap points live ONLY on the direct wrapper children of the
+          scroller (see below). Declaring a second, padded snap area here made
+          the browser choose between two points ~4px apart per card, which
+          showed up as the reel feed "dancing" between them. */}
       {/* Video Element — neighbours keep their source for instant navigation. */}
       {mediaSrc && attachSrc ? (
         <video
@@ -322,6 +329,7 @@ function ReelCard({
         {/* Like (Heart Icon + Count below) */}
         <button
           type="button"
+          data-reel-action="like"
           onClick={handleLike}
           className="press flex flex-col items-center gap-1"
         >
@@ -566,10 +574,52 @@ function ReelsPage() {
   const { reel: deepLinkReel } = useSearch({ from: "/reels" });
 
   const containerRef = useRef<HTMLDivElement>(null);
-  // Single source of truth for the active index: a rAF-throttled scroll
-  // handler that picks the article nearest the container's centre (the old
-  // dual IntersectionObserver + scroll-listener setup jittered).
-  const scrollRafRef = useRef<number | null>(null);
+  // B5.8 — mirrors of state for listeners that are registered ONCE.
+  const activeIndexRef = useRef(0);
+  const reelsLengthRef = useRef(0);
+  useEffect(() => {
+    activeIndexRef.current = activeReelIndex;
+  }, [activeReelIndex]);
+  useEffect(() => {
+    reelsLengthRef.current = reels.length;
+  }, [reels.length]);
+
+  // B5.8 — while the reels route is mounted the PAGE itself never scrolls:
+  // hides the desktop page scrollbar (full-screen player feel) and removes
+  // the page-level scroll target that scrollIntoView used to drag around.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add("reels-page-scroll-lock");
+    return () => {
+      root.classList.remove("reels-page-scroll-lock");
+    };
+  }, []);
+
+  // ── B5.8 — navigation primitives ──────────────────────────────────────────
+  // ONLY the snap container scrolls, ONLY to exact card multiples. Never
+  // scrollIntoView(): it also scrolls every scrollable ancestor (the page!)
+  // and its smooth animation fights the mandatory CSS snap — the two effects
+  // behind the feed "dancing" and skipping a video then snapping back.
+  const goToReelImpl = useCallback((idx: number) => {
+    const container = containerRef.current;
+    if (!container) return;
+    const target = clampReelIndex(idx, reelsLengthRef.current);
+    container.scrollTo({ top: target * container.clientHeight, behavior: "smooth" });
+  }, []);
+
+  /** Step one reel from the CURRENT GEOMETRY (never a stale React state),
+   * so chained input mid-animation retargets correctly. */
+  const navigateStep = useCallback((dir: 1 | -1) => {
+    const container = containerRef.current;
+    if (!container || reelsLengthRef.current === 0) return;
+    const current = reelIndexFromScroll(container.scrollTop, container.clientHeight);
+    const target = clampReelIndex(current + dir, reelsLengthRef.current);
+    container.scrollTo({ top: target * container.clientHeight, behavior: "smooth" });
+  }, []);
+  const navigateStepRef = useRef(navigateStep);
+  useEffect(() => {
+    navigateStepRef.current = navigateStep;
+  }, [navigateStep]);
 
   // B5.7 — deep-link restore: /reels?reel=<id> scrolls to that reel once loaded.
   const deepLinkHandled = useRef(false);
@@ -578,59 +628,82 @@ function ReelsPage() {
     const idx = reels.findIndex((r) => r._id === deepLinkReel);
     if (idx >= 0) {
       deepLinkHandled.current = true;
-      const target = containerRef.current?.querySelector(`article[data-reel-id="${deepLinkReel}"]`);
-      target?.scrollIntoView({ behavior: "auto", block: "start" });
       setActiveReelIndex(idx);
+      // After paint, when the container has its final height — instant snap
+      // (no animation to fight on first positioning).
+      requestAnimationFrame(() => {
+        const container = containerRef.current;
+        if (container) {
+          container.scrollTo({
+            top: clampReelIndex(idx, reelsLengthRef.current) * container.clientHeight,
+            behavior: "auto",
+          });
+        }
+      });
     }
   }, [deepLinkReel, reels]);
 
-  const scrollToReel = useCallback((idx: number) => {
-    const container = containerRef.current;
-    if (!container) return;
-    const targets = container.querySelectorAll("article[data-reel-id]");
-    const target = targets[idx];
-    if (target instanceof HTMLElement) {
-      target.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, []);
-
-  // ── Active index from scroll position (rAF-throttled, one mechanism) ──────
+  // ── B5.8 — active index from scroll GEOMETRY, committed only once the
+  // scroll has SETTLED (scrollend where available, 140ms of quiet as the
+  // universal fallback). The old rAF handler flipped state mid-flight; the
+  // re-render churn while the snap animation ran is exactly what made the
+  // feed visibly jitter between cards. ───────────────────────────────────────
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const computeActive = () => {
-      scrollRafRef.current = null;
-      const articles = container.querySelectorAll("article[data-reel-id]");
-      if (articles.length === 0) return;
-      const centerY = container.getBoundingClientRect().top + container.clientHeight / 2;
-      let closestIdx = 0;
-      let minDistance = Number.POSITIVE_INFINITY;
-      articles.forEach((art, i) => {
-        const rect = art.getBoundingClientRect();
-        const artCenter = rect.top + rect.height / 2;
-        const dist = Math.abs(artCenter - centerY);
-        if (dist < minDistance) {
-          minDistance = dist;
-          closestIdx = i;
-        }
-      });
-      if (minDistance < container.clientHeight * 0.5) {
-        setActiveReelIndex(closestIdx);
+    let settleTimer: number | undefined;
+    let lastScrollAt = 0;
+
+    const commitIndex = () => {
+      const idx = clampReelIndex(
+        reelIndexFromScroll(container.scrollTop, container.clientHeight),
+        reelsLengthRef.current,
+      );
+      if (idx !== activeIndexRef.current) {
+        activeIndexRef.current = idx;
+        setActiveReelIndex(idx);
       }
     };
 
-    const onScroll = () => {
-      if (scrollRafRef.current != null) return;
-      scrollRafRef.current = requestAnimationFrame(computeActive);
+    const scheduleSettle = (delay: number) => {
+      if (settleTimer !== undefined) window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(() => {
+        settleTimer = undefined;
+        commitIndex();
+      }, delay);
     };
 
+    const onScroll = () => {
+      lastScrollAt = Date.now();
+      scheduleSettle(140); // fallback for browsers without scrollend
+    };
+    const onScrollEnd = () => scheduleSettle(0); // snap/programmatic scroll finished
+
     container.addEventListener("scroll", onScroll, { passive: true });
+    const supportsScrollEnd = "onscrollend" in window;
+    if (supportsScrollEnd) container.addEventListener("scrollend", onScrollEnd);
+
+    // Viewport/dvh changes (mobile URL bar collapse, window resize) change
+    // card heights; re-pin the scroll to the active card's exact offset so
+    // the browser's own re-snap can never choose a neighbour — but only
+    // while we are settled (never mid-drag/animation).
+    const resizeObserver = new ResizeObserver(() => {
+      if (Date.now() - lastScrollAt < 180) return;
+      const expected = activeIndexRef.current * container.clientHeight;
+      if (Math.abs(container.scrollTop - expected) > 1) {
+        container.scrollTop = expected;
+      }
+    });
+    resizeObserver.observe(container);
+
     return () => {
       container.removeEventListener("scroll", onScroll);
-      if (scrollRafRef.current != null) cancelAnimationFrame(scrollRafRef.current);
+      if (supportsScrollEnd) container.removeEventListener("scrollend", onScrollEnd);
+      if (settleTimer !== undefined) window.clearTimeout(settleTimer);
+      resizeObserver.disconnect();
     };
-  }, [reels.length]);
+  }, []);
 
   // ── B5.6 — infinite prefetch: fetch the next page when the active reel is
   // within 3 of the end. Keeps the scroll position stable (appends only). ────
@@ -647,10 +720,10 @@ function ReelsPage() {
 
   const goToReel = useCallback(
     (idx: number) => {
-      if (idx < 0 || idx >= reels.length) return;
-      scrollToReel(idx);
+      if (idx < 0 || idx >= reelsLengthRef.current) return;
+      goToReelImpl(idx);
     },
-    [reels.length, scrollToReel],
+    [goToReelImpl],
   );
 
   // ── B5.3 — keyboard navigation ─────────────────────────────────────────────
@@ -658,8 +731,9 @@ function ReelsPage() {
     const onKeyUpCooldown = { last: 0 };
     const onKeyDown = (e: KeyboardEvent) => {
       if (shouldIgnoreReelKeys()) return;
-      const reelsLen = reels.length;
-      if (reelsLen === 0) return;
+      // Live length via ref — a closure-captured reels.length goes stale
+      // when the feed loads after mount and would leave the keys dead.
+      if (reelsLengthRef.current === 0) return;
 
       // Key-repeat throttle (~120ms) so holding a key doesn't turbo-scroll.
       const now = Date.now();
@@ -677,13 +751,13 @@ function ReelsPage() {
         case "j":
         case "PageDown":
           e.preventDefault();
-          goToReel(Math.min(reelsLen - 1, activeReelIndex + 1));
+          navigateStep(1);
           break;
         case "ArrowUp":
         case "k":
         case "PageUp":
           e.preventDefault();
-          goToReel(Math.max(0, activeReelIndex - 1));
+          navigateStep(-1);
           break;
         case "m":
         case "M":
@@ -691,14 +765,13 @@ function ReelsPage() {
           break;
         case " ": {
           e.preventDefault();
-          const video = containerRef.current?.querySelector(
-            "article[data-reel-id] video",
-          ) as HTMLVideoElement | null;
-          const activeVideo = containerRef.current?.querySelectorAll("article[data-reel-id] video")[
-            activeReelIndex
-          ] as HTMLVideoElement | undefined;
-          const target = activeVideo ?? video;
-          if (target) {
+          // B5.8 — resolve the video THROUGH the active article (windowed
+          // rendering means querySelectorAll("article video") indices do NOT
+          // match reel indices; the old lookup toggled the wrong video).
+          const activeArticle =
+            containerRef.current?.querySelectorAll("article[data-reel-id]")[activeReelIndex];
+          const target = activeArticle?.querySelector("video");
+          if (target instanceof HTMLVideoElement) {
             if (target.paused) void target.play().catch(() => {});
             else target.pause();
           }
@@ -707,10 +780,11 @@ function ReelsPage() {
         case "l":
         case "L": {
           // Like the active reel via its rail button (keeps one code path).
+          // B5.8 — target it by data attribute: querying the first generic
+          // `.press` button hit the header MUTE button instead.
           const activeArticle =
             containerRef.current?.querySelectorAll("article[data-reel-id]")[activeReelIndex];
-          const railBtn = activeArticle?.querySelector<HTMLButtonElement>("button.press");
-          railBtn?.click();
+          activeArticle?.querySelector<HTMLButtonElement>('[data-reel-action="like"]')?.click();
           break;
         }
         case "Escape":
@@ -720,62 +794,56 @@ function ReelsPage() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeReelIndex, reels.length, goToReel, navigate]);
+  }, [activeReelIndex, navigateStep, navigate]);
 
   // Focus the viewport on mount so keys work right after page load.
   useEffect(() => {
     containerRef.current?.focus?.();
   }, []);
 
-  // ── B5.4 — wheel/trackpad: exactly ONE reel per gesture with cooldown and
-  // inertia-tail rejection (delta-decay detection). Touch relies on native
-  // snap. Never hijacks scrolling inside sheets/inputs. ──────────────────────
+  // ── B5.8 — wheel/trackpad: we OWN the wheel on this container (every event
+  // preventDefault'd, so native wheel snap never fights our animations) and
+  // group deltas into gestures via the pure ReelWheelArbiter: one navigation
+  // per gesture, re-armed only after 150ms of silence — a trackpad flick's
+  // inertia tail can never fire a second, spurious navigation (the
+  // "skips a video then snaps back" report). Touch keeps native snap.
+  // Registered once; live state comes through refs, never stale closures. ────
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    let gestureActive = false;
-    let gestureCooldownUntil = 0;
-    let lastDelta = 0;
+    const arbiter = new ReelWheelArbiter();
+    let silenceTimer: number | undefined;
 
     const onWheel = (e: WheelEvent) => {
-      // Don't hijack wheel events over open overlays.
+      // Don't hijack wheel events over open overlays — let sheets scroll.
       if (shouldIgnoreReelKeys()) return;
+      // Horizontal-intent gestures (shift+wheel, trackpad swipes) are not ours.
+      if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
 
-      const delta = Math.abs(e.deltaY);
-      if (delta < 24) return; // ignore jitter / tiny trackpad drifts
-
-      const now = Date.now();
-      if (gestureActive || now < gestureCooldownUntil) {
-        // Inertia tail: decaying deltas keep updating the last seen magnitude
-        // but don't trigger another navigation while the cooldown runs.
-        lastDelta = delta;
-        e.preventDefault();
-        return;
-      }
-
-      // Start a gesture: navigate once, then lock until deltas decay.
-      gestureActive = true;
-      lastDelta = delta;
+      // We fully own vertical wheel on the reel viewport.
       e.preventDefault();
-      const direction = e.deltaY > 0 ? 1 : -1;
-      goToReel(Math.max(0, Math.min(reels.length - 1, activeReelIndex + direction)));
 
-      // ~700ms TikTok-style cooldown between gestures.
-      gestureCooldownUntil = now + 700;
+      // Re-arm on gesture silence.
+      if (silenceTimer !== undefined) window.clearTimeout(silenceTimer);
+      silenceTimer = window.setTimeout(() => {
+        silenceTimer = undefined;
+        arbiter.rearm();
+      }, WHEEL_SILENCE_MS);
 
-      const decayCheck = window.setInterval(() => {
-        if (lastDelta < 12 || Date.now() > gestureCooldownUntil + 2500) {
-          gestureActive = false;
-          window.clearInterval(decayCheck);
-        }
-        lastDelta *= 0.85; // decay reference magnitude over time
-      }, 100);
+      const dy = normaliseWheelDelta(e.deltaY, e.deltaMode, container.clientHeight);
+      const decision = arbiter.onWheelDelta(dy, performance.now());
+      if ("nav" in decision) {
+        navigateStepRef.current(decision.nav);
+      }
     };
 
     container.addEventListener("wheel", onWheel, { passive: false });
-    return () => container.removeEventListener("wheel", onWheel);
-  }, [activeReelIndex, reels.length, goToReel]);
+    return () => {
+      container.removeEventListener("wheel", onWheel);
+      if (silenceTimer !== undefined) window.clearTimeout(silenceTimer);
+    };
+  }, []);
 
   return (
     <AppShell>
@@ -865,8 +933,11 @@ function ReelsPage() {
               <div
                 key={r._id}
                 className="h-full w-full shrink-0 p-1 pb-2"
-                style={{ scrollSnapAlign: "start" }}
+                style={{ scrollSnapAlign: "start", scrollSnapStop: "always" }}
               >
+                {/* B5.8 — snap points are declared HERE only (direct children
+                    of the scroller): align-start + stop-always per card, one
+                    unambiguous point per reel, flings can never skip cards. */}
                 <ReelCard
                   reel={r}
                   isActive={i === activeReelIndex}
@@ -876,9 +947,12 @@ function ReelsPage() {
                 />
               </div>
             ))}
-            {/* Skeleton row while prefetching the next page */}
+            {/* Skeleton row while prefetching the next page — compact (a
+                full-height row here would add a viewport-sized block to the
+                snap scroller for no reason; it is unreachable past the last
+                snap point anyway). */}
             {isFetchingNextPage && (
-              <div className="flex h-full items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
+              <div className="flex h-20 items-center justify-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" /> Loading more…
               </div>
             )}

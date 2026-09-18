@@ -5,6 +5,21 @@ Verification commands and results are in `VERIFYING.md`.
 
 ---
 
+## v2 — Paid interactions are now a moderator-stream exclusive (owner instruction)
+
+**Policy change**: paid like/comment/reaction interactions exist **only on streams hosted by moderator / admin / superadmin accounts**. Streams hosted by normal creators are **always free** — viewers like, comment and react exactly as before the feature existed. Four enforcement layers make it impossible to bypass:
+
+1. **`POST /live/start`** — `paidInteractions.enabled` is forced to `false` for non-staff hosts, no matter what the client sends (staff hosts keep the default-ON + toggle behaviour).
+2. **`PATCH /live/:id/settings`** — a non-staff host attempting `enabled: true` gets a `403` ("Paid interactions are only available on moderator-hosted streams"); any legacy enabled flag on their stream is forced back off (self-healing old data).
+3. **`chargePaidInteraction()`** (the money-moving layer) — re-checks the host role *before any money moves*, so even legacy or hand-edited non-staff streams resolve to **free**. New `isStaffRole()` helper; `resolveInteractionAccess()` takes `hostIsStaff` and treats non-staff streams as free.
+4. **Frontend** — stream payloads now expose `host.role` (`HOST_FIELDS`), and the "Enable paid interactions" host-menu item only renders for staff hosts. Normal creators never see the toggle; their viewers see the plain free chat/like UI.
+
+Tests: 5 new regression tests (49 total backend) pin the policy — non-staff streams resolve free for all interaction kinds, the charge path consults the host role, `/start` forces the flag off, `PATCH /settings` rejects enabling, and payloads expose the role.
+
+**Env note**: no env vars are needed for paid interactions (prices live in the DB / staff Settings). The new-this-version env vars (live hygiene + LiveKit + transport switch) are documented in `backend/.env.example`, `frontend/.env.example`, and pre-filled (append-only) in both `.env` files; standalone copies ship as `backend-new-vars.env` / `frontend-new-vars.env` next to the ZIP.
+
+---
+
 ## Part A — Live streaming
 
 ### A1 — Viewers receive HD video (was ~640×480)
@@ -38,7 +53,7 @@ Verification commands and results are in `VERIFYING.md`.
 - Host UI: live countdown badge (red under 5 min); viewers get a subtle "N min left" chip; cap-ended streams show "This stream reached the 5-hour limit" + "Start a new stream" (host).
 
 ### A5 — Paid like / comment / react
-- Interpretation (as pinned by the brief): staff-hosted streams (moderator/admin/superadmin hosts) default **ON**, everyone else **OFF**; host-toggleable per stream (`PATCH /live/:id/settings`, bounds-validated); staff-settable global price defaults via the `Setting` model (`live_paid_interactions_defaults`, category `features`).
+- Policy (updated in v2 — see the top of this file): **moderator-stream exclusive**. Staff-hosted streams (moderator/admin/superadmin hosts) default **ON** and are host-toggleable per stream (`PATCH /live/:id/settings`, bounds-validated); normal creators' streams are **always free** and cannot enable the feature; staff-settable global price defaults via the `Setting` model (`live_paid_interactions_defaults`, category `features`).
 - **Server-authoritative** (`backend/src/lib/paidInteractions.ts`): price always from the DB; **atomic debit** `findOneAndUpdate({kingdomPoints: {$gte: price}, frozen: {$ne: true}}, {$inc: …})` — no overdraft, no double-spend; host credit minus optional platform fee (`live_paid_interactions_fee_bps` Setting); **compensating refund** on any post-debit failure; `Transaction` rows with new kinds `live_like / live_comment / live_reaction` (wallet history + payments dashboard updated via the shared Transaction model).
 - **Idempotency**: client-sent `idempotencyKey` + Redis `SETNX` window (5 min) — duplicates charge exactly once; per-user/stream rate limit (40/min).
 - Socket flow: free event names preserved; `live:paid-chat` / `live:paid-react` carry the idempotency key; failures emit `live:payment-failed` with precise reasons (`insufficient / frozen / muted / banned / rate-limited / ended / disabled`). Muted/banned users are rejected **before** any charge; host/mods/staff interact free.
@@ -87,8 +102,23 @@ See `VERIFYING.md` for the full matrix and how to run it (including the 2-minute
 - One scroll container: definite `calc(100dvh - 9rem)` height, `scroll-snap-type: y mandatory`, `overscroll-behavior: contain`, `scroll-snap-align/start + scroll-snap-stop: always` on cards, **no gap** (padding inside).
 - **Sticky arrows on desktop AND touch** (disabled at ends, visible focus rings). **Windowed rendering**: active ± 1 stay mounted with sources (instant navigation), others are empty snap cells.
 - **Keyboard**: ↑/↓, j/k, PageUp/Down, Space (play/pause), m (mute), l (like), Esc — ignored while typing in inputs/textarea/contenteditable or with a dialog open, `preventDefault`, key-repeat throttled, works right after load.
-- **Wheel/trackpad**: exactly one reel per gesture, ~700 ms cooldown, inertia-tail rejection via delta decay; touch relies on native snap.
-- Single source of truth: rAF-throttled scroll-centre detection. **Infinite prefetch** at active ≥ length−3 with a skeleton row; deep-link `/reels?reel=<id>` restores position; `aria-live` announces the current reel.
+- **Wheel/trackpad**: exactly one reel per gesture, inertia-tail rejection; touch relies on native snap.
+- Single source of truth: geometry-based index committed on settle. **Infinite prefetch** at active ≥ length−3 with a compact skeleton row; deep-link `/reels?reel=<id>` restores position; `aria-live` announces the current reel.
+
+### B5.8 — Reels scroll glitch fix (owner-reported: "videos jump into the screen and dance, skip next/previous then snap back")
+- **Root causes found** (frame-by-frame analysis of the owner's screen recording):
+  1. `scrollIntoView({behavior:'smooth'})` on the card **fights the mandatory CSS snap mid-animation** (Chrome re-snaps during the animation → bounce/"dance"), and also targets **every scrollable ancestor** — including the page itself, which is what made the desktop page scrollbar jump.
+  2. The wheel handler navigated from React state captured in a closure (stale mid-animation) with a leaky 700 ms cooldown + setInterval decay machinery racing native snap.
+  3. A rAF handler flipped the active index (and thus the windowed DOM: videos mounting/unmounting) **mid-animation**, churning the layout while the snap animation ran.
+  4. Snap points were declared on BOTH the padded wrapper and the inset article — two competing points ~4 px apart per card → ambiguous snapping/jitter.
+- **Fix** (`src/lib/reel-scroll.ts` + `reels.tsx` rewrite, 12 new unit tests):
+  - **Only the snap container ever scrolls, only to exact card multiples** (`index × clientHeight` via `container.scrollTo`) — never `scrollIntoView`; the page is never a scroll target again.
+  - **Wheel is fully owned** (every event `preventDefault`'d, native wheel snap can never fight us) and grouped into gestures by a pure `ReelWheelArbiter`: one navigation per gesture, re-armed only after 150 ms of wheel silence — a trackpad flick's inertia tail can never fire a second, spurious navigation. Navigation steps derive from **live scroll geometry**, never stale state.
+  - **Active index commits only on settle** (`scrollend` where available, 140 ms quiet fallback) — zero state/DOM churn mid-animation.
+  - **One unambiguous snap point per card** (align-start + stop-always on the direct wrapper children only).
+  - **ResizeObserver re-pins** the scroll to the active card when the viewport/dvh changes (mobile URL-bar collapse) so a re-snap can never choose a neighbour.
+  - **`html.reels-page-scroll-lock`** (applied while the route is mounted): the page itself never scrolls — **hides the desktop right page scrollbar** (full-screen player feel, per owner request) and kills page-level scroll chaining on mobile.
+  - Bonus fixes found during the pass: keyboard `l` hit the MUTE button instead of LIKE (now targeted via `data-reel-action="like"`); Space resolved the wrong video through mismatched `querySelectorAll` indices; the prefetch skeleton row was a full viewport tall; keyboard nav early-return used a stale closure of `reels.length`.
 
 ### B6 — Sign-up fully responsive
 - `Button size="lg"` is fluid (`h-11 sm:h-12`, `px-4 sm:px-7`, `text-sm sm:text-base`) and wraps long labels (i18n-safe `text-wrap`).

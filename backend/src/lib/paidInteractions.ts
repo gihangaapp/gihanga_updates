@@ -14,12 +14,18 @@ import { Setting } from "../models/Setting";
 /**
  * Server-authoritative paid live interactions (A5).
  *
- * Interpretation implemented (as pinned by the engineering brief):
- * "moderators' live streams" = streams hosted by users whose role is
- * moderator/admin/superadmin (staff hosts). The feature is a per-stream,
- * host-controlled monetisation setting — defaulting ON for staff-hosted
- * streams and OFF for everyone else — with staff-settable global price
- * defaults via the existing Setting model.
+ * Policy (v2, per project owner): paid like/comment/reaction interactions are
+ * a MODERATOR-STREAM EXCLUSIVE. Only streams hosted by users whose role is
+ * moderator/admin/superadmin can enable them. Streams hosted by normal
+ * creators are ALWAYS free — viewers like, comment and react at no cost,
+ * exactly as before this feature existed.
+ *
+ * Enforcement layers (a non-staff host can never charge viewers):
+ *  - POST /live/start forces paidInteractions.enabled = false for non-staff
+ *    hosts (client requests to enable are ignored),
+ *  - PATCH /live/:id/settings rejects enabling for non-staff hosts (403),
+ *  - chargePaidInteraction() re-checks the host role BEFORE any money moves,
+ *    so even legacy or hand-edited non-staff streams resolve to "free".
  *
  * Guarantees:
  *  - the price ALWAYS comes from the DB (client-sent prices are ignored),
@@ -79,6 +85,11 @@ function clampPrice(raw: unknown, fallback: number, max: number): number {
   return Math.min(Math.floor(n), max);
 }
 
+/** Staff = the roles allowed to host a PAID stream (moderator and up). */
+export function isStaffRole(role: string | null | undefined): boolean {
+  return role === "moderator" || role === "admin" || role === "superadmin";
+}
+
 export function priceFor(kind: PaidInteractionKind, settings: PaidInteractionsSettings): number {
   switch (kind) {
     case "like":
@@ -97,6 +108,11 @@ export function txKindFor(kind: PaidInteractionKind): "live_like" | "live_commen
 /**
  * Pure decision helper: can this user perform this interaction for free,
  * must they pay, or are they blocked outright? Tested without any I/O.
+ *
+ * `hostIsStaff` (defaults true for pure-interface back-compat; the charge
+ * path always passes the real value): when false, the stream is treated as
+ * a normal creator's stream and every interaction is FREE — the moderator-
+ * only policy is enforced here so no caller can forget it.
  */
 export function resolveInteractionAccess(input: {
   kind: PaidInteractionKind;
@@ -106,6 +122,7 @@ export function resolveInteractionAccess(input: {
   streamBannedIds: string[];
   streamStatus: string;
   paidInteractions: PaidInteractionsSettings;
+  hostIsStaff?: boolean;
   viewerId: string;
   viewerCanModerate: boolean;
 }): { access: "free" | "paid" | "blocked"; reason?: PaymentFailureReason; price: number } {
@@ -117,6 +134,7 @@ export function resolveInteractionAccess(input: {
     streamBannedIds,
     streamStatus,
     paidInteractions,
+    hostIsStaff = true,
     viewerId,
     viewerCanModerate,
   } = input;
@@ -134,7 +152,9 @@ export function resolveInteractionAccess(input: {
   }
 
   const price = priceFor(kind, paidInteractions);
-  if (!paidInteractions.enabled || price <= 0) return { access: "free", price: 0 };
+  // Moderator-only policy: a non-staff host's stream is always free, even
+  // if the flag was somehow enabled (legacy data, direct DB edit).
+  if (!paidInteractions.enabled || !hostIsStaff || price <= 0) return { access: "free", price: 0 };
   if (isHost || isModerator || viewerCanModerate) return { access: "free", price: 0 };
   return { access: "paid", price };
 }
@@ -175,7 +195,16 @@ export async function chargePaidInteraction(
   const viewer = await User.findById(userId).select("role").lean();
   const viewerRole = input.viewerRole ?? viewer?.role ?? "user";
   const canModeratePlatform =
-    input.viewerCanModerate ?? (viewerRole === "moderator" || viewerRole === "admin" || viewerRole === "superadmin");
+    input.viewerCanModerate ?? isStaffRole(viewerRole);
+
+  // Moderator-only policy, enforced at the money-moving layer: consult the
+  // host's role whenever the stream claims paid mode, so legacy/hand-edited
+  // non-staff streams resolve to free instead of charging viewers.
+  let hostIsStaff = false;
+  if (stream.paidInteractions?.enabled) {
+    const hostUser = await User.findById(stream.host).select("role").lean();
+    hostIsStaff = isStaffRole(hostUser?.role);
+  }
 
   const access = resolveInteractionAccess({
     kind,
@@ -185,6 +214,7 @@ export async function chargePaidInteraction(
     streamBannedIds: stream.bannedUsers.map((b) => String(b)),
     streamStatus: stream.status,
     paidInteractions: stream.paidInteractions,
+    hostIsStaff,
     viewerId: userId,
     viewerCanModerate: canModeratePlatform,
   });

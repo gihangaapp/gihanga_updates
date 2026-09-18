@@ -22,6 +22,7 @@ import type { PaidInteractionsSettings } from "../src/models/LiveStream";
 const liveRoute = readFileSync(new URL("../src/routes/v1/live/live.ts", import.meta.url), "utf8");
 const signaling = readFileSync(new URL("../src/lib/liveSignaling.ts", import.meta.url), "utf8");
 const walletLib = readFileSync(new URL("../src/lib/wallet.ts", import.meta.url), "utf8");
+const paidLib = readFileSync(new URL("../src/lib/paidInteractions.ts", import.meta.url), "utf8");
 const service = readFileSync(new URL("../src/services/liveStreamService.ts", import.meta.url), "utf8");
 const serverFile = readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
 
@@ -148,6 +149,7 @@ const baseAccess = {
   streamBannedIds: ["ban1"],
   streamStatus: "live",
   paidInteractions: PAID_ON,
+  hostIsStaff: true, // moderator-hosted stream — paid mode is allowed
   viewerId: "viewer1",
   viewerCanModerate: false,
 };
@@ -193,6 +195,33 @@ test("a zero price means free even when the toggle is on", () => {
   assert.equal(r.access, "free");
 });
 
+// ── A5 (v2): paid interactions are a moderator-stream exclusive ─────────────
+
+test("paid interactions on a normal creator's stream are ALWAYS free, even if the flag is somehow on", () => {
+  for (const kind of ["like", "comment", "reaction"] as const) {
+    const r = resolveInteractionAccess({ ...baseAccess, kind, hostIsStaff: false });
+    assert.equal(r.access, "free");
+    assert.equal(r.price, 0);
+  }
+});
+
+test("the charge path consults the host role before any money moves", () => {
+  assert.match(paidLib, /hostIsStaff/);
+  assert.match(paidLib, /isStaffRole\(hostUser\?\.role\)/);
+});
+
+test("/live/start forces paidInteractions off for non-staff hosts", () => {
+  assert.match(liveRoute, /paidEnabled = staffHost \? \(paidEnabledRaw === undefined \? true : Boolean\(paidEnabledRaw\)\) : false/);
+});
+
+test("PATCH /live/:id/settings rejects enabling paid interactions for non-staff hosts", () => {
+  assert.match(liveRoute, /only available on moderator-hosted streams/);
+});
+
+test("stream payloads expose the host role so the UI can honour the policy", () => {
+  assert.match(liveRoute, /followersCount role/);
+});
+
 test("transaction kinds map correctly for wallet history", () => {
   assert.equal(txKindFor("like"), "live_like");
   assert.equal(txKindFor("comment"), "live_comment");
@@ -213,7 +242,7 @@ test("atomic debit refuses overdrafts and frozen wallets in one conditional upda
 
 test("a failure after the debit writes a compensating refund (all-or-nothing)", () => {
   assert.match(liveRoute, /Refund — gift to/);
-  assert.match(readFileSync(new URL("../src/lib/paidInteractions.ts", import.meta.url), "utf8"), /Refund — paid/);
+  assert.match(paidLib, /Refund — paid/);
 });
 
 test("paid socket events exist and free event names are preserved", () => {

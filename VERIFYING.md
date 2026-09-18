@@ -26,9 +26,9 @@ cp .env.example .env      # VITE_API_URL (+ VITE_USE_LIVEKIT when going SFU)
 | Backend lint | `cd backend && npm run lint` | **0 errors** (285 legacy warnings) |
 | Frontend lint | `cd frontend && npm run lint` | **0 errors** (148 legacy warnings) |
 | Payment regression | `cd backend && npm run test:payment` | **12/12 pass** |
-| New backend tests | `cd backend && npm run test:live` | **32/32 pass** |
-| All backend tests | `cd backend && npm run test` | **44/44 pass** |
-| Frontend pure tests | `cd frontend && npm run test` | **23/23 pass** |
+| New backend tests | `cd backend && npm run test:live` | **37/37 pass** (incl. 5 moderator-only policy tests) |
+| All backend tests | `cd backend && npm run test` | **49/49 pass** |
+| Frontend pure tests | `cd frontend && npm run test` | **35/35 pass** (10 quality + 13 gradient + 12 reel-scroll) |
 | Backend build | `cd backend && npm run build` | **dist/ produced** |
 | Frontend build | `cd frontend && npm run build` | **.output/ produced** |
 
@@ -43,9 +43,15 @@ cp .env.example .env      # VITE_API_URL (+ VITE_USE_LIVEKIT when going SFU)
   once per mark (30/5/1 min); cap takes precedence over staleness; missing
   heartbeat falls back to `startedAt`.
 - **Token TTL**: clamps to remaining+60 s, 60 s floor, 6 h ceiling.
-- **Paid-interaction access**: disabled → free; enabled → viewer pays the
-  DB price; host/stream-mod/staff → free; muted/banned blocked **before**
-  charge; ended → blocked; zero price → free.
+- **Paid-interaction access**: disabled → free; enabled on a staff-hosted
+  stream → viewer pays the DB price; host/stream-mod/staff → free;
+  muted/banned blocked **before** charge; ended → blocked; zero price →
+  free.
+- **Moderator-only policy (v2)**: paid interactions on a normal creator's
+  stream are **always free** even if the flag is somehow on; the charge path
+  consults the host role before any money moves; `POST /live/start` forces
+  the flag off for non-staff hosts; `PATCH /live/:id/settings` rejects
+  enabling for non-staff hosts (403); stream payloads expose `host.role`.
 - **Money safety**: gift route uses the atomic conditional debit (no
   check-then-debit); the debit refuses overdrafts and frozen wallets in one
   conditional update; failures after the debit write compensating refunds.

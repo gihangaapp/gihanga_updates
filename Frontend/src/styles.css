@@ -402,6 +402,17 @@
   }
 }
 
+/* B5.8 — Reels route: the page itself must never scroll. Applied to <html>
+   while /reels is mounted: hides the desktop page scrollbar (full-screen
+   player feel, per project owner request) and eliminates the page-level
+   scroll target that previously danced alongside the inner snap container.
+   The reel viewport inside has its own scroll + snap + overscroll-contain. */
+html.reels-page-scroll-lock,
+html.reels-page-scroll-lock body {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
+
 @utility shimmer {
   background-image: linear-gradient(
     90deg,

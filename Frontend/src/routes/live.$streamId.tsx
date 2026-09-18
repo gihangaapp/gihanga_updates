@@ -461,6 +461,15 @@ function LiveRoomPage() {
   const canModerate = isHost || isMod;
   const isOver = stream ? stream.status !== "live" || Boolean(ended) : false;
 
+  // Moderator-only policy: paid interactions exist solely on streams hosted
+  // by moderator/admin/superadmin accounts. Normal creators never see the
+  // toggle, and the backend forces their streams free regardless.
+  const isStaffHost = Boolean(
+    stream?.host?.role === "moderator" ||
+    stream?.host?.role === "admin" ||
+    stream?.host?.role === "superadmin",
+  );
+
   // A5 — paid interaction pricing (server-authoritative; UI only reflects it).
   const paid = stream?.paidInteractions;
   const paidEnabled = Boolean(
@@ -1533,7 +1542,7 @@ function LiveRoomPage() {
                     {stream.giftsEnabled ? "Disable gifts" : "Enable gifts"}
                   </DropdownMenuItem>
                 )}
-                {isHost && (
+                {isHost && isStaffHost && (
                   <DropdownMenuItem
                     onClick={() => {
                       updateSettings.mutate(
