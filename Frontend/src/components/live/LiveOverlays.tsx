@@ -149,7 +149,7 @@ export function ConnectionQualityBanner({
     <div
       role="status"
       className={cn(
-        "pointer-events-none absolute inset-x-3 top-14 z-20 mx-auto flex w-fit items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-bold backdrop-blur-md",
+        "pointer-events-none absolute inset-x-3 top-28 z-20 mx-auto flex w-fit items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-bold backdrop-blur-md",
         offline
           ? "border-danger/40 bg-danger/20 text-white"
           : "border-amber-400/40 bg-amber-500/20 text-amber-100",

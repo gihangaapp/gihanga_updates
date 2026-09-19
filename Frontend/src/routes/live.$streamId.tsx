@@ -544,7 +544,18 @@ function LiveRoomPage() {
     if (!VIEWER_GRID_AVAILABLE) return [];
     return viewerRoom.viewerStreams;
   }, [isHost, isCoHost, viewerRoom.viewerStreams]);
-  const hasCoHosts = allCoHostStreams.length > 0 || viewerGridTiles.length > 0;
+  // Host/co-host tiles exclude self, so any entry means someone else joined.
+  // The viewer grid INCLUDES the host tile itself, so it only counts as a
+  // real split screen once there's the host PLUS at least one co-host (2+).
+  // Otherwise a single-tile "grid" (just the host) was rendering as a
+  // half-screen split with the other half black for every plain viewer.
+  const hasCoHosts = allCoHostStreams.length > 0 || viewerGridTiles.length > 1;
+  // True on-screen headcount, normalized across roles: host/co-host arrays
+  // exclude self (add 1 back for the self tile rendered separately below);
+  // the viewer array already includes every tile (host + co-hosts), so it's
+  // used as-is. Drives the grid layout so viewers see the SAME 2/3/4+ split
+  // shape as the broadcasters do.
+  const liveGridTileCount = isHost || isCoHost ? allCoHostStreams.length + 1 : viewerGridTiles.length;
 
   // ── §8.2 fix: role/session values the socket handlers need, via refs so
   // the effect can keep its [streamId, navigate] deps without closing over
@@ -1146,7 +1157,11 @@ function LiveRoomPage() {
                 </p>
               )}
               <div className="mt-2 flex items-center gap-2">
-                <Button variant="outline" className="border-white/30 text-white" asChild>
+                <Button
+                  variant="outline"
+                  className="border-white/30 bg-white text-black hover:bg-white/90"
+                  asChild
+                >
                   <Link to="/live">Browse other streams</Link>
                 </Button>
                 {reachedCap && isHost && (
@@ -1180,9 +1195,13 @@ function LiveRoomPage() {
                 <div
                   className={cn(
                     "grid h-full w-full gap-1.5 bg-black p-1.5",
-                    allCoHostStreams.length === 1
+                    // Host/co-host arrays exclude self (so + 1 below); the
+                    // viewer array already includes the host tile itself —
+                    // this normalizes both to the TRUE on-screen headcount
+                    // so viewers get the same 2/3/4+ layouts as broadcasters.
+                    liveGridTileCount === 2
                       ? "grid-cols-1 grid-rows-2 lg:grid-cols-2 lg:grid-rows-1"
-                      : allCoHostStreams.length === 2
+                      : liveGridTileCount === 3
                         ? "grid-cols-2 grid-rows-2 [&>*:first-child]:col-span-2"
                         : "auto-rows-fr grid-cols-2",
                   )}
