@@ -40,7 +40,9 @@ export type Permission =
   | "settings.momo.edit"
   | "danger.walletFreeze"
   | "danger.liveEnd"
-  | "danger.featureDisable";
+  | "danger.featureDisable"
+  | "achievements.view"
+  | "achievements.edit";
 
 const MODERATOR_PERMISSIONS: Set<Permission> = new Set([
   "moderation.queue.view",
@@ -72,6 +74,7 @@ const ADMIN_PERMISSIONS: Set<Permission> = new Set([
   "analytics.view",
   "analytics.revenue",
   "rewards.view",
+  "achievements.view",
 ]);
 
 const SUPERADMIN_PERMISSIONS: Set<Permission> = new Set([
@@ -89,6 +92,8 @@ const SUPERADMIN_PERMISSIONS: Set<Permission> = new Set([
   "danger.walletFreeze",
   "danger.liveEnd",
   "danger.featureDisable",
+  "achievements.view",
+  "achievements.edit",
 ]);
 
 export const ROLE_PERMISSIONS: Record<Exclude<UserRole, "user">, Set<Permission>> = {

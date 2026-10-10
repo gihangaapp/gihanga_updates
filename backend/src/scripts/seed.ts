@@ -5,6 +5,8 @@ import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import { connectDB } from "../config/db";
 import { User, Wallet, Setting, ModerationRule } from "../models";
+import { AchievementDefinition } from "../models/Achievement";
+import { DEFAULT_ACHIEVEMENTS } from "../services/achievementService";
 
 async function seed() {
   await connectDB();
@@ -144,6 +146,24 @@ async function seed() {
     await ModerationRule.create(r);
   }
   console.log(`  ✓ Created ${defaultRules.length} moderation rules`);
+
+  // 4. Seed Default Achievement Definitions (idempotent upsert)
+  console.log("[Seed] Seeding achievement definitions...");
+  for (const def of DEFAULT_ACHIEVEMENTS) {
+    await AchievementDefinition.findOneAndUpdate(
+      { achievementId: def.achievementId },
+      {
+        $set: {
+          name: def.name, category: def.category, metric: def.metric,
+          description: def.description, threshold: def.threshold,
+          icon: def.icon, color: def.color, enabled: true,
+        },
+        $setOnInsert: { version: 1 },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+  }
+  console.log(`  ✓ Seeded ${DEFAULT_ACHIEVEMENTS.length} achievement definitions`);
 
   console.log("\n=======================================================");
   console.log("SEEDING COMPLETE. Working credentials:");

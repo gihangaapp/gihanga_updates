@@ -6,6 +6,7 @@ import { optionalAuth } from "../../../middleware/optionalAuth";
 import { notify } from "../../../lib/notify";
 import { getIO } from "../../../lib/socket";
 import { awardPoints } from "../../../lib/rewards";
+import { invalidateUserMetrics, evaluateUser } from "../../../services/achievementService";
 
 const router = Router();
 const PUBLIC_FIELDS = "name username avatarHue avatarUrl isCreator verified bio followersCount followingCount postsCount isLive";
@@ -53,6 +54,12 @@ router.post("/:username", authenticateConsumer, async (req: AuthenticatedRequest
       console.error("[Rewards] Follow bonus failed:", err),
     );
 
+    // Re-evaluate the target's follower-based achievements (idempotent,
+    // non-blocking). The response never waits on this.
+    invalidateUserMetrics(String(target._id))
+      .then(() => evaluateUser(String(target._id)))
+      .catch((err) => console.error("[Achievements] follow re-eval failed:", err));
+
     return res.json({ following: true, followersCount: updatedTarget?.followersCount ?? 0 });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to follow user", details: error.message });
@@ -76,6 +83,12 @@ router.delete("/:username", authenticateConsumer, async (req: AuthenticatedReque
     ]);
 
     getIO()?.emit("user:followers-changed", { username: target.username, followersCount: updatedTarget?.followersCount ?? 0 });
+
+    // A follower badge may need revoking if the count dropped below a
+    // threshold. Re-evaluate idempotently, non-blocking.
+    invalidateUserMetrics(String(target._id))
+      .then(() => evaluateUser(String(target._id)))
+      .catch((err) => console.error("[Achievements] unfollow re-eval failed:", err));
 
     return res.json({ following: false, followersCount: updatedTarget?.followersCount ?? 0 });
   } catch (error: any) {

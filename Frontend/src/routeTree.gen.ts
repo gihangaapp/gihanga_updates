@@ -37,6 +37,7 @@ import { Route as SystemDashboardRouteImport } from './routes/system.dashboard'
 import { Route as TagTagRouteImport } from './routes/tag.$tag'
 import { Route as SystemDashboardIndexRouteImport } from './routes/system.dashboard.index'
 import { Route as SystemDashboardAccountsRouteImport } from './routes/system.dashboard.accounts'
+import { Route as SystemDashboardAchievementsRouteImport } from './routes/system.dashboard.achievements'
 import { Route as SystemDashboardActivityRouteImport } from './routes/system.dashboard.activity'
 import { Route as SystemDashboardAdSettingsRouteImport } from './routes/system.dashboard.ad-settings'
 import { Route as SystemDashboardAuditRouteImport } from './routes/system.dashboard.audit'
@@ -189,6 +190,12 @@ const SystemDashboardAccountsRoute = SystemDashboardAccountsRouteImport.update({
   path: '/accounts',
   getParentRoute: () => SystemDashboardRoute,
 } as any)
+const SystemDashboardAchievementsRoute =
+  SystemDashboardAchievementsRouteImport.update({
+    id: '/achievements',
+    path: '/achievements',
+    getParentRoute: () => SystemDashboardRoute,
+  } as any)
 const SystemDashboardActivityRoute = SystemDashboardActivityRouteImport.update({
   id: '/activity',
   path: '/activity',
@@ -276,6 +283,7 @@ export interface FileRoutesByFullPath {
   '/tag/$tag': typeof TagTagRoute
   '/system/': typeof SystemIndexRoute
   '/system/dashboard/accounts': typeof SystemDashboardAccountsRoute
+  '/system/dashboard/achievements': typeof SystemDashboardAchievementsRoute
   '/system/dashboard/activity': typeof SystemDashboardActivityRoute
   '/system/dashboard/ad-settings': typeof SystemDashboardAdSettingsRoute
   '/system/dashboard/audit': typeof SystemDashboardAuditRoute
@@ -316,6 +324,7 @@ export interface FileRoutesByTo {
   '/tag/$tag': typeof TagTagRoute
   '/system': typeof SystemIndexRoute
   '/system/dashboard/accounts': typeof SystemDashboardAccountsRoute
+  '/system/dashboard/achievements': typeof SystemDashboardAchievementsRoute
   '/system/dashboard/activity': typeof SystemDashboardActivityRoute
   '/system/dashboard/ad-settings': typeof SystemDashboardAdSettingsRoute
   '/system/dashboard/audit': typeof SystemDashboardAuditRoute
@@ -358,6 +367,7 @@ export interface FileRoutesById {
   '/tag/$tag': typeof TagTagRoute
   '/system/': typeof SystemIndexRoute
   '/system/dashboard/accounts': typeof SystemDashboardAccountsRoute
+  '/system/dashboard/achievements': typeof SystemDashboardAchievementsRoute
   '/system/dashboard/activity': typeof SystemDashboardActivityRoute
   '/system/dashboard/ad-settings': typeof SystemDashboardAdSettingsRoute
   '/system/dashboard/audit': typeof SystemDashboardAuditRoute
@@ -401,6 +411,7 @@ export interface FileRouteTypes {
     | '/tag/$tag'
     | '/system/'
     | '/system/dashboard/accounts'
+    | '/system/dashboard/achievements'
     | '/system/dashboard/activity'
     | '/system/dashboard/ad-settings'
     | '/system/dashboard/audit'
@@ -441,6 +452,7 @@ export interface FileRouteTypes {
     | '/tag/$tag'
     | '/system'
     | '/system/dashboard/accounts'
+    | '/system/dashboard/achievements'
     | '/system/dashboard/activity'
     | '/system/dashboard/ad-settings'
     | '/system/dashboard/audit'
@@ -482,6 +494,7 @@ export interface FileRouteTypes {
     | '/tag/$tag'
     | '/system/'
     | '/system/dashboard/accounts'
+    | '/system/dashboard/achievements'
     | '/system/dashboard/activity'
     | '/system/dashboard/ad-settings'
     | '/system/dashboard/audit'
@@ -722,6 +735,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SystemDashboardAccountsRouteImport
       parentRoute: typeof SystemDashboardRoute
     }
+    '/system/dashboard/achievements': {
+      id: '/system/dashboard/achievements'
+      path: '/achievements'
+      fullPath: '/system/dashboard/achievements'
+      preLoaderRoute: typeof SystemDashboardAchievementsRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
     '/system/dashboard/activity': {
       id: '/system/dashboard/activity'
       path: '/activity'
@@ -814,6 +834,7 @@ const LiveRouteWithChildren = LiveRoute._addFileChildren(LiveRouteChildren)
 
 interface SystemDashboardRouteChildren {
   SystemDashboardAccountsRoute: typeof SystemDashboardAccountsRoute
+  SystemDashboardAchievementsRoute: typeof SystemDashboardAchievementsRoute
   SystemDashboardActivityRoute: typeof SystemDashboardActivityRoute
   SystemDashboardAdSettingsRoute: typeof SystemDashboardAdSettingsRoute
   SystemDashboardAuditRoute: typeof SystemDashboardAuditRoute
@@ -830,6 +851,7 @@ interface SystemDashboardRouteChildren {
 
 const SystemDashboardRouteChildren: SystemDashboardRouteChildren = {
   SystemDashboardAccountsRoute: SystemDashboardAccountsRoute,
+  SystemDashboardAchievementsRoute: SystemDashboardAchievementsRoute,
   SystemDashboardActivityRoute: SystemDashboardActivityRoute,
   SystemDashboardAdSettingsRoute: SystemDashboardAdSettingsRoute,
   SystemDashboardAuditRoute: SystemDashboardAuditRoute,
@@ -878,13 +900,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

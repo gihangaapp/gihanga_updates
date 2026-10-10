@@ -23,3 +23,4 @@ export * from "./ContentView";
 export * from "./NegativeFeedback";
 export * from "./RecommendationConfig";
 export * from "./Media";
+export * from "./Achievement";

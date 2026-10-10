@@ -98,6 +98,12 @@ const navSections: NavSection[] = [
         icon: Award,
         permissions: ["rewards.view"],
       },
+      {
+        to: "/system/dashboard/achievements",
+        label: "Achievement Badges",
+        icon: Award,
+        permissions: ["achievements.view"],
+      },
     ],
   },
   {

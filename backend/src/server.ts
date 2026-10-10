@@ -9,6 +9,7 @@ import { verifyConsumerAccessToken, verifyStaffAccessToken } from "./lib/jwt";
 import { setIO } from "./lib/socket";
 import { attachLiveHandlers } from "./lib/liveSignaling";
 import { startLiveSweeper } from "./lib/liveSweeper";
+import { startAchievementSweeper } from "./lib/achievementSweeper";
 import { verifyMailer } from "./lib/mailer";
 
 const PORT = process.env.PORT || 4000;
@@ -98,6 +99,7 @@ async function startServer() {
     // sweep + remaining-time warnings. Single-instance safe via a Redis lock
     // (or the in-memory shim's lock on dev); every action is idempotent anyway.
     startLiveSweeper();
+    startAchievementSweeper();
   });
 }
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   AtSign,
+  Award,
   Bell,
   DollarSign,
   Gift,
@@ -55,6 +56,7 @@ const iconFor: Record<AppNotification["kind"], { icon: typeof Heart; tone: strin
   system: { icon: Sparkles, tone: "bg-primary-soft text-primary" },
   payment: { icon: DollarSign, tone: "bg-success/12 text-success" },
   reward: { icon: Gift, tone: "bg-accent/15 text-accent" },
+  achievement: { icon: Award, tone: "primary" },
 };
 
 const tabs = [

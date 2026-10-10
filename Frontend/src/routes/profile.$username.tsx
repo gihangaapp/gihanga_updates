@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   CalendarDays,
@@ -32,6 +32,8 @@ import { useUserPosts, useLikedPosts, useDeletePost } from "@/hooks/use-posts";
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { formatCount } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { AchievementBadgeRow } from "@/components/achievements/AchievementBadgeRow";
+import { useUserBadges, useMyAchievementProgress } from "@/hooks/use-achievements";
 
 export const Route = createFileRoute("/profile/$username")({
   head: () => ({
@@ -171,8 +173,46 @@ function ProfilePage() {
 
   const followUser = useFollowUser();
   const deletePost = useDeletePost();
-
   const isMe = authUser?.username === username;
+
+  // Achievement badges — public badge states for this profile, plus the
+  // detailed progress (current/remaining/%) when the viewer is the owner.
+  const badgesQuery = useUserBadges(username);
+  const myProgressQuery = useMyAchievementProgress(isMe);
+
+  // Unlock celebration: when the profile owner's earned set grows (a badge
+  // transitions from locked → earned), fire a celebratory toast ONCE. The
+  // ref seeds on first load without celebrating (so already-earned badges
+  // don't re-fire on every page visit). Respects reduced-motion preferences.
+  const celebratedRef = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (!isMe) return;
+    const earned = new Set(
+      (badgesQuery.data?.badges ?? []).filter((b) => b.earned).map((b) => b.achievementId),
+    );
+    if (celebratedRef.current === null) {
+      // First load — seed without celebrating.
+      celebratedRef.current = earned;
+      return;
+    }
+    for (const id of earned) {
+      if (!celebratedRef.current.has(id)) {
+        const badge = badgesQuery.data?.badges.find((b) => b.achievementId === id);
+        if (badge) {
+          const prefersReduced =
+            typeof window !== "undefined" &&
+            window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+          toast.success(`Achievement Unlocked! ${badge.name}`, {
+            description: `You earned the ${badge.name} on Gihanga Updates.`,
+            duration: prefersReduced ? 4000 : 6000,
+          });
+        }
+      }
+    }
+    celebratedRef.current = earned;
+  }, [badgesQuery.data, isMe]);
+
+
   const postsQuery = useUserPosts(username);
   const likesQuery = useLikedPosts(username, isMe && tab === "likes");
 
@@ -344,6 +384,15 @@ function ProfilePage() {
                 ),
               )}
             </ul>
+
+            {/* Achievement badges — Stars (followers) | Diamonds (views).
+                All configured badges render (locked = outlined, unlocked = filled).
+                Tapping a badge opens a detail popover with progress. */}
+            <AchievementBadgeRow
+              badges={badgesQuery.data?.badges ?? []}
+              progress={myProgressQuery.data?.progress ?? undefined}
+              isLoading={badgesQuery.isLoading}
+            />
           </div>
         </header>
 

@@ -35,7 +35,9 @@ export type Permission =
   | "settings.featureFlags"
   | "settings.categories"
   | "settings.momo.view"
-  | "settings.momo.edit";
+  | "settings.momo.edit"
+  | "achievements.view"
+  | "achievements.edit";
 
 const MODERATOR_PERMISSIONS: Set<Permission> = new Set([
   "moderation.queue.view",
@@ -67,6 +69,7 @@ const ADMIN_PERMISSIONS: Set<Permission> = new Set([
   "analytics.view",
   "analytics.revenue",
   "rewards.view",
+  "achievements.view",
 ]);
 
 const SUPERADMIN_PERMISSIONS: Set<Permission> = new Set([
@@ -81,6 +84,8 @@ const SUPERADMIN_PERMISSIONS: Set<Permission> = new Set([
   "settings.categories",
   "settings.momo.view",
   "settings.momo.edit",
+  "achievements.view",
+  "achievements.edit",
 ]);
 
 const DEFAULT_ROLE_PERMISSIONS: Record<string, Set<Permission>> = {

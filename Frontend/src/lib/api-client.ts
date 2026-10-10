@@ -389,7 +389,7 @@ export interface AppNotification {
   _id: string;
   recipient: string;
   actor?: PostAuthor;
-  kind: "like" | "comment" | "follow" | "mention" | "live" | "system" | "payment" | "reward";
+  kind: "like" | "comment" | "follow" | "mention" | "live" | "system" | "payment" | "reward" | "achievement";
   text: string;
   relatedPost?: {
     _id: string;
@@ -419,4 +419,68 @@ export interface PublicUser {
   isFollowing: boolean;
   isFollowedBy?: boolean;
   isSelf?: boolean;
+}
+
+
+// ── Achievement Badge System ─────────────────────────────────────────────────
+
+export type AchievementCategory = "stars" | "diamonds";
+export type AchievementMetric = "followers" | "views";
+export type AchievementIcon = "star" | "diamond";
+export type AchievementColor = "red" | "gold" | "blue" | "green";
+
+/** A single badge's public state on a profile — locked or unlocked. */
+export interface BadgeState {
+  achievementId: string;
+  name: string;
+  category: AchievementCategory;
+  metric: AchievementMetric;
+  description: string;
+  threshold: number;
+  icon: AchievementIcon;
+  color: AchievementColor;
+  enabled: boolean;
+  earned: boolean;
+  /** ISO date string when the badge was awarded, if currently earned. */
+  awardedAt: string | null;
+}
+
+/** A badge with detailed progress — current value, remaining, clamped %. */
+export interface BadgeProgress extends BadgeState {
+  current: number;
+  remaining: number;
+  progressPct: number;
+}
+
+export interface AchievementDefinitionsResponse {
+  definitions: Array<{
+    achievementId: string;
+    name: string;
+    category: AchievementCategory;
+    metric: AchievementMetric;
+    description: string;
+    threshold: number;
+    icon: AchievementIcon;
+    color: AchievementColor;
+  }>;
+}
+
+export interface UserBadgesResponse {
+  badges: BadgeState[];
+}
+
+export interface MyProgressResponse {
+  progress: BadgeProgress[];
+}
+
+export interface ReevaluateResponse {
+  newlyAwarded: Array<{
+    achievementId: string;
+    name: string;
+    category: AchievementCategory;
+    color: AchievementColor;
+    icon: AchievementIcon;
+    threshold: number;
+  }>;
+  revoked: string[];
 }

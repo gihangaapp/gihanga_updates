@@ -11,6 +11,9 @@ import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/
 import { optionalAuth } from "../../../middleware/optionalAuth";
 import { getIO } from "../../../lib/socket";
 import { awardPoints } from "../../../lib/rewards";
+import { ContentView } from "../../../models/ContentView";
+import { rateLimitHits, redis } from "../../../lib/redis";
+import { invalidateUserMetrics, evaluateUser } from "../../../services/achievementService";
 
 const router = Router();
 
@@ -313,12 +316,84 @@ router.post("/:id/share", optionalAuth, async (req: AuthenticatedRequest, res: R
   }
 });
 
-// POST /api/v1/posts/:id/view — bump the view counter (best-effort, no auth required)
+// POST /api/v1/posts/:id/view — hardened view tracking.
+//
+// Requirements satisfied (per the Achievement Badge spec, section 8):
+//   - Only counts a view for a PUBLISHED, non-removed post (drafts/scheduled/removed excluded).
+//   - Authenticated users: deduplicated via the existing ContentView collection
+//     (unique (user, content) index). A re-view bumps seenCount + lastSeenAt
+//     but does NOT increment Post.viewsCount — so refreshing the page never
+//     inflates the counter.
+//   - Anonymous visitors: deduplicated via a short-TTL Redis fingerprint
+//     (SHA1 of IP + UA), capped at one view per content per fingerprint per
+//     10-minute window, with a per-IP rate limit so a single client can't
+//     hammer the counter.
+//   - Never trusts a client-supplied view total — the increment is always $inc: 1.
+//   - After a genuine new view, asynchronously re-evaluates the author's
+//     achievement eligibility (idempotent, non-blocking) so view-based badges
+//     unlock promptly without slowing the response.
 router.post("/:id/view", optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    await Post.findByIdAndUpdate(req.params.id, { $inc: { viewsCount: 1 } });
+    const post = await Post.findOne({ _id: req.params.id, status: "published" }).select("_id author viewsCount").lean();
+    if (!post) return res.status(404).json({ error: "Post not found" });
+
+    let shouldIncrement = false;
+
+    if (req.user) {
+      // Authenticated viewer — dedup via ContentView (unique user+content index).
+      // upsert with $setOnInsert so only the FIRST view creates a row; re-views
+      // just refresh lastSeenAt + seenCount.
+      const existing = await ContentView.findOne({ user: req.user.userId, content: post._id }).lean();
+      if (!existing) {
+        await ContentView.create({
+          user: req.user.userId,
+          content: post._id,
+          kind: "post",
+          seenCount: 1,
+          firstSeenAt: new Date(),
+          lastSeenAt: new Date(),
+        });
+        shouldIncrement = true;
+      } else {
+        await ContentView.updateOne(
+          { _id: existing._id },
+          { $inc: { seenCount: 1 }, $set: { lastSeenAt: new Date() } },
+        );
+        // Re-view by the same authenticated user does NOT count again.
+      }
+    } else {
+      // Anonymous viewer — dedup via a 10-minute Redis fingerprint window.
+      const ip = (req.headers["x-forwarded-for"]?.toString().split(",")[0].trim() || req.socket.remoteAddress || "anon");
+      const ua = req.headers["user-agent"] || "";
+      const crypto = await import("crypto");
+      const fingerprint = crypto.createHash("sha1").update(`${ip}|${ua}|${post._id}`).digest("hex");
+
+      // Rate limit: max 30 anonymous views per IP per 5 minutes.
+      const allowed = await rateLimitHits("post-view", ip, 30, 300);
+      if (!allowed) return res.status(429).json({ error: "Too many view requests" });
+
+      const claimed = await (redis as any).setnx(`view:fp:${fingerprint}`, "1");
+      if (claimed === 1) {
+        await (redis as any).expire(`view:fp:${fingerprint}`, 600); // 10-min dedup window
+        shouldIncrement = true;
+      }
+    }
+
+    if (shouldIncrement) {
+      await Post.updateOne({ _id: post._id }, { $inc: { viewsCount: 1 } });
+
+      // Async, non-blocking achievement re-evaluation for the author. The
+      // response never waits on this; failures are logged, never surfaced.
+      const authorId = String(post.author);
+      invalidateUserMetrics(authorId)
+        .then(() => evaluateUser(authorId))
+        .catch((err) => console.error("[Achievements] post-view re-eval failed:", err));
+    }
+
     return res.status(204).end();
-  } catch {
+  } catch (err) {
+    // View tracking is best-effort — never break the client over a counting error.
+    console.error("[Posts] view tracking failed:", err);
     return res.status(204).end();
   }
 });

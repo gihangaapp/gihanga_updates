@@ -1,7 +1,7 @@
 {
   "name": "gihanga-backend",
   "version": "1.0.0",
-  "description": "Gihanga Updates — Express/MongoDB/Socket.IO backend API",
+  "description": "Gihanga Updates \u2014 Express/MongoDB/Socket.IO backend API",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
@@ -12,8 +12,10 @@
     "lint": "eslint src test",
     "test:payment": "tsx --test test/payment-regression.test.ts",
     "test:live": "tsx --test test/live-regression.test.ts test/idempotency.test.ts",
-    "test": "tsx --test test/payment-regression.test.ts test/live-regression.test.ts test/idempotency.test.ts",
-    "migrate:post-media": "tsx src/scripts/migrate-post-media-meta.ts"
+    "test": "tsx --test test/payment-regression.test.ts test/live-regression.test.ts test/idempotency.test.ts test/achievements.test.ts",
+    "migrate:post-media": "tsx src/scripts/migrate-post-media-meta.ts",
+    "seed:achievements": "tsx src/scripts/seed-achievements.ts",
+    "test:achievements": "tsx --test test/achievements.test.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

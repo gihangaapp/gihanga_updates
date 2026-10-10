@@ -37,6 +37,8 @@ import staffNotificationsRoutes from "./routes/v1/system/notifications/staffNoti
 import studioRoutes from "./routes/v1/studio/studio";
 import recommendationRoutes from "./routes/v1/recommendations/recommendations";
 import mediaRoutes from "./routes/v1/media/media";
+import achievementsRoutes from "./routes/v1/achievements/achievements";
+import staffAchievementsRoutes from "./routes/v1/system/achievements/staffAchievements";
 
 export function createApp(): Express {
   const app = express();
@@ -142,6 +144,8 @@ export function createApp(): Express {
   app.use("/api/v1/studio", studioRoutes);
   app.use("/api/v1/recommendations", recommendationRoutes);
   app.use("/api/v1/media", mediaRoutes);
+  app.use("/api/v1/achievements", achievementsRoutes);
+  app.use("/api/v1/system/achievements", staffAchievementsRoutes);
 
   // 404 Handler
   app.use((_req: Request, res: Response) => {
