@@ -26,13 +26,13 @@ export function resolveBadgeColor(color: BadgeColor): {
 } {
   switch (color) {
     case "red":
-      return { value: "var(--color-danger)", label: "red" };
+      return { value: "var(--danger)", label: "red" };
     case "gold":
-      return { value: "var(--color-warning)", label: "gold" };
+      return { value: "var(--warning)", label: "gold" };
     case "blue":
-      return { value: "var(--color-info)", label: "blue" };
+      return { value: "var(--info)", label: "blue" };
     case "green":
-      return { value: "var(--color-success)", label: "green" };
+      return { value: "var(--success)", label: "green" };
   }
 }
 

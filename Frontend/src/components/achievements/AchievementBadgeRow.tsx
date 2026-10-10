@@ -16,7 +16,7 @@
  */
 import { useState } from "react";
 import { BadgeState, BadgeProgress } from "@/lib/api-client";
-import { BadgeIconSvg, BadgeColor } from "./badge-icons";
+import { BadgeIconSvg, resolveBadgeColor } from "./badge-icons";
 import { AchievementBadgeDetail } from "./AchievementBadgeDetail";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -39,16 +39,7 @@ function BadgeButton({
   progress?: BadgeProgress[] | undefined;
 }) {
   const [open, setOpen] = useState(false);
-  const { value: colorValue } = (() => {
-    // resolveBadgeColor is in badge-icons but we import statically to avoid a cycle
-    const map: Record<BadgeColor, string> = {
-      red: "var(--color-danger)",
-      gold: "var(--color-warning)",
-      blue: "var(--color-info)",
-      green: "var(--color-success)",
-    };
-    return { value: map[badge.color] };
-  })();
+  const { value: colorValue } = resolveBadgeColor(badge.color);
 
   const detailed = progress?.find((p) => p.achievementId === badge.achievementId);
   const thresholdLabel =
@@ -75,7 +66,13 @@ function BadgeButton({
               "grid place-items-center rounded-full p-0.5 transition-all",
               badge.earned && "drop-shadow-sm",
             )}
-            style={badge.earned ? { filter: `drop-shadow(0 2px 6px ${colorValue}40)` } : undefined}
+            style={
+              badge.earned
+                ? {
+                    filter: `drop-shadow(0 2px 6px color-mix(in srgb, ${colorValue} 25%, transparent))`,
+                  }
+                : undefined
+            }
           >
             <BadgeIconSvg icon={badge.icon} color={badge.color} filled={badge.earned} size={38} />
           </span>

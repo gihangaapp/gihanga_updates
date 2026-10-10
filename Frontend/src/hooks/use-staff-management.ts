@@ -27,6 +27,22 @@ export function usePromoteStaff() {
   });
 }
 
+export function useCreateStaff() {
+  return useMutation({
+    mutationFn: (input: {
+      name: string;
+      username: string;
+      email: string;
+      password: string;
+      role: "moderator" | "admin" | "superadmin";
+    }) =>
+      api.post<{
+        user: import("@/lib/api-client").UserProfile;
+        tokens: { accessToken: string; refreshToken: string };
+      }>("/system/staff/create", input, true),
+  });
+}
+
 export function useDemoteStaff() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -1,10 +1,16 @@
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ShieldCheck, ShieldMinus, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ROLE_LABEL } from "@/lib/permissions";
-import { useStaffList, usePromoteStaff, useDemoteStaff } from "@/hooks/use-staff-management";
+import { useAuth } from "@/lib/auth-context";
+import {
+  useStaffList,
+  usePromoteStaff,
+  useCreateStaff,
+  useDemoteStaff,
+} from "@/hooks/use-staff-management";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/system/dashboard/staff")({
@@ -18,11 +24,38 @@ const roleTone: Record<string, string> = {
 };
 
 function StaffManagementPage() {
+  const navigate = useNavigate();
+  const { staffUser, signInStaff } = useAuth();
   const { data, isLoading } = useStaffList();
   const promote = usePromoteStaff();
+  const createStaff = useCreateStaff();
   const demote = useDemoteStaff();
   const [identifier, setIdentifier] = useState("");
   const [role, setRole] = useState<"moderator" | "admin">("moderator");
+  const [newStaff, setNewStaff] = useState({
+    name: "",
+    username: "",
+    email: "",
+    password: "",
+    role: "moderator" as "moderator" | "admin" | "superadmin",
+  });
+
+  async function submitCreateStaff(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    try {
+      const result = await createStaff.mutateAsync({
+        ...newStaff,
+        name: newStaff.name.trim(),
+        username: newStaff.username.trim(),
+        email: newStaff.email.trim(),
+      });
+      signInStaff(result.tokens, result.user);
+      toast.success(`Staff account created. Signed in as ${ROLE_LABEL[result.user.role]}.`);
+      navigate({ to: "/system/dashboard" });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't create staff account");
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -73,6 +106,77 @@ function StaffManagementPage() {
           </Button>
         </div>
       </div>
+
+      {staffUser?.role === "superadmin" && (
+        <form onSubmit={submitCreateStaff} className="rounded-2xl border border-border bg-card p-5">
+          <h2 className="mb-1 text-sm font-bold text-foreground">Create a staff account</h2>
+          <p className="mb-4 text-xs text-muted-foreground">
+            Create an account and sign in to its dashboard. Only superadmins can create staff
+            accounts.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <input
+              required
+              minLength={2}
+              maxLength={64}
+              value={newStaff.name}
+              onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
+              placeholder="Full name"
+              autoComplete="name"
+              className="h-10 rounded-xl border border-border bg-card px-3.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            />
+            <input
+              required
+              minLength={3}
+              maxLength={20}
+              pattern="[a-zA-Z0-9_]{3,20}"
+              value={newStaff.username}
+              onChange={(e) => setNewStaff({ ...newStaff, username: e.target.value })}
+              placeholder="Username"
+              autoComplete="username"
+              className="h-10 rounded-xl border border-border bg-card px-3.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            />
+            <input
+              required
+              type="email"
+              value={newStaff.email}
+              onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })}
+              placeholder="Email address"
+              autoComplete="email"
+              className="h-10 rounded-xl border border-border bg-card px-3.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            />
+            <input
+              required
+              type="password"
+              minLength={8}
+              maxLength={72}
+              value={newStaff.password}
+              onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })}
+              placeholder="Password (8+ characters)"
+              autoComplete="new-password"
+              className="h-10 rounded-xl border border-border bg-card px-3.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+            />
+            <select
+              value={newStaff.role}
+              onChange={(e) =>
+                setNewStaff({
+                  ...newStaff,
+                  role: e.target.value as "moderator" | "admin" | "superadmin",
+                })
+              }
+              className="h-10 rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none"
+            >
+              <option value="moderator">Moderator</option>
+              <option value="admin">Admin</option>
+              <option value="superadmin">Super Admin</option>
+            </select>
+            <Button type="submit" variant="brand" disabled={createStaff.isPending}>
+              <UserPlus className="size-4" />
+              {createStaff.isPending ? "Creating account…" : "Create and open dashboard"}
+            </Button>
+          </div>
+        </form>
+      )}
 
       <div className="overflow-hidden rounded-2xl border border-border">
         <table className="w-full text-sm">
