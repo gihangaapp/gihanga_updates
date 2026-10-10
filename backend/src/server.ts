@@ -11,11 +11,13 @@ import { attachLiveHandlers } from "./lib/liveSignaling";
 import { startLiveSweeper } from "./lib/liveSweeper";
 import { startAchievementSweeper } from "./lib/achievementSweeper";
 import { verifyMailer } from "./lib/mailer";
+import { ensureDefaultAchievementDefinitions } from "./services/achievementService";
 
 const PORT = process.env.PORT || 4000;
 
 async function startServer() {
   await connectDB();
+  await ensureDefaultAchievementDefinitions();
 
   // Mail sending is temporarily disabled across the app (see notes in
   // consumerAuth.ts) since free-tier hosting is currently failing to send

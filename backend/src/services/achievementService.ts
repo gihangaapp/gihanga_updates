@@ -132,6 +132,29 @@ export const DEFAULT_ACHIEVEMENTS: Array<{
   },
 ];
 
+/** Inserts any missing default definitions without overwriting admin settings. */
+export async function ensureDefaultAchievementDefinitions(): Promise<void> {
+  for (const def of DEFAULT_ACHIEVEMENTS) {
+    try {
+      await AchievementDefinition.updateOne(
+        { achievementId: def.achievementId },
+        { $setOnInsert: { ...def, enabled: true, version: 1 } },
+        { upsert: true },
+      );
+    } catch (error) {
+      if (
+        typeof error !== "object" ||
+        error === null ||
+        !("code" in error) ||
+        error.code !== 11000
+      ) {
+        throw error;
+      }
+    }
+  }
+  await invalidateDefinitionsCache();
+}
+
 // ── Public response shapes ──────────────────────────────────────────────────
 
 export interface BadgeState {

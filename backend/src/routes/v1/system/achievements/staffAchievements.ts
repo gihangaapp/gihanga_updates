@@ -116,8 +116,12 @@ router.post(
         // Recently-active creators (posted in the last 7 days).
         const since = new Date(Date.now() - 7 * 24 * 3600 * 1000);
         const { Post } = await import("../../../../models/Post");
-        const recentAuthors = await Post.distinct("author", { createdAt: { $gte: since }, status: "published" }).limit(80);
-        userIds = [...new Set([...nearThreshold, ...recentAuthors.map(String)])].slice(0, 200);
+        const recentAuthors = await Post.aggregate([
+          { $match: { createdAt: { $gte: since }, status: "published" } },
+          { $group: { _id: "$author" } },
+          { $limit: 80 },
+        ]);
+        userIds = [...new Set([...nearThreshold, ...recentAuthors.map((author) => String(author._id))])].slice(0, 200);
       }
 
       const summary = await reconcileBatch(userIds);

@@ -72,8 +72,12 @@ export async function buildCandidateBatch(): Promise<string[]> {
 
   // 2) Creators who posted in the last 24h (view counts moving).
   const since = new Date(Date.now() - 24 * 3600 * 1000);
-  const recentAuthorIds = await Post.distinct("author", { createdAt: { $gte: since }, status: "published" }).limit(80);
-  for (const id of recentAuthorIds) candidates.add(String(id));
+  const recentAuthors = await Post.aggregate([
+    { $match: { createdAt: { $gte: since }, status: "published" } },
+    { $group: { _id: "$author" } },
+    { $limit: 80 },
+  ]);
+  for (const author of recentAuthors) candidates.add(String(author._id));
 
   // 3) A rotating slice of all active creators, so nobody is starved.
   //    Offset by the current hour so the slice advances over time.
