@@ -487,11 +487,11 @@ function ReelCard({
       {moreOpen && (
         <div
           onClick={() => setMoreOpen(false)}
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 backdrop-blur-sm max-sm:p-0"
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm rounded-3xl border border-white/20 bg-slate-900 p-4 text-white shadow-2xl space-y-2"
+            className="w-full max-w-sm rounded-3xl border border-white/20 bg-slate-900 p-4 text-white shadow-2xl space-y-2 max-sm:max-w-none max-sm:rounded-b-none max-sm:pb-[max(1rem,env(safe-area-inset-bottom))]"
           >
             <button
               type="button"

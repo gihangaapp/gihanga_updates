@@ -1671,8 +1671,9 @@ function SecuritySection({
 
       {/* Change Password Modal */}
       {showPasswordModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs grid place-items-center p-4">
-          <div className="w-full max-w-md surface-card rounded-3xl p-6 border border-border shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs grid place-items-center p-4 max-sm:place-items-end max-sm:p-0">
+          <div className="w-full max-w-md surface-card rounded-3xl p-6 border border-border shadow-2xl space-y-4 max-sm:relative max-sm:max-w-none max-sm:rounded-b-none max-sm:max-h-[92dvh] max-sm:overflow-y-auto max-sm:pt-8 max-sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+            <span aria-hidden className="absolute left-1/2 top-2.5 h-1.5 w-11 -translate-x-1/2 rounded-full bg-muted-foreground/30 sm:hidden" />
             <div className="flex items-center justify-between">
               <h3 className="font-display text-base font-extrabold text-foreground">
                 Change Password
@@ -2998,8 +2999,9 @@ function AccountManagementSection() {
 
       {/* Deactivation Modal */}
       {showDeactivateModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs grid place-items-center p-4">
-          <div className="w-full max-w-md surface-card rounded-3xl p-6 border border-border shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs grid place-items-center p-4 max-sm:place-items-end max-sm:p-0">
+          <div className="w-full max-w-md surface-card rounded-3xl p-6 border border-border shadow-2xl space-y-4 max-sm:relative max-sm:max-w-none max-sm:rounded-b-none max-sm:max-h-[92dvh] max-sm:overflow-y-auto max-sm:pt-8 max-sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+            <span aria-hidden className="absolute left-1/2 top-2.5 h-1.5 w-11 -translate-x-1/2 rounded-full bg-muted-foreground/30 sm:hidden" />
             <h3 className="font-display text-base font-extrabold text-foreground">
               Deactivate Account?
             </h3>
@@ -3031,8 +3033,9 @@ function AccountManagementSection() {
 
       {/* Delete Account Modal */}
       {showDeleteModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs grid place-items-center p-4">
-          <div className="w-full max-w-md surface-card rounded-3xl p-6 border border-danger/40 shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs grid place-items-center p-4 max-sm:place-items-end max-sm:p-0">
+          <div className="w-full max-w-md surface-card rounded-3xl p-6 border border-danger/40 shadow-2xl space-y-4 max-sm:relative max-sm:max-w-none max-sm:rounded-b-none max-sm:max-h-[92dvh] max-sm:overflow-y-auto max-sm:pt-8 max-sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+            <span aria-hidden className="absolute left-1/2 top-2.5 h-1.5 w-11 -translate-x-1/2 rounded-full bg-muted-foreground/30 sm:hidden" />
             <div className="flex items-center gap-2 text-danger">
               <AlertTriangle className="size-5" />
               <h3 className="font-display text-base font-extrabold">Permanent Account Deletion</h3>

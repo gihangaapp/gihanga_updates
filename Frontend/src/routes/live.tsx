@@ -22,6 +22,8 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { MobileGoLive } from "@/components/live/MobileGoLive";
 import { useCameraPreview, useBrowserLiveRoom } from "@/lib/live-room";
 import { formatCount } from "@/lib/format";
 import { useLiveStreams, useStartLive, type LiveStreamData } from "@/hooks/use-live";
@@ -138,7 +140,7 @@ function LiveVideoPreview({
   );
 }
 
-function GoLiveDialog({
+export function GoLiveDialog({
   open,
   onOpenChange,
   asStaff,
@@ -148,6 +150,7 @@ function GoLiveDialog({
   asStaff: boolean;
 }) {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const startLive = useStartLive(asStaff);
   const [step, setStep] = useState<"details" | "preview">("details");
   const [title, setTitle] = useState("");
@@ -217,6 +220,11 @@ function GoLiveDialog({
     );
   }
 
+  // Phones get the minimal full-screen go-live experience; desktop keeps the dialog.
+  if (isMobile) {
+    return <MobileGoLive open={open} onClose={() => onOpenChange(false)} asStaff={asStaff} />;
+  }
+
   return (
     <Dialog
       open={open}
@@ -259,6 +267,12 @@ function GoLiveDialog({
               <Lock className="size-4" />
               Followers-only stream
             </button>
+            {asStaff && (
+              <p className="rounded-xl bg-primary-soft px-3.5 py-2.5 text-xs font-semibold text-primary">
+                Paid interactions are on for your stream: viewers spend Kingdom Points to like,
+                comment and react, and you earn from each. You can adjust prices while live.
+              </p>
+            )}
             <Button variant="brand" size="lg" onClick={goToPreview}>
               Continue
             </Button>

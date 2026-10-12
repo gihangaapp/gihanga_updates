@@ -471,7 +471,7 @@ export function StoryCreator({ onClose }: StoryCreatorProps) {
       )}
 
       {activeModal === "stickers" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md max-sm:items-end max-sm:p-0">
           <StoryStickerPicker
             onSelectSticker={(stk) => setStickers([...stickers, stk])}
             onClose={() => setActiveModal("none")}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
+  Eye,
   ChevronDown,
   ChevronUp,
   Coins,
@@ -45,7 +46,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth-context";
 import { formatCount } from "@/lib/format";
 import {
@@ -327,6 +334,8 @@ function LiveVideoTile({
     if (videoRef.current) {
       videoRef.current.srcObject = stream ?? null;
       videoRef.current.muted = muted ?? false;
+      videoRef.current.volume = 1;
+      if (stream) void videoRef.current.play().catch(() => {});
     }
   }, [stream, muted]);
 
@@ -423,6 +432,8 @@ function LiveRoomPage() {
   const [giftPickerOpen, setGiftPickerOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [addModOpen, setAddModOpen] = useState(false);
+  const [endConfirmOpen, setEndConfirmOpen] = useState(false);
+  const [joinSheetOpen, setJoinSheetOpen] = useState(false);
   const [heartBurst, setHeartBurst] = useState(0);
   const [soundOn, setSoundOn] = useState(false);
   const [replyingTo, setReplyingTo] = useState<LiveChatEntry | null>(null);
@@ -531,19 +542,32 @@ function LiveRoomPage() {
   // Co-host streams: host sees hostCoHostStreams, co-host sees coHostRoom.coHostStreams,
   // and (A2) plain viewers on the LiveKit transport see viewerRoom.viewerStreams —
   // the SAME grid layout renders for every role.
-  const allCoHostStreams: CoHostRemoteStream[] = isHost
+  const rawCoHostStreams: CoHostRemoteStream[] = isHost
     ? hostCoHostStreams
     : isCoHost
       ? coHostRoom.coHostStreams
       : VIEWER_GRID_AVAILABLE
         ? viewerRoom.viewerStreams
         : [];
+  // Split-screen only ever shows participants who are CURRENTLY live: the
+  // host plus accepted co-hosts. A leftover stream from a co-host who left
+  // (or dropped) must never keep the screen split with one person live.
+  const allCoHostStreams: CoHostRemoteStream[] = useMemo(() => {
+    const liveIds = new Set<string>([stream?.host?._id ?? "", ...coHostIds]);
+    const seen = new Set<string>();
+    return rawCoHostStreams.filter((cs) => {
+      if (!liveIds.has(cs.participantId) || seen.has(cs.participantId)) return false;
+      if (cs.participantId === activeIdentity?.id) return false;
+      seen.add(cs.participantId);
+      return true;
+    });
+  }, [rawCoHostStreams, stream?.host?._id, coHostIds, activeIdentity?.id]);
   // For plain viewers the grid INCLUDES the host tile (all tiles are remote).
   const viewerGridTiles: CoHostRemoteStream[] = useMemo(() => {
     if (isHost || isCoHost) return [];
     if (!VIEWER_GRID_AVAILABLE) return [];
-    return viewerRoom.viewerStreams;
-  }, [isHost, isCoHost, viewerRoom.viewerStreams]);
+    return allCoHostStreams;
+  }, [isHost, isCoHost, allCoHostStreams]);
   // Host/co-host tiles exclude self, so any entry means someone else joined.
   // The viewer grid INCLUDES the host tile itself, so it only counts as a
   // real split screen once there's the host PLUS at least one co-host (2+).
@@ -582,7 +606,8 @@ function LiveRoomPage() {
   // too now that they see the same grid.
   useEffect(() => {
     if (hasCoHosts && !chatAutoCollapsed) {
-      setChatCollapsed(true);
+      // Comments stay visible over the video on mobile (minimal overlay), so
+      // there's no auto-collapse when a co-host joins.
       setChatAutoCollapsed(true);
     } else if (!hasCoHosts && chatAutoCollapsed) {
       setChatAutoCollapsed(false);
@@ -1134,380 +1159,8 @@ function LiveRoomPage() {
   const following = followingSet?.has(stream.host.username) ?? false;
   const reachedCap = Boolean(ended && /5-hour|maximum duration/i.test(ended));
 
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-black lg:flex-row">
-      <button
-        type="button"
-        onClick={() => navigate({ to: "/live" })}
-        aria-label="Back to live streams"
-        className="press absolute top-3 left-3 z-20 grid size-9 place-items-center rounded-full bg-black/50 text-white backdrop-blur"
-      >
-        <ArrowLeft className="size-5" />
-      </button>
-
-      <div className="relative w-full flex-1 bg-black lg:flex-none lg:basis-0 lg:grow-[3] lg:mr-1.5">
-        <div className="relative size-full">
-          {isOver ? (
-            <div className="flex size-full flex-col items-center justify-center gap-2 text-white/70">
-              <VideoOff className="size-10" />
-              <p className="font-semibold">{ended || "This stream has ended"}</p>
-              {reachedCap && (
-                <p className="max-w-xs text-center text-sm text-white/60">
-                  This stream reached the 5-hour limit
-                </p>
-              )}
-              <div className="mt-2 flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  className="border-white/30 bg-white text-black hover:bg-white/90"
-                  asChild
-                >
-                  <Link to="/live">Browse other streams</Link>
-                </Button>
-                {reachedCap && isHost && (
-                  <Button variant="brand" asChild>
-                    <Link to="/live">Start a new stream</Link>
-                  </Button>
-                )}
-              </div>
-            </div>
-          ) : browserError ? (
-            <div className="flex size-full flex-col items-center justify-center gap-2 p-6 text-center text-white/70">
-              <VideoOff className="size-8 text-danger" />
-              <p className="text-sm">{browserError}</p>
-            </div>
-          ) : (
-            <>
-              {/* ── Split-screen grid — THE SAME layout for host, co-hosts and
-                  viewers (A2). Self view always renders LAST (bottom-most
-                  slot); every other participant renders BEFORE it, so on each
-                  person's own device their own camera sits at the bottom
-                  while everyone else appears above/first — matches how the
-                  reference app lays it out. For plain viewers every tile is
-                  remote (no "You" tile).
-                  The grid itself adapts to the participant count so it
-                  never produces a tiny/unusable split:
-                    2 people → even 50/50 split
-                    3 people → 1 tile spans the full top row, 2 below
-                    4+ people → even auto-fit grid that reflows when someone
-                      leaves (no leftover black space) */}
-              {hasCoHosts ? (
-                <div
-                  className={cn(
-                    "grid h-full w-full gap-1.5 bg-black p-1.5",
-                    // Host/co-host arrays exclude self (so + 1 below); the
-                    // viewer array already includes the host tile itself —
-                    // this normalizes both to the TRUE on-screen headcount
-                    // so viewers get the same 2/3/4+ layouts as broadcasters.
-                    liveGridTileCount === 2
-                      ? "grid-cols-1 grid-rows-2 lg:grid-cols-2 lg:grid-rows-1"
-                      : liveGridTileCount === 3
-                        ? "grid-cols-2 grid-rows-2 [&>*:first-child]:col-span-2"
-                        : "auto-rows-fr grid-cols-2",
-                  )}
-                >
-                  {/* Every other participant, in the order they joined */}
-                  {allCoHostStreams.map((cs) => {
-                    const coHostInfo = coHostList.find((c) => c._id === cs.participantId);
-                    const isHostTile = cs.participantId === stream.host._id;
-                    return (
-                      <LiveVideoTile
-                        key={cs.participantId}
-                        stream={cs.stream}
-                        label={
-                          coHostInfo?.username ?? (isHostTile ? stream.host.username : undefined)
-                        }
-                        muted={!soundOn}
-                        dataSaver={dataSaver && !isHost && !isCoHost}
-                      />
-                    );
-                  })}
-                  {/* Self view — always last, so it sits in the bottom-most grid cell */}
-                  {(isHost || isCoHost) && (
-                    <div className="relative min-h-0 overflow-hidden rounded-2xl bg-black/40">
-                      <video
-                        ref={setVideoRef}
-                        autoPlay
-                        muted
-                        playsInline
-                        data-live-tile="self"
-                        className="absolute inset-0 size-full object-cover"
-                      />
-                      <span className="absolute bottom-2 left-2 z-10 rounded-md bg-black/60 px-2 py-0.5 text-xs font-bold text-white backdrop-blur">
-                        You
-                      </span>
-                      <VideoStatusOverlay
-                        health={mainVideoHealth}
-                        role={isHost ? "host" : "co-host"}
-                      />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                /* ── Single video (no co-hosts) ── */
-                <>
-                  <video
-                    ref={setVideoRef}
-                    autoPlay
-                    muted
-                    playsInline
-                    onClick={() => !isHost && !isCoHost && !soundOn && toggleSound()}
-                    className={cn(
-                      "absolute inset-0 size-full object-cover",
-                      dataSaver && !isHost && !isCoHost && "inset-1/4 size-1/2 object-contain",
-                    )}
-                  />
-                  {/* A3 — one overlay with distinct messages for every failure
-                      mode; never rendered over healthy video. */}
-                  <VideoStatusOverlay
-                    health={mainVideoHealth}
-                    role={isHost ? "host" : isCoHost ? "co-host" : "viewer"}
-                  />
-                </>
-              )}
-            </>
-          )}
-
-          <FloatingHearts burst={heartBurst} />
-
-          {/* A6 — poor-connection banner with hysteresis (viewer wording).
-               The streamer variant uses the publisher's uplink samples. */}
-          {!isOver && !browserError && (
-            <ConnectionQualityBanner
-              samples={isHost || isCoHost ? publisherQuality : viewerRoom.qualitySamples}
-              variant={isHost || isCoHost ? "broadcaster" : "viewer"}
-              escalated={
-                mainVideoHealth.state === "disconnected" || mainVideoHealth.state === "reconnecting"
-              }
-            />
-          )}
-
-          {/* ── Incoming co-host join requests (host only) ── */}
-          {isHost && !isOver && joinRequests[0] && (
-            <JoinRequestDialog
-              request={joinRequests[0]}
-              onAccept={acceptJoinRequest}
-              onReject={rejectJoinRequest}
-            />
-          )}
-
-          {!isOver && (
-            <div className="absolute top-3 left-14 z-10 flex flex-wrap items-center gap-2">
-              <span className="flex items-center gap-1.5 rounded-lg bg-danger px-2.5 py-1 text-xs font-bold text-white animate-pulse">
-                <Radio className="size-3" /> LIVE
-              </span>
-              <span className="flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1 text-xs font-bold text-white">
-                <Users className="size-3" /> {formatCount(viewerCount)}
-              </span>
-              <span className="flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1 text-xs font-bold text-white">
-                <Heart className="size-3 fill-danger text-danger" /> {formatCount(reactionCount)}
-              </span>
-              {stream.totalGifts > 0 && (
-                <span className="flex items-center gap-1 rounded-lg bg-amber-500/90 px-2.5 py-1 text-xs font-bold text-black">
-                  <Gift className="size-3" /> {formatCount(stream.totalGifts)} pts
-                </span>
-              )}
-              {/* A4 — host countdown badge / viewer subtle notice */}
-              {isHost && remainingLabel && (
-                <span
-                  className={cn(
-                    "flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-bold text-white",
-                    remainingMs != null && remainingMs < 5 * 60_000
-                      ? "bg-danger animate-pulse"
-                      : "bg-black/60",
-                  )}
-                >
-                  <Timer className="size-3" /> {remainingLabel}
-                </span>
-              )}
-              {!isHost && timeWarning != null && (
-                <span className="rounded-lg bg-black/60 px-2.5 py-1 text-xs font-bold text-white/80">
-                  {timeWarning} min left
-                </span>
-              )}
-            </div>
-          )}
-
-          {!isHost && !isCoHost && !isOver && (
-            <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
-              {/* A6 — Data saver: shrink the rendered element so adaptiveStream
-                  pins a lower simulcast layer (halves data). */}
-              <Button
-                size="icon"
-                variant={dataSaver ? "brand" : "secondary"}
-                className="rounded-full"
-                onClick={() => setDataSaver((v) => !v)}
-                aria-pressed={dataSaver}
-                aria-label={dataSaver ? "Disable data saver" : "Enable data saver"}
-                title={
-                  dataSaver ? "Data saver on — tap for full quality" : "Data saver — use less data"
-                }
-              >
-                <Timer className="size-4" />
-              </Button>
-              <Button
-                size="icon"
-                variant="secondary"
-                className="rounded-full"
-                onClick={toggleSound}
-                aria-label={soundOn ? "Mute live audio" : "Turn on live audio"}
-                aria-pressed={soundOn}
-              >
-                {soundOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
-              </Button>
-            </div>
-          )}
-
-          {isHost && !isOver && (
-            <div className="absolute top-16 right-3 z-20 flex items-center gap-2">
-              <Button size="icon" variant="secondary" className="rounded-full" onClick={toggleMic}>
-                {micOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}
-              </Button>
-              <Button
-                size="icon"
-                variant="secondary"
-                className="rounded-full"
-                onClick={toggleCamera}
-              >
-                {camOn ? <Video className="size-4" /> : <VideoOff className="size-4" />}
-              </Button>
-              <Button
-                size="icon"
-                variant="secondary"
-                className="rounded-full"
-                onClick={switchCamera}
-              >
-                <SwitchCamera className="size-4" />
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleEnd}
-                disabled={endLive.isPending}
-              >
-                <X className="size-4" /> {endLive.isPending ? "Ending…" : "End stream"}
-              </Button>
-            </div>
-          )}
-
-          {/* ── Co-host controls ── */}
-          {isCoHost && !isOver && (
-            <div className="absolute top-16 right-3 z-20 flex items-center gap-2">
-              <Button
-                size="icon"
-                variant="secondary"
-                className="rounded-full"
-                onClick={coHostRoom.toggleMic}
-              >
-                {coHostRoom.micOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}
-              </Button>
-              <Button
-                size="icon"
-                variant="secondary"
-                className="rounded-full"
-                onClick={coHostRoom.toggleCamera}
-              >
-                {coHostRoom.camOn ? <Video className="size-4" /> : <VideoOff className="size-4" />}
-              </Button>
-              <Button
-                size="icon"
-                variant="secondary"
-                className="rounded-full"
-                onClick={coHostRoom.flipCamera}
-              >
-                <SwitchCamera className="size-4" />
-              </Button>
-              <Button variant="destructive" size="sm" onClick={leaveCoHost}>
-                <PhoneOff className="size-4" /> Leave
-              </Button>
-            </div>
-          )}
-
-          {/* Subtle video bottom gradient for visual depth (mobile only) */}
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] bg-gradient-to-t from-black/40 via-black/15 to-transparent h-28 lg:hidden" />
-        </div>
-      </div>
-
-      {/* ── Chat / interaction panel ── */}
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex max-h-[36vh] flex-col lg:pointer-events-auto lg:static lg:h-full lg:max-h-none lg:w-[360px] lg:shrink-0 lg:border-l lg:border-white/10 lg:bg-black">
-        <div
-          className={cn(
-            "pointer-events-auto flex flex-col lg:h-full lg:max-h-none lg:rounded-none lg:bg-transparent",
-            // Collapsed (mobile): only the host row + toggle are visible, fully transparent.
-            // Expanded (mobile): comments become visible, panel background fades from
-            // transparent at the top to a low-opacity black near the input area.
-            chatCollapsed
-              ? "max-h-none bg-transparent"
-              : "max-h-[36vh] bg-gradient-to-t from-black/60 via-black/20 to-transparent",
-          )}
-        >
-          {/* PC chat header */}
-          <header className="hidden border-b border-white/10 p-3 lg:flex lg:items-center lg:gap-2">
-            <p className="text-sm font-bold text-white">Live chat</p>
-          </header>
-
-          {/* ── Host info row (avatar, name, title, three-dot menu, follow) ── */}
-          <div className="flex items-center gap-2.5 px-3 py-2">
-            <Link
-              to="/profile/$username"
-              params={{ username: stream.host.username }}
-              className="shrink-0"
-            >
-              <GAvatar user={toDisplayUser(stream.host)} size="md" />
-            </Link>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <UserName
-                  user={toDisplayUser(stream.host)}
-                  className="min-w-0 truncate text-white [&>span]:text-white"
-                />
-              </div>
-              <p className="truncate text-sm text-white/70">{stream.title}</p>
-            </div>
-
-            {/* Gift / Join — desktop inline; mobile is handled in the input row */}
-            <div className="hidden items-center gap-1 lg:flex">
-              {!isHost && !isOver && stream.giftsEnabled && (
-                <Button variant="brand" size="sm" onClick={() => setGiftPickerOpen((v) => !v)}>
-                  <Gift className="size-4" /> Gift
-                </Button>
-              )}
-              {!isHost && !isCoHost && !isOver && activeIdentity && (
-                <Button
-                  variant="brand"
-                  size="sm"
-                  onClick={requestJoinLive}
-                  disabled={joinRequestPending}
-                >
-                  {joinRequestPending ? (
-                    <>
-                      <Radio className="size-4 animate-pulse" /> Requesting…
-                    </>
-                  ) : (
-                    <>
-                      <LogIn className="size-4" /> Join
-                    </>
-                  )}
-                </Button>
-              )}
-            </div>
-
-            {!isHost && (
-              <Button
-                variant={following ? "soft" : "default"}
-                size="sm"
-                className="shrink-0"
-                onClick={() =>
-                  followUser.mutate({ username: stream.host.username, follow: !following })
-                }
-              >
-                {following ? "Following" : "Follow"}
-              </Button>
-            )}
-
-            {/* Three-dot actions menu — same row as host name/title on every
-                screen size, including mobile, so it never gets pushed below. */}
-            <DropdownMenu>
+  const moreMenu = (
+<DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
@@ -1593,6 +1246,411 @@ function LiveRoomPage() {
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-black lg:flex-row">
+      <button
+        type="button"
+        onClick={() => navigate({ to: "/live" })}
+        aria-label="Back to live streams"
+        className="press absolute top-3 left-3 z-20 grid size-9 place-items-center rounded-full bg-black/50 text-white backdrop-blur max-lg:hidden"
+      >
+        <ArrowLeft className="size-5" />
+      </button>
+
+      {/* ── Mobile header — minimal, Instagram-style (hidden on desktop) ── */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center gap-2 bg-gradient-to-b from-black/60 to-transparent px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-6 lg:hidden">
+        <Link
+          to="/profile/$username"
+          params={{ username: stream.host.username }}
+          className="pointer-events-auto flex min-w-0 items-center gap-2"
+        >
+          <GAvatar user={toDisplayUser(stream.host)} size="sm" />
+          <span className="truncate text-sm font-bold text-white [text-shadow:0_1px_3px_rgba(0,0,0,0.8)]">
+            {stream.host.username}
+          </span>
+        </Link>
+        {!isOver && (
+          <>
+            <span className="shrink-0 rounded-md bg-danger px-2 py-0.5 text-xs font-extrabold tracking-wide text-white">
+              LIVE
+            </span>
+            <span className="flex shrink-0 items-center gap-1 rounded-md bg-black/50 px-2 py-0.5 text-xs font-bold text-white">
+              <Eye className="size-3.5" /> {formatCount(viewerCount)}
+            </span>
+          </>
+        )}
+        {!isHost && !following && (
+          <button
+            type="button"
+            onClick={() => followUser.mutate({ username: stream.host.username, follow: true })}
+            className="pointer-events-auto press shrink-0 rounded-md bg-white/20 px-2.5 py-0.5 text-xs font-bold text-white backdrop-blur"
+          >
+            Follow
+          </button>
+        )}
+        <div className="pointer-events-auto ml-auto flex shrink-0 items-center">
+          {moreMenu}
+          <button
+            type="button"
+            onClick={() => (isHost && !isOver ? setEndConfirmOpen(true) : navigate({ to: "/live" }))}
+            aria-label={isHost && !isOver ? "End live video" : "Close"}
+            className="press grid size-9 place-items-center text-white"
+          >
+            <X className="size-6" />
+          </button>
+        </div>
+      </div>
+
+      <div className="relative w-full flex-1 bg-black lg:flex-none lg:basis-0 lg:grow-[3] lg:mr-1.5">
+        <div className="relative size-full">
+          {isOver ? (
+            <div className="flex size-full flex-col items-center justify-center gap-2 text-white/70">
+              <VideoOff className="size-10" />
+              <p className="font-semibold">{ended || "This stream has ended"}</p>
+              {reachedCap && (
+                <p className="max-w-xs text-center text-sm text-white/60">
+                  This stream reached the 5-hour limit
+                </p>
+              )}
+              <div className="mt-2 flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  className="border-white/30 bg-white text-black hover:bg-white/90"
+                  asChild
+                >
+                  <Link to="/live">Browse other streams</Link>
+                </Button>
+                {reachedCap && isHost && (
+                  <Button variant="brand" asChild>
+                    <Link to="/live">Start a new stream</Link>
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : browserError ? (
+            <div className="flex size-full flex-col items-center justify-center gap-2 p-6 text-center text-white/70">
+              <VideoOff className="size-8 text-danger" />
+              <p className="text-sm">{browserError}</p>
+            </div>
+          ) : (
+            <>
+              {/* ── Split-screen grid — THE SAME layout for host, co-hosts and
+                  viewers (A2). Self view always renders LAST (bottom-most
+                  slot); every other participant renders BEFORE it, so on each
+                  person's own device their own camera sits at the bottom
+                  while everyone else appears above/first — matches how the
+                  reference app lays it out. For plain viewers every tile is
+                  remote (no "You" tile).
+                  The grid itself adapts to the participant count so it
+                  never produces a tiny/unusable split:
+                    2 people → even 50/50 split
+                    3 people → 1 tile spans the full top row, 2 below
+                    4+ people → even auto-fit grid that reflows when someone
+                      leaves (no leftover black space) */}
+              {hasCoHosts ? (
+                <div
+                  className={cn(
+                    "grid h-full w-full gap-1.5 bg-black p-1.5",
+                    // Host/co-host arrays exclude self (so + 1 below); the
+                    // viewer array already includes the host tile itself —
+                    // this normalizes both to the TRUE on-screen headcount
+                    // so viewers get the same 2/3/4+ layouts as broadcasters.
+                    liveGridTileCount === 2
+                      ? "grid-cols-1 grid-rows-2 lg:grid-cols-2 lg:grid-rows-1"
+                      : liveGridTileCount === 3
+                        ? "grid-cols-2 grid-rows-2 [&>*:first-child]:col-span-2"
+                        : "auto-rows-fr grid-cols-2",
+                  )}
+                >
+                  {/* Every other participant, in the order they joined */}
+                  {allCoHostStreams.map((cs) => {
+                    const coHostInfo = coHostList.find((c) => c._id === cs.participantId);
+                    const isHostTile = cs.participantId === stream.host._id;
+                    return (
+                      <LiveVideoTile
+                        key={cs.participantId}
+                        stream={cs.stream}
+                        label={
+                          coHostInfo?.username ?? (isHostTile ? stream.host.username : undefined)
+                        }
+                        muted={!(isHost || isCoHost || soundOn)}
+                        dataSaver={dataSaver && !isHost && !isCoHost}
+                      />
+                    );
+                  })}
+                  {/* Self view — always last, so it sits in the bottom-most grid cell */}
+                  {(isHost || isCoHost) && (
+                    <div className="relative min-h-0 overflow-hidden rounded-2xl bg-black/40">
+                      <video
+                        ref={setVideoRef}
+                        autoPlay
+                        muted
+                        playsInline
+                        data-live-tile="self"
+                        className="absolute inset-0 size-full object-cover"
+                      />
+                      <span className="absolute bottom-2 left-2 z-10 rounded-md bg-black/60 px-2 py-0.5 text-xs font-bold text-white backdrop-blur">
+                        You
+                      </span>
+                      <VideoStatusOverlay
+                        health={mainVideoHealth}
+                        role={isHost ? "host" : "co-host"}
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* ── Single video (no co-hosts) ── */
+                <>
+                  <video
+                    ref={setVideoRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    onClick={() => !isHost && !isCoHost && !soundOn && toggleSound()}
+                    className={cn(
+                      "absolute inset-0 size-full object-cover",
+                      dataSaver && !isHost && !isCoHost && "inset-1/4 size-1/2 object-contain",
+                    )}
+                  />
+                  {/* A3 — one overlay with distinct messages for every failure
+                      mode; never rendered over healthy video. */}
+                  <VideoStatusOverlay
+                    health={mainVideoHealth}
+                    role={isHost ? "host" : isCoHost ? "co-host" : "viewer"}
+                  />
+                </>
+              )}
+            </>
+          )}
+
+          <FloatingHearts burst={heartBurst} />
+
+          {/* A6 — poor-connection banner with hysteresis (viewer wording).
+               The streamer variant uses the publisher's uplink samples. */}
+          {!isOver && !browserError && (
+            <ConnectionQualityBanner
+              samples={isHost || isCoHost ? publisherQuality : viewerRoom.qualitySamples}
+              variant={isHost || isCoHost ? "broadcaster" : "viewer"}
+              escalated={
+                mainVideoHealth.state === "disconnected" || mainVideoHealth.state === "reconnecting"
+              }
+            />
+          )}
+
+          {/* ── Incoming co-host join requests (host only) ── */}
+          {isHost && !isOver && joinRequests[0] && (
+            <JoinRequestDialog
+              request={joinRequests[0]}
+              onAccept={acceptJoinRequest}
+              onReject={rejectJoinRequest}
+            />
+          )}
+
+          {!isOver && (
+            <div className="absolute top-3 left-14 z-10 flex flex-wrap items-center gap-2 max-lg:hidden">
+              <span className="flex items-center gap-1.5 rounded-lg bg-danger px-2.5 py-1 text-xs font-bold text-white animate-pulse">
+                <Radio className="size-3" /> LIVE
+              </span>
+              <span className="flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1 text-xs font-bold text-white">
+                <Users className="size-3" /> {formatCount(viewerCount)}
+              </span>
+              <span className="flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1 text-xs font-bold text-white">
+                <Heart className="size-3 fill-danger text-danger" /> {formatCount(reactionCount)}
+              </span>
+              {stream.totalGifts > 0 && (
+                <span className="flex items-center gap-1 rounded-lg bg-amber-500/90 px-2.5 py-1 text-xs font-bold text-black">
+                  <Gift className="size-3" /> {formatCount(stream.totalGifts)} pts
+                </span>
+              )}
+              {/* The 5-hour cap is still enforced by the server; its
+                  countdown is intentionally not shown in the UI. */}
+            </div>
+          )}
+
+          {!isHost && !isCoHost && !isOver && (
+            <div className="absolute top-3 right-3 z-20 flex items-center gap-2 max-lg:top-16 max-lg:flex-col">
+              {/* A6 — Data saver: shrink the rendered element so adaptiveStream
+                  pins a lower simulcast layer (halves data). */}
+              <Button
+                size="icon"
+                variant={dataSaver ? "brand" : "secondary"}
+                className="rounded-full"
+                onClick={() => setDataSaver((v) => !v)}
+                aria-pressed={dataSaver}
+                aria-label={dataSaver ? "Disable data saver" : "Enable data saver"}
+                title={
+                  dataSaver ? "Data saver on — tap for full quality" : "Data saver — use less data"
+                }
+              >
+                <Timer className="size-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="secondary"
+                className="rounded-full"
+                onClick={toggleSound}
+                aria-label={soundOn ? "Mute live audio" : "Turn on live audio"}
+                aria-pressed={soundOn}
+              >
+                {soundOn ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+              </Button>
+            </div>
+          )}
+
+          {isHost && !isOver && (
+            <div className="absolute top-16 right-3 z-20 flex items-center gap-2 max-lg:flex-col">
+              <Button size="icon" variant="secondary" className="rounded-full" onClick={toggleMic}>
+                {micOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+              </Button>
+              <Button
+                size="icon"
+                variant="secondary"
+                className="rounded-full"
+                onClick={toggleCamera}
+              >
+                {camOn ? <Video className="size-4" /> : <VideoOff className="size-4" />}
+              </Button>
+              <Button
+                size="icon"
+                variant="secondary"
+                className="rounded-full"
+                onClick={switchCamera}
+              >
+                <SwitchCamera className="size-4" />
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="max-lg:hidden"
+                onClick={handleEnd}
+                disabled={endLive.isPending}
+              >
+                <X className="size-4" /> {endLive.isPending ? "Ending…" : "End stream"}
+              </Button>
+            </div>
+          )}
+
+          {/* ── Co-host controls ── */}
+          {isCoHost && !isOver && (
+            <div className="absolute top-16 right-3 z-20 flex items-center gap-2 max-lg:flex-col">
+              <Button
+                size="icon"
+                variant="secondary"
+                className="rounded-full"
+                onClick={coHostRoom.toggleMic}
+              >
+                {coHostRoom.micOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+              </Button>
+              <Button
+                size="icon"
+                variant="secondary"
+                className="rounded-full"
+                onClick={coHostRoom.toggleCamera}
+              >
+                {coHostRoom.camOn ? <Video className="size-4" /> : <VideoOff className="size-4" />}
+              </Button>
+              <Button
+                size="icon"
+                variant="secondary"
+                className="rounded-full"
+                onClick={coHostRoom.flipCamera}
+              >
+                <SwitchCamera className="size-4" />
+              </Button>
+              <Button variant="destructive" size="sm" onClick={leaveCoHost}>
+                <PhoneOff className="size-4" /> Leave
+              </Button>
+            </div>
+          )}
+
+          {/* Subtle video bottom gradient for visual depth (mobile only) */}
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[5] bg-gradient-to-t from-black/40 via-black/15 to-transparent h-28 lg:hidden" />
+        </div>
+      </div>
+
+      {/* ── Chat / interaction panel ── */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex max-h-[36vh] flex-col lg:pointer-events-auto lg:static lg:h-full lg:max-h-none lg:w-[360px] lg:shrink-0 lg:border-l lg:border-white/10 lg:bg-black">
+        <div
+          className={cn(
+            "pointer-events-auto flex flex-col lg:h-full lg:max-h-none lg:rounded-none lg:bg-transparent",
+            // Collapsed (mobile): only the host row + toggle are visible, fully transparent.
+            // Expanded (mobile): comments become visible, panel background fades from
+            // transparent at the top to a low-opacity black near the input area.
+            chatCollapsed
+              ? "max-h-none bg-transparent"
+              : "max-h-[36vh] bg-gradient-to-t from-black/60 via-black/20 to-transparent",
+          )}
+        >
+          {/* PC chat header */}
+          <header className="hidden border-b border-white/10 p-3 lg:flex lg:items-center lg:gap-2">
+            <p className="text-sm font-bold text-white">Live chat</p>
+          </header>
+
+          {/* ── Host info row (avatar, name, title, three-dot menu, follow) ── */}
+          <div className="flex items-center gap-2.5 px-3 py-2 max-lg:hidden">
+            <Link
+              to="/profile/$username"
+              params={{ username: stream.host.username }}
+              className="shrink-0"
+            >
+              <GAvatar user={toDisplayUser(stream.host)} size="md" />
+            </Link>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <UserName
+                  user={toDisplayUser(stream.host)}
+                  className="min-w-0 truncate text-white [&>span]:text-white"
+                />
+              </div>
+              <p className="truncate text-sm text-white/70">{stream.title}</p>
+            </div>
+
+            {/* Gift / Join — desktop inline; mobile is handled in the input row */}
+            <div className="hidden items-center gap-1 lg:flex">
+              {!isHost && !isOver && stream.giftsEnabled && (
+                <Button variant="brand" size="sm" onClick={() => setGiftPickerOpen((v) => !v)}>
+                  <Gift className="size-4" /> Gift
+                </Button>
+              )}
+              {!isHost && !isCoHost && !isOver && activeIdentity && (
+                <Button
+                  variant="brand"
+                  size="sm"
+                  onClick={requestJoinLive}
+                  disabled={joinRequestPending}
+                >
+                  {joinRequestPending ? (
+                    <>
+                      <Radio className="size-4 animate-pulse" /> Requesting…
+                    </>
+                  ) : (
+                    <>
+                      <LogIn className="size-4" /> Join
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+
+            {!isHost && (
+              <Button
+                variant={following ? "soft" : "default"}
+                size="sm"
+                className="shrink-0"
+                onClick={() =>
+                  followUser.mutate({ username: stream.host.username, follow: !following })
+                }
+              >
+                {following ? "Following" : "Follow"}
+              </Button>
+            )}
+
+            {/* Three-dot actions menu — same row as host name/title on every
+                screen size, including mobile, so it never gets pushed below. */}
+            {moreMenu}
 
             {/* Collapse/expand toggle — mobile only; comments panel is
                 collapsed by default and the user can expand it to read
@@ -1794,7 +1852,7 @@ function LiveRoomPage() {
 
           {/* ── Comment input row ── */}
           {!isOver && (
-            <div className="flex items-center gap-1.5 border-t border-white/10 p-2.5">
+            <div className="flex items-center gap-1.5 border-t border-white/10 p-2.5 max-lg:border-t-0 max-lg:px-3 max-lg:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               {replyingTo && (
                 <div className="flex w-full items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-[11px] text-white/80">
                   <Reply className="size-3 shrink-0" />
@@ -1840,8 +1898,8 @@ function LiveRoomPage() {
                       setInsufficientPoints(false);
                     }}
                     onKeyDown={(e) => e.key === "Enter" && sendChat()}
-                    placeholder={paidEnabled ? `Comment · ${commentPrice} pts` : "Send a message…"}
-                    className="h-9 min-w-0 flex-1 rounded-full border border-white/20 bg-white/10 px-3 text-sm text-white placeholder:text-white/50 outline-none focus:border-white/40"
+                    placeholder={paidEnabled ? `Comment · ${commentPrice} pts` : "Add a comment…"}
+                    className="h-9 min-w-0 flex-1 rounded-full border border-white/20 bg-white/10 px-3 text-sm text-white placeholder:text-white/50 outline-none focus:border-white/40 max-lg:h-10 max-lg:border-white/40 max-lg:bg-black/25 max-lg:px-4 max-lg:placeholder:text-white/80"
                   />
                   {/* Tight cluster: Send / Gift / Join / Like — small gap between
                       them so the input keeps as much width as possible, while
@@ -1852,7 +1910,7 @@ function LiveRoomPage() {
                       variant="brand"
                       onClick={sendChat}
                       disabled={!draft.trim()}
-                      className="shrink-0"
+                      className={cn("shrink-0", !draft.trim() && "max-lg:hidden")}
                       aria-label="Send message"
                     >
                       <Send className="size-4" />
@@ -1874,7 +1932,7 @@ function LiveRoomPage() {
                         variant="ghost"
                         size="icon"
                         className="shrink-0 text-white hover:bg-white/15 lg:hidden"
-                        onClick={requestJoinLive}
+                        onClick={() => setJoinSheetOpen(true)}
                         disabled={joinRequestPending}
                         aria-label="Request to join live"
                       >
@@ -1892,7 +1950,7 @@ function LiveRoomPage() {
                       aria-label={
                         paidEnabled ? `Send a like (${reactionPrice} points)` : "Send a like"
                       }
-                      className="press flex shrink-0 items-center gap-1 rounded-full bg-white/15 px-3 text-white size-9 justify-center"
+                      className="press flex shrink-0 items-center gap-1 rounded-full bg-white/15 px-3 text-white size-9 justify-center max-lg:bg-transparent"
                     >
                       <Heart className="size-4" />
                       {paidEnabled && reactionPrice > 0 && (
@@ -1910,7 +1968,7 @@ function LiveRoomPage() {
                     onKeyDown={(e) => e.key === "Enter" && sendChat()}
                     placeholder={paidEnabled ? `Reply · ${commentPrice} pts` : ""}
                     autoFocus
-                    className="h-9 min-w-0 flex-1 rounded-full border border-white/20 bg-white/10 px-3 text-sm text-white placeholder:text-white/50 outline-none focus:border-white/40"
+                    className="h-9 min-w-0 flex-1 rounded-full border border-white/20 bg-white/10 px-3 text-sm text-white placeholder:text-white/50 outline-none focus:border-white/40 max-lg:h-10 max-lg:border-white/40 max-lg:bg-black/25 max-lg:px-4 max-lg:placeholder:text-white/80"
                   />
                   <Button
                     size="icon"
@@ -1980,6 +2038,64 @@ function LiveRoomPage() {
               </p>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* End-live confirmation (mobile X button) */}
+      <Dialog open={endConfirmOpen} onOpenChange={setEndConfirmOpen}>
+        <DialogContent className="sm:max-w-[360px]">
+          <DialogHeader>
+            <DialogTitle>End live video?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Your live video will end for everyone who is watching.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEndConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={endLive.isPending}
+              onClick={() => {
+                setEndConfirmOpen(false);
+                handleEnd();
+              }}
+            >
+              {endLive.isPending ? "Ending…" : "End now"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Request to join — confirmation sheet (mobile join icon) */}
+      <Dialog open={joinSheetOpen} onOpenChange={setJoinSheetOpen}>
+        <DialogContent className="sm:max-w-[380px]">
+          <DialogHeader>
+            <DialogTitle className="text-center">Request to join</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-3 text-center">
+            <GAvatar user={toDisplayUser(stream.host)} size="lg" />
+            <p className="font-display text-lg font-extrabold">Request to be in this live video.</p>
+            <p className="text-sm text-muted-foreground">
+              Anyone can watch it, and some of your followers may get notified. When the live ends,{" "}
+              @{stream.host.username} can share it on their profile.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setJoinSheetOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="brand"
+              onClick={() => {
+                setJoinSheetOpen(false);
+                requestJoinLive();
+              }}
+            >
+              Send request
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

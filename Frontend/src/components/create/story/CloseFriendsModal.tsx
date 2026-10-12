@@ -54,8 +54,8 @@ export function CloseFriendsModal({ onClose, onDone }: CloseFriendsModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md select-none text-white">
-      <div className="flex flex-col gap-4 rounded-3xl border border-white/20 bg-slate-900 p-5 shadow-2xl max-w-sm w-full mx-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md select-none text-white max-sm:items-end max-sm:p-0">
+      <div className="flex flex-col gap-4 rounded-3xl border border-white/20 bg-slate-900 p-5 shadow-2xl max-w-sm w-full mx-auto max-sm:max-w-none max-sm:rounded-b-none max-sm:max-h-[92dvh] max-sm:overflow-y-auto max-sm:pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { Gift, Plus, Radio, ShieldAlert, StopCircle, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { GoLiveDialog } from "@/routes/live";
 import { formatCount } from "@/lib/format";
 import { useAuth } from "@/lib/auth-context";
 import { getStaffSocket } from "@/lib/socket-client";
@@ -133,7 +134,12 @@ function LiveOversightPage() {
   const { data, isLoading, isError, error, refetch } = useStaffLiveStreams();
   const { data: alertsData } = useLiveAlerts();
   const [liveViewerCounts, setLiveViewerCounts] = useState<Record<string, number>>({});
+  const [goLiveOpen, setGoLiveOpen] = useState(false);
+  const navigate = useNavigate();
   const streams = data?.streams ?? [];
+  // Moderators host through the exact same live room as creators — their own
+  // active stream (if any) is found by username so "Manage live" can reopen it.
+  const myStream = streams.find((s) => s.host.username === staffUser?.username);
   const alerts = alertsData?.alerts ?? [];
 
   useEffect(() => {
@@ -162,7 +168,20 @@ function LiveOversightPage() {
         title="Live Stream Oversight"
         description="Monitor active live broadcasts and enforce safety guardrails in real time."
         accent="danger"
+        action={
+          <Button
+            variant="brand"
+            onClick={() =>
+              myStream
+                ? navigate({ to: "/live/$streamId", params: { streamId: myStream._id } })
+                : setGoLiveOpen(true)
+            }
+          >
+            <Radio className="mr-1 size-4" /> {myStream ? "Manage my live" : "Go Live"}
+          </Button>
+        }
       />
+      <GoLiveDialog open={goLiveOpen} onOpenChange={setGoLiveOpen} asStaff />
 
       {isError && (
         <StaffErrorState
@@ -208,7 +227,16 @@ function LiveOversightPage() {
                       <strong className="text-warning">{formatCount(s.totalGifts)} pts</strong> in
                       gifts
                     </span>
-                    <ForceEndButton id={s._id} username={s.host.username} />
+                    <div className="flex items-center gap-1.5">
+                      <Button size="sm" variant="outline" asChild>
+                        <Link to="/live/$streamId" params={{ streamId: s._id }}>
+                          {s._id === myStream?._id ? "Open" : "Watch"}
+                        </Link>
+                      </Button>
+                      {s._id !== myStream?._id && (
+                        <ForceEndButton id={s._id} username={s.host.username} />
+                      )}
+                    </div>
                   </div>
                 </StaffCard>
               </motion.div>

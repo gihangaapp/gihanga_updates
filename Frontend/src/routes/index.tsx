@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { Loader2, Sparkles, TrendingUp, UserPlus } from "lucide-react";
+import { ArrowUpRight, Flame, Loader2, Radio, Sparkles, TrendingUp, UserPlus } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { StoryRail } from "@/components/feed/StoryRail";
 import { Composer } from "@/components/feed/Composer";
@@ -11,6 +11,8 @@ import { FeedAdCard } from "@/components/ads/FeedAdCard";
 import { Button } from "@/components/ui/button";
 import { useFeed, useExplore } from "@/hooks/use-posts";
 import { useFeedAds } from "@/hooks/use-ads";
+import { useTrendingTags } from "@/hooks/use-search";
+import { useLiveStreams } from "@/hooks/use-live";
 import { useAuth } from "@/lib/auth-context";
 import { LandingPage } from "./landing";
 import { cn } from "@/lib/utils";
@@ -58,6 +60,92 @@ const tabs = [
   { id: "trending", label: "Trending", icon: TrendingUp },
 ] as const;
 
+/**
+ * Mobile/tablet discovery strip (hidden on xl+, where the right rail already
+ * shows trending): a scrollable row of trending tags plus a swipeable banner
+ * carousel. Both scroll horizontally with snap, so they never push the feed.
+ */
+function MobileDiscovery() {
+  const { data: tagsData } = useTrendingTags();
+  const { data: liveData } = useLiveStreams();
+  const tags = (tagsData?.tags ?? []).slice(0, 10);
+  const liveStreams = liveData?.streams ?? [];
+
+  return (
+    <div className="mb-4 space-y-3 xl:hidden">
+      {tags.length > 0 && (
+        <div className="-mx-3 flex items-center gap-2 overflow-x-auto px-3 no-scrollbar sm:-mx-5 sm:px-5">
+          <Flame className="size-4 shrink-0 text-primary" />
+          {tags.map((t) => (
+            <Link
+              key={t.tag}
+              to="/tag/$tag"
+              params={{ tag: t.tag }}
+              className="press shrink-0 rounded-full bg-muted px-3 py-1.5 text-xs font-bold text-foreground"
+            >
+              #{t.tag}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <div className="-mx-3 flex snap-x snap-mandatory gap-3 overflow-x-auto px-3 pb-1 no-scrollbar sm:-mx-5 sm:px-5">
+        {liveStreams.length > 0 && (
+          <Link
+            to="/live"
+            className="surface-card press flex w-[82%] max-w-[360px] shrink-0 snap-start items-center gap-3 p-4"
+          >
+            <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-danger/10 text-danger">
+              <Radio className="size-5 animate-pulse" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-display text-sm font-bold">
+                {liveStreams.length} live now
+              </span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {liveStreams[0]?.title}
+              </span>
+            </span>
+            <ArrowUpRight className="size-4 shrink-0 text-muted-foreground" />
+          </Link>
+        )}
+        <Link
+          to="/explore"
+          className="surface-card press flex w-[82%] max-w-[360px] shrink-0 snap-start items-center gap-3 p-4"
+        >
+          <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-primary-soft text-primary">
+            <TrendingUp className="size-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-display text-sm font-bold">What's trending</span>
+            <span className="block truncate text-xs text-muted-foreground">
+              Top topics and fresh media from the community
+            </span>
+          </span>
+          <ArrowUpRight className="size-4 shrink-0 text-muted-foreground" />
+        </Link>
+        <Link
+          to="/ads"
+          className="surface-card press flex w-[82%] max-w-[360px] shrink-0 snap-start items-center gap-3 p-4"
+        >
+          <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-primary-soft text-primary">
+            <Sparkles className="size-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-display text-sm font-bold">
+              Grow with Gihanga Ads
+            </span>
+            <span className="block truncate text-xs text-muted-foreground">
+              Campaigns from 5,000 RWF
+            </span>
+          </span>
+          <ArrowUpRight className="size-4 shrink-0 text-muted-foreground" />
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 function HomeFeed() {
   const [tab, setTab] = useState<(typeof tabs)[number]["id"]>("foryou");
   const forYou = useFeed();
@@ -103,6 +191,7 @@ function HomeFeed() {
           })}
         </div>
 
+        <MobileDiscovery />
         <StoryRail />
         <Composer />
 

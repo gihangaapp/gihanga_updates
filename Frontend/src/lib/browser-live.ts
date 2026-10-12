@@ -498,6 +498,17 @@ export function useCoHostLiveRoom({ streamId, hostId, myUserId, enabled }: CoHos
         if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
           meshPeers.current.delete(targetSocketId);
           pc.close();
+          // Drop the dead participant's tile so the split screen collapses
+          // back to a single view instead of keeping a frozen/black cell.
+          const deadId = socketParticipants.current.get(targetSocketId);
+          if (deadId && streamsMap.current.delete(deadId)) {
+            setCoHostStreams(
+              Array.from(streamsMap.current.entries()).map(([pid, str]) => ({
+                participantId: pid,
+                stream: str,
+              })),
+            );
+          }
         }
       };
 
@@ -781,6 +792,17 @@ export function useHostCoHostMesh({
         if (["failed", "disconnected", "closed"].includes(pc.connectionState)) {
           meshPeers.current.delete(targetSocketId);
           pc.close();
+          // Drop the dead participant's tile so the split screen collapses
+          // back to a single view instead of keeping a frozen/black cell.
+          const deadId = socketParticipants.current.get(targetSocketId);
+          if (deadId && streamsMap.current.delete(deadId)) {
+            setCoHostStreams(
+              Array.from(streamsMap.current.entries()).map(([pid, str]) => ({
+                participantId: pid,
+                stream: str,
+              })),
+            );
+          }
         }
       };
 
