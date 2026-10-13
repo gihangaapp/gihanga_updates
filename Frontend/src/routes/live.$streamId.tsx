@@ -34,6 +34,7 @@ import {
   Volume2,
   VolumeX,
   Reply,
+  Loader2,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -87,6 +88,7 @@ import {
   VIEWER_GRID_AVAILABLE,
   type CoHostRemoteStream,
 } from "@/lib/live-room";
+import { useCompositeBroadcast } from "@/lib/live-composite";
 import { getLiveSocket } from "@/lib/socket-client";
 import { useLiveVideoHealth } from "@/hooks/use-live-video-health";
 import { VideoStatusOverlay, ConnectionQualityBanner } from "@/components/live/LiveOverlays";
@@ -515,6 +517,7 @@ function LiveRoomPage() {
     toggleMic,
     toggleCamera,
     switchCamera,
+    setBroadcastStream,
   } = useBrowserLiveRoom({
     streamId,
     publish: isHost && !isCoHost,
@@ -590,14 +593,49 @@ function LiveRoomPage() {
   // Broadcasters: any other live participant. Plain viewers: the grid already
   // holds the host tile, so it only splits with 2+ tiles — a lone host is
   // ALWAYS full screen (no half-black split, before or after joining).
+  // Participants who are accepted but whose video hasn't arrived yet get a
+  // "Connecting…" tile, so the screen splits the INSTANT someone joins
+  // (both for the host and for the joiner) instead of after the first frame.
+  const pendingParticipants = useMemo(() => {
+    if (!(isHost || isCoHost)) return [] as { id: string; label: string }[];
+    const have = new Set(allCoHostStreams.map((s) => s.participantId));
+    const expected: { id: string; label: string }[] = [];
+    if (isCoHost && stream?.host?._id) {
+      expected.push({ id: stream.host._id, label: stream.host.username });
+    }
+    for (const c of coHostList) expected.push({ id: c._id, label: c.username });
+    const seen = new Set<string>();
+    return expected.filter((p) => {
+      if (!p.id || p.id === activeIdentity?.id || have.has(p.id) || seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
+  }, [isHost, isCoHost, allCoHostStreams, coHostList, stream?.host, activeIdentity?.id]);
   const hasCoHosts =
-    isHost || isCoHost ? allCoHostStreams.length > 0 : viewerGridTiles.length > 1;
+    isHost || isCoHost
+      ? allCoHostStreams.length + pendingParticipants.length > 0
+      : viewerGridTiles.length > 1;
   // True on-screen headcount, normalized across roles: host/co-host arrays
   // exclude self (add 1 back for the self tile rendered separately below);
   // the viewer array already includes every tile (host + co-hosts), so it's
   // used as-is. Drives the grid layout so viewers see the SAME 2/3/4+ split
   // shape as the broadcasters do.
-  const liveGridTileCount = isHost || isCoHost ? allCoHostStreams.length + 1 : viewerGridTiles.length;
+  const liveGridTileCount =
+    isHost || isCoHost
+      ? allCoHostStreams.length + pendingParticipants.length + 1
+      : viewerGridTiles.length;
+
+  // Mesh transport: viewers can't receive co-host video from an SFU, so the
+  // host mixes everyone (split-screen picture + all voices) into the one
+  // stream viewers already receive.
+  const mixedBroadcast = useCompositeBroadcast({
+    localStream,
+    tiles: allCoHostStreams,
+    enabled: isHost && !isOver && !VIEWER_GRID_AVAILABLE,
+  });
+  useEffect(() => {
+    if (isHost) setBroadcastStream(mixedBroadcast);
+  }, [isHost, mixedBroadcast, setBroadcastStream]);
 
   // ── §8.2 fix: role/session values the socket handlers need, via refs so
   // the effect can keep its [streamId, navigate] deps without closing over
@@ -1455,6 +1493,20 @@ function LiveRoomPage() {
                       />
                     );
                   })}
+                  {pendingParticipants.map((p) => (
+                    <div
+                      key={`pending-${p.id}`}
+                      className="relative grid min-h-0 place-items-center overflow-hidden rounded-2xl bg-black/60"
+                    >
+                      <div className="flex flex-col items-center gap-2 text-white/70">
+                        <Loader2 className="size-6 animate-spin" />
+                        <span className="text-xs font-semibold">Connecting…</span>
+                      </div>
+                      <span className="absolute bottom-2 left-2 z-10 rounded-md bg-black/60 px-2 py-0.5 text-xs font-bold text-white backdrop-blur">
+                        {p.label}
+                      </span>
+                    </div>
+                  ))}
                   {/* Self view — always last, so it sits in the bottom-most grid cell */}
                   {(isHost || isCoHost) && (
                     <div className="relative min-h-0 overflow-hidden rounded-2xl bg-black/40">

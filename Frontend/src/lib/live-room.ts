@@ -68,7 +68,9 @@ export function useBrowserLiveRoom(options: LiveRoomOptions) {
     hostId: options.hostId,
     asStaff: Boolean(options.asStaff),
   });
-  return USE_LIVEKIT ? livekit : mesh;
+  // Mesh only: lets the host swap the viewer-facing stream for a mixed
+  // split-screen one (no-op on LiveKit, where the SFU fans tiles out itself).
+  return { ...(USE_LIVEKIT ? livekit : mesh), setBroadcastStream: mesh.setBroadcastStream };
 }
 
 export function useCoHostLiveRoom(options: {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getLiveSocket } from "./socket-client";
 import {
   liveCaptureConstraints,
@@ -136,6 +136,22 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
   const hostPeers = useRef<Map<string, RTCPeerConnection>>(new Map());
   const readyTimerRef = useRef<number | null>(null);
   const qualityStoppers = useRef<Array<() => void>>([]);
+  // What viewers actually receive: the host's own camera, or — while
+  // co-hosts are live — a mixed split-screen + mixed-voice stream.
+  const broadcastRef = useRef<MediaStream | null>(null);
+
+  const setBroadcastStream = useCallback((next: MediaStream | null) => {
+    broadcastRef.current = next;
+    const source = next ?? localRef.current;
+    if (!source) return;
+    hostPeers.current.forEach((pc) => {
+      for (const kind of ["video", "audio"] as const) {
+        const track = source.getTracks().find((t) => t.kind === kind);
+        const sender = pc.getSenders().find((s) => s.track?.kind === kind);
+        if (sender && track && sender.track !== track) void sender.replaceTrack(track).catch(() => {});
+      }
+    });
+  }, []);
 
   useEffect(() => {
     if (!enabled || !streamId) return;
@@ -185,9 +201,8 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
         iceServers: liveIceServers(),
       });
       hostPeers.current.set(viewerId, hostPeer);
-      localRef.current
-        ?.getTracks()
-        .forEach((track) => hostPeer.addTrack(track, localRef.current as MediaStream));
+      const outgoing = broadcastRef.current ?? localRef.current;
+      outgoing?.getTracks().forEach((track) => hostPeer.addTrack(track, outgoing));
       // A1 — explicit sender bitrate so viewers receive HD, not the ~640x480
       // default; also sample this peer's stats for the streamer-side banner.
       void applyMeshVideoBitrate(hostPeer);
@@ -392,6 +407,7 @@ export function useBrowserLiveRoom({ streamId, publish, enabled }: BrowserLiveOp
     toggleMic,
     toggleCamera,
     switchCamera,
+    setBroadcastStream,
   };
 }
 
