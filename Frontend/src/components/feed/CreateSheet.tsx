@@ -159,7 +159,7 @@ export function CreateHost() {
 
   return (
     <Dialog open={s.open} onOpenChange={(o) => (o ? openCreate(mode) : closeCreate())}>
-      <DialogContent className="max-h-[92vh] gap-0 overflow-y-auto p-0 sm:max-w-[560px]">
+      <DialogContent className="max-h-[92dvh] max-w-[calc(100vw-1rem)] gap-0 overflow-x-hidden overflow-y-auto p-0 sm:max-w-[560px]">
         <DialogHeader className="border-b border-border px-5 py-4">
           <DialogTitle className="font-display text-lg font-extrabold tracking-tight">Create</DialogTitle>
         </DialogHeader>

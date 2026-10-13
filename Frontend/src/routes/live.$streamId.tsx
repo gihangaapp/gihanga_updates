@@ -37,6 +37,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { GAvatar, UserName } from "@/components/common/GAvatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -62,6 +63,9 @@ import {
   useLiveHeartbeat,
   useSendGift,
   useMyWallet,
+  useBuyPoints,
+  useLiveViewers,
+  type LiveViewerEntry,
   useAddModerator,
   useMuteViewer,
   useBanViewer,
@@ -455,6 +459,10 @@ function LiveRoomPage() {
   const [paidConfirmOpen, setPaidConfirmOpen] = useState<null | "comment" | "reaction">(null);
   const [paidConfirmDontAsk, setPaidConfirmDontAsk] = useState(false);
   const [insufficientPoints, setInsufficientPoints] = useState(false);
+  // Professional "not enough Kingdom Points" prompt (with buy flow) + viewers list.
+  const [insufficientFor, setInsufficientFor] = useState<null | "comment" | "reaction">(null);
+  const [viewersOpen, setViewersOpen] = useState(false);
+  const queryClient = useQueryClient();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -489,6 +497,12 @@ function LiveRoomPage() {
   const commentPrice = paid?.commentPrice ?? 0;
   const reactionPrice = paid?.reactionPrice ?? 0;
   const walletPoints = walletData?.wallet.kingdomPoints ?? 0;
+  const pointsRate = walletData?.pointsToCashRate ?? 100;
+  const cashBalance = walletData?.wallet.available ?? 0;
+
+  // The streamer (host, co-hosts, moderators) can see who is watching.
+  const canSeeViewers = Boolean(activeIdentity && (isHost || isMod || isCoHost));
+  const viewersQuery = useLiveViewers(streamId, viewersOpen && canSeeViewers && !isOver, asStaff);
 
   const {
     localStream,
@@ -573,7 +587,11 @@ function LiveRoomPage() {
   // real split screen once there's the host PLUS at least one co-host (2+).
   // Otherwise a single-tile "grid" (just the host) was rendering as a
   // half-screen split with the other half black for every plain viewer.
-  const hasCoHosts = allCoHostStreams.length > 0 || viewerGridTiles.length > 1;
+  // Broadcasters: any other live participant. Plain viewers: the grid already
+  // holds the host tile, so it only splits with 2+ tiles — a lone host is
+  // ALWAYS full screen (no half-black split, before or after joining).
+  const hasCoHosts =
+    isHost || isCoHost ? allCoHostStreams.length > 0 : viewerGridTiles.length > 1;
   // True on-screen headcount, normalized across roles: host/co-host arrays
   // exclude self (add 1 back for the self tile rendered separately below);
   // the viewer array already includes every tile (host + co-hosts), so it's
@@ -683,7 +701,18 @@ function LiveRoomPage() {
 
   useEffect(() => {
     if (chatHistory) {
-      setMessages(chatHistory.messages);
+      // MERGE instead of replace: a background refetch (window focus,
+      // reconnect) must never wipe comments that arrived live over the socket.
+      setMessages((prev) => {
+        const history = chatHistory.messages;
+        const last = history[history.length - 1];
+        const lastTs = last ? new Date(last.createdAt).getTime() : 0;
+        const seen = new Set(history.map((m) => m._id));
+        const newer = prev.filter(
+          (m) => !seen.has(m._id) && new Date(m.createdAt).getTime() >= lastTs,
+        );
+        return [...history, ...newer];
+      });
       setPinned(chatHistory.pinned ?? null);
     }
   }, [chatHistory]);
@@ -814,7 +843,11 @@ function LiveRoomPage() {
       message: string;
     }) => {
       if (p.streamId !== streamId) return;
-      if (p.reason === "insufficient") setInsufficientPoints(true);
+      if (p.reason === "insufficient") {
+        setInsufficientPoints(true);
+        setInsufficientFor(p.kind === "reaction" ? "reaction" : "comment");
+        void queryClient.invalidateQueries({ queryKey: ["wallet"] });
+      }
       if (p.kind === "reaction") {
         setReactionCount((n) => Math.max(0, n - 1));
       }
@@ -923,7 +956,7 @@ function LiveRoomPage() {
       socket.off("live:co-host:snapshot", onCoHostSnapshot);
       socket.off("live:co-host:left", onCoHostLeft);
     };
-  }, [streamId, navigate]);
+  }, [streamId, navigate, queryClient]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -947,9 +980,37 @@ function LiveRoomPage() {
     return !paidConfirmDontAsk || paidConfirmOpen !== null ? true : kind !== paidConfirmOpen;
   };
 
+  // Keep the displayed balance honest between server round-trips: deduct
+  // optimistically, then reconcile with the server shortly after.
+  function spendOptimistic(price: number) {
+    if (price <= 0) return;
+    queryClient.setQueryData(["wallet", "me"], (old: unknown) => {
+      const o = old as { wallet?: { kingdomPoints: number } } | undefined;
+      if (!o?.wallet) return old;
+      return {
+        ...o,
+        wallet: { ...o.wallet, kingdomPoints: Math.max(0, o.wallet.kingdomPoints - price) },
+      };
+    });
+    window.setTimeout(() => void queryClient.invalidateQueries({ queryKey: ["wallet"] }), 900);
+  }
+
+  // Only SEND when the viewer can afford it; otherwise explain and let them buy.
+  function ensureCanAfford(kind: "comment" | "reaction") {
+    if (!paidEnabled) return true;
+    const price = kind === "comment" ? commentPrice : reactionPrice;
+    if (price <= 0) return true;
+    if (walletData && walletPoints < price) {
+      setInsufficientFor(kind);
+      return false;
+    }
+    return true;
+  }
+
   function emitChat(body: string) {
     const socket = getLiveSocket();
     if (!socket) return;
+    if (paidEnabled) spendOptimistic(commentPrice);
     const idempotencyKey =
       typeof crypto !== "undefined" && "randomUUID" in crypto
         ? crypto.randomUUID()
@@ -969,6 +1030,7 @@ function LiveRoomPage() {
       toast.error("Sign in to join the live chat");
       return;
     }
+    if (!ensureCanAfford("comment")) return;
     // A5 — confirm-once dialog before the first paid comment of the stream.
     if (paidEnabled && commentPrice > 0 && shouldConfirmPaid("comment")) {
       setPaidConfirmOpen("comment");
@@ -985,6 +1047,7 @@ function LiveRoomPage() {
   function emitReaction() {
     const socket = getLiveSocket();
     if (!socket) return;
+    if (paidEnabled) spendOptimistic(reactionPrice);
     const idempotencyKey =
       typeof crypto !== "undefined" && "randomUUID" in crypto
         ? crypto.randomUUID()
@@ -1003,6 +1066,7 @@ function LiveRoomPage() {
       toast.error("Sign in to react to this live");
       return;
     }
+    if (!ensureCanAfford("reaction")) return;
     // A5 — confirm-once dialog before the first paid reaction of the stream.
     if (paidEnabled && reactionPrice > 0 && shouldConfirmPaid("reaction")) {
       setPaidConfirmOpen("reaction");
@@ -1175,6 +1239,11 @@ function LiveRoomPage() {
                 <DropdownMenuItem onClick={shareStream}>
                   <Share2 className="size-4" /> Share live
                 </DropdownMenuItem>
+                {canSeeViewers && (
+                  <DropdownMenuItem onClick={() => setViewersOpen(true)}>
+                    <Users className="size-4" /> Viewers ({formatCount(viewerCount)})
+                  </DropdownMenuItem>
+                )}
                 {isHost && (
                   <DropdownMenuItem onClick={() => setAddModOpen(true)}>
                     <UserPlus className="size-4" /> Add moderator
@@ -1276,9 +1345,15 @@ function LiveRoomPage() {
             <span className="shrink-0 rounded-md bg-danger px-2 py-0.5 text-xs font-extrabold tracking-wide text-white">
               LIVE
             </span>
-            <span className="flex shrink-0 items-center gap-1 rounded-md bg-black/50 px-2 py-0.5 text-xs font-bold text-white">
+            <button
+              type="button"
+              disabled={!canSeeViewers}
+              onClick={() => setViewersOpen(true)}
+              aria-label="Show viewers"
+              className="pointer-events-auto flex shrink-0 items-center gap-1 rounded-md bg-black/50 px-2 py-0.5 text-xs font-bold text-white"
+            >
               <Eye className="size-3.5" /> {formatCount(viewerCount)}
-            </span>
+            </button>
           </>
         )}
         {!isHost && !following && (
@@ -1454,9 +1529,15 @@ function LiveRoomPage() {
               <span className="flex items-center gap-1.5 rounded-lg bg-danger px-2.5 py-1 text-xs font-bold text-white animate-pulse">
                 <Radio className="size-3" /> LIVE
               </span>
-              <span className="flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1 text-xs font-bold text-white">
+              <button
+                type="button"
+                disabled={!canSeeViewers}
+                onClick={() => setViewersOpen(true)}
+                aria-label="Show viewers"
+                className="flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1 text-xs font-bold text-white enabled:press enabled:hover:bg-black/80"
+              >
                 <Users className="size-3" /> {formatCount(viewerCount)}
-              </span>
+              </button>
               <span className="flex items-center gap-1 rounded-lg bg-black/60 px-2.5 py-1 text-xs font-bold text-white">
                 <Heart className="size-3 fill-danger text-danger" /> {formatCount(reactionCount)}
               </span>
@@ -1852,7 +1933,7 @@ function LiveRoomPage() {
 
           {/* ── Comment input row ── */}
           {!isOver && (
-            <div className="flex items-center gap-1.5 border-t border-white/10 p-2.5 max-lg:border-t-0 max-lg:px-3 max-lg:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <div className="flex flex-wrap items-center gap-1.5 border-t border-white/10 p-2.5 max-lg:border-t-0 max-lg:px-3 max-lg:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
               {replyingTo && (
                 <div className="flex w-full items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-[11px] text-white/80">
                   <Reply className="size-3 shrink-0" />
@@ -1878,9 +1959,13 @@ function LiveRoomPage() {
                         {insufficientPoints ? (
                           <span className="text-danger">
                             Not enough points ({walletPoints}/{commentPrice}) —{" "}
-                            <Link to="/wallet" className="underline">
-                              Top up
-                            </Link>
+                            <button
+                              type="button"
+                              className="underline"
+                              onClick={() => setInsufficientFor("comment")}
+                            >
+                              Buy points
+                            </button>
                           </span>
                         ) : (
                           `${walletPoints} pts`
@@ -2032,14 +2117,54 @@ function LiveRoomPage() {
             {walletPoints < (paidConfirmOpen === "reaction" ? reactionPrice : commentPrice) && (
               <p className="text-xs text-danger">
                 Not enough Kingdom Points —{" "}
-                <Link to="/wallet" className="underline">
-                  top up your wallet
-                </Link>
+                <button
+                  type="button"
+                  className="underline"
+                  onClick={() => {
+                    const k = paidConfirmOpen;
+                    setPaidConfirmOpen(null);
+                    setInsufficientFor(k === "reaction" ? "reaction" : "comment");
+                  }}
+                >
+                  buy points
+                </button>
               </p>
             )}
           </div>
         </DialogContent>
       </Dialog>
+
+      <InsufficientPointsDialog
+        kind={insufficientFor}
+        onClose={() => setInsufficientFor(null)}
+        price={insufficientFor === "reaction" ? reactionPrice : commentPrice}
+        balance={walletPoints}
+        cash={cashBalance}
+        rate={pointsRate}
+      />
+      <ViewersDialog
+        open={viewersOpen && canSeeViewers}
+        onOpenChange={setViewersOpen}
+        loading={viewersQuery.isLoading}
+        viewers={viewersQuery.data?.viewers ?? []}
+        canModerate={canModerate}
+        onMute={(v) =>
+          muteViewer.mutate(v._id, {
+            onSuccess: (r) => {
+              toast.success(r.muted ? `Muted @${v.username}` : `Unmuted @${v.username}`);
+              void viewersQuery.refetch();
+            },
+          })
+        }
+        onBan={(v) =>
+          banViewer.mutate(v._id, {
+            onSuccess: (r) => {
+              toast.success(r.banned ? `Banned @${v.username}` : `Unbanned @${v.username}`);
+              void viewersQuery.refetch();
+            },
+          })
+        }
+      />
 
       {/* End-live confirmation (mobile X button) */}
       <Dialog open={endConfirmOpen} onOpenChange={setEndConfirmOpen}>
@@ -2139,5 +2264,199 @@ function HostEarnings({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Shown INSTEAD of sending when a viewer can't afford a paid like/comment on a
+ * moderator's live: explains the shortfall and lets them buy Kingdom Points
+ * (from their cash wallet) without leaving the stream.
+ */
+function InsufficientPointsDialog({
+  kind,
+  onClose,
+  price,
+  balance,
+  cash,
+  rate,
+}: {
+  kind: "comment" | "reaction" | null;
+  onClose: () => void;
+  price: number;
+  balance: number;
+  cash: number;
+  rate: number;
+}) {
+  const buy = useBuyPoints();
+  const packs = [100, 500, 1000];
+  const [rwf, setRwf] = useState<number>(100);
+  const shortfall = Math.max(0, price - balance);
+  const points = Math.floor(rwf * rate);
+  const enoughCash = cash >= rwf;
+  const noun = kind === "reaction" ? "like" : "comment";
+
+  return (
+    <Dialog open={kind !== null} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-[400px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Coins className="size-5 text-amber-500" /> Not enough Kingdom Points
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 px-1 text-sm">
+          <p className="text-muted-foreground">
+            Each {noun} on this live costs <b className="text-foreground">{price} pts</b>. You have{" "}
+            <b className="text-foreground">{formatCount(balance)} pts</b>
+            {shortfall > 0 && (
+              <>
+                {" "}
+                — you need <b className="text-foreground">{formatCount(shortfall)} more</b>
+              </>
+            )}
+            .
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {packs.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setRwf(p)}
+                aria-pressed={rwf === p}
+                className={cn(
+                  "press rounded-xl border p-2.5 text-center",
+                  rwf === p
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-border text-muted-foreground hover:bg-muted",
+                )}
+              >
+                <span className="block text-sm font-extrabold">{formatCount(p * rate)} pts</span>
+                <span className="block text-[11px]">{formatCount(p)} RWF</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Paid from your wallet balance:{" "}
+            <b className="text-foreground">{formatCount(cash)} RWF</b>.
+          </p>
+          {!enoughCash && (
+            <p className="text-xs text-danger">
+              Your wallet balance is too low for this pack — deposit with MTN MoMo first.
+            </p>
+          )}
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={onClose}>
+              Not now
+            </Button>
+            {enoughCash ? (
+              <Button
+                variant="brand"
+                className="flex-1"
+                disabled={buy.isPending}
+                onClick={() =>
+                  buy.mutate(points, {
+                    onSuccess: (r) => {
+                      toast.success(`Added ${formatCount(r.purchased)} Kingdom Points`);
+                      onClose();
+                    },
+                    onError: (err: Error) => toast.error(err.message || "Couldn't buy points"),
+                  })
+                }
+              >
+                {buy.isPending ? "Buying…" : `Buy ${formatCount(points)} pts`}
+              </Button>
+            ) : (
+              <Button variant="brand" className="flex-1" asChild>
+                <Link to="/wallet">Deposit funds</Link>
+              </Button>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Who is watching right now — visible to the host, co-hosts and moderators. */
+function ViewersDialog({
+  open,
+  onOpenChange,
+  loading,
+  viewers,
+  canModerate,
+  onMute,
+  onBan,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  loading: boolean;
+  viewers: LiveViewerEntry[];
+  canModerate: boolean;
+  onMute: (v: LiveViewerEntry) => void;
+  onBan: (v: LiveViewerEntry) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[400px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Users className="size-5" /> Viewers ({viewers.length})
+          </DialogTitle>
+        </DialogHeader>
+        <div className="max-h-[60vh] space-y-1 overflow-y-auto px-1">
+          {loading && <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>}
+          {!loading && viewers.length === 0 && (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              No one else is watching yet.
+            </p>
+          )}
+          {viewers.map((v) => (
+            <div key={v._id} className="flex items-center gap-2.5 rounded-xl p-2 hover:bg-muted">
+              <GAvatar
+                user={toDisplayUser({
+                  _id: v._id,
+                  name: v.name,
+                  username: v.username,
+                  avatarHue: v.avatarHue ?? 0,
+                  avatarUrl: v.avatarUrl ?? null,
+                  verified: Boolean(v.verified),
+                  isCreator: Boolean(v.isCreator),
+                })}
+                size="sm"
+              />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{v.name}</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  @{v.username}
+                  {v.isModerator && " · Moderator"}
+                  {v.isCoHost && " · Co-host"}
+                  {v.muted && " · Muted"}
+                </p>
+              </div>
+              {canModerate && !v.isModerator && (
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    aria-label={v.muted ? "Unmute viewer" : "Mute viewer"}
+                    onClick={() => onMute(v)}
+                  >
+                    <ShieldOff className="size-4" />
+                  </Button>
+                  <Button
+                    size="icon-sm"
+                    variant="ghost"
+                    className="text-danger"
+                    aria-label="Ban viewer"
+                    onClick={() => onBan(v)}
+                  >
+                    <ShieldBan className="size-4" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

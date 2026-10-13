@@ -48,6 +48,20 @@ export function useExplore() {
   });
 }
 
+export function useTrending() {
+  const { user } = useAuth();
+  return useInfiniteQuery({
+    queryKey: ["posts", "trending", user?.id],
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+      api.get<PostsPage>(
+        `/recommendations/trending?limit=12${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
+      ),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.nextCursor ?? undefined,
+    refetchInterval: 60_000,
+  });
+}
+
 export function useReelsFeed() {
   const { user } = useAuth();
   return useInfiniteQuery({

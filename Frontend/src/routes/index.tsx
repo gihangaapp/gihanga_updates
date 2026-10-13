@@ -9,7 +9,7 @@ import { PostCard } from "@/components/feed/PostCard";
 import { PostSkeleton } from "@/components/feed/PostSkeleton";
 import { FeedAdCard } from "@/components/ads/FeedAdCard";
 import { Button } from "@/components/ui/button";
-import { useFeed, useExplore } from "@/hooks/use-posts";
+import { useFeed, useExplore, useTrending } from "@/hooks/use-posts";
 import { useFeedAds } from "@/hooks/use-ads";
 import { useTrendingTags } from "@/hooks/use-search";
 import { useLiveStreams } from "@/hooks/use-live";
@@ -74,7 +74,7 @@ function MobileDiscovery() {
   return (
     <div className="mb-4 space-y-3 xl:hidden">
       {tags.length > 0 && (
-        <div className="-mx-3 flex items-center gap-2 overflow-x-auto px-3 no-scrollbar sm:-mx-5 sm:px-5">
+        <div className="-mx-3 flex items-center gap-2 overflow-x-auto overscroll-x-contain px-3 no-scrollbar [touch-action:pan-x_pan-y] sm:-mx-5 sm:px-5">
           <Flame className="size-4 shrink-0 text-primary" />
           {tags.map((t) => (
             <Link
@@ -89,7 +89,7 @@ function MobileDiscovery() {
         </div>
       )}
 
-      <div className="-mx-3 flex snap-x snap-mandatory gap-3 overflow-x-auto px-3 pb-1 no-scrollbar sm:-mx-5 sm:px-5">
+      <div className="-mx-3 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain scroll-px-3 px-3 pb-1 no-scrollbar [touch-action:pan-x_pan-y] sm:-mx-5 sm:px-5">
         {liveStreams.length > 0 && (
           <Link
             to="/live"
@@ -149,12 +149,18 @@ function MobileDiscovery() {
 function HomeFeed() {
   const [tab, setTab] = useState<(typeof tabs)[number]["id"]>("foryou");
   const forYou = useFeed();
+  const trending = useTrending();
   const explore = useExplore();
   const { data: feedAds = [] } = useFeedAds();
 
-  const active = tab === "foryou" ? forYou : explore;
+  // Trending uses the dedicated ranked trending feed; if it has nothing yet
+  // (fresh platform) fall back to the explore feed ordered by engagement.
+  const trendingEmpty =
+    !trending.isLoading && (trending.data?.pages.flatMap((p) => p.posts).length ?? 0) === 0;
+  const trendingSource = trendingEmpty ? explore : trending;
+  const active = tab === "foryou" ? forYou : trendingSource;
   const posts = (active.data?.pages.flatMap((p) => p.posts) ?? []).slice();
-  if (tab === "trending") posts.sort((a, b) => b.likesCount - a.likesCount);
+  if (tab === "trending" && trendingEmpty) posts.sort((a, b) => b.likesCount - a.likesCount);
 
   const isFollowingAnyone = forYou.data?.pages[0]?.isFollowingAnyone ?? true;
 
@@ -163,7 +169,7 @@ function HomeFeed() {
       <div className="mx-auto w-full max-w-[620px]">
         <h1 className="sr-only">Gihanga Updates home feed</h1>
 
-        <div className="glass sticky top-16 z-30 -mx-3 mb-4 flex gap-1 rounded-none border-b px-3 py-2 sm:-mx-5 sm:px-5 lg:static lg:mx-0 lg:rounded-2xl lg:border lg:px-2">
+        <div className="glass no-scrollbar sticky top-16 z-30 -mx-3 mb-4 flex snap-x gap-1 overflow-x-auto overscroll-x-contain rounded-none border-b px-3 py-2 [touch-action:pan-x_pan-y] sm:-mx-5 sm:px-5 lg:static lg:mx-0 lg:rounded-2xl lg:border lg:px-2">
           {tabs.map((t) => {
             const isActive = t.id === tab;
             return (
@@ -173,7 +179,7 @@ function HomeFeed() {
                 onClick={() => setTab(t.id)}
                 aria-current={isActive}
                 className={cn(
-                  "press relative flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold",
+                  "press relative flex min-w-[140px] flex-1 shrink-0 snap-start items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold",
                   isActive ? "text-primary" : "text-muted-foreground hover:bg-muted",
                 )}
               >

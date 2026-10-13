@@ -156,11 +156,19 @@ export function ConnectionQualityBanner({
       )}
     >
       {offline ? <WifiOff className="size-3.5" /> : <Wifi className="size-3.5 animate-pulse" />}
-      {offline
-        ? "You're offline — reconnecting…"
-        : variant === "viewer"
-          ? "Poor connection — try moving to a new location or switching networks."
-          : "Your connection is weak — viewers may see lag."}
+      {offline ? (
+        "You're offline — reconnecting…"
+      ) : (
+        <>
+          {/* Mobile: just "Poor connection"; larger screens keep the full hint. */}
+          <span className="lg:hidden">Poor connection</span>
+          <span className="max-lg:hidden">
+            {variant === "viewer"
+              ? "Poor connection — try moving to a new location or switching networks."
+              : "Your connection is weak — viewers may see lag."}
+          </span>
+        </>
+      )}
     </div>
   );
 }

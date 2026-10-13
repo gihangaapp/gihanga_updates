@@ -134,19 +134,19 @@ export function ReelCreator({ onClose }: ReelCreatorProps) {
   if (!user) return null;
 
   return (
-    <div className="flex flex-col gap-5 p-5 max-w-[720px] mx-auto w-full">
+    <div className="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-3 sm:gap-5 sm:p-5">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border pb-4">
-        <div className="flex items-center gap-2">
-          <div className="grid size-9 place-items-center rounded-xl bg-accent/20 text-accent">
+      <div className="flex items-center justify-between gap-2 border-b border-border pb-3 sm:pb-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent/20 text-accent">
             <Video className="size-5" />
           </div>
-          <div>
-            <h2 className="font-display text-lg font-extrabold tracking-tight">Create Reel</h2>
-            <p className="text-xs text-muted-foreground">Share short videos up to 2 minutes</p>
+          <div className="min-w-0">
+            <h2 className="truncate font-display text-lg font-extrabold tracking-tight">Create Reel</h2>
+            <p className="hidden truncate text-xs text-muted-foreground sm:block">Share short videos up to 2 minutes</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           {videoFile && (
             <Button variant="ghost" size="sm" onClick={handleSaveDraft}>
               Save Draft

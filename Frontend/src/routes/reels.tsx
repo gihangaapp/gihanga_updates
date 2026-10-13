@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-r
 import {
   Bookmark,
   Camera,
+  ArrowLeft,
   ChevronDown,
   ChevronUp,
   Heart,
@@ -209,7 +210,7 @@ function ReelCard({
   return (
     <article
       data-reel-id={reel._id}
-      className="relative flex h-full w-full shrink-0 flex-col justify-center overflow-hidden rounded-3xl bg-black select-none shadow-float"
+      className="relative flex h-full w-full shrink-0 flex-col justify-center overflow-hidden rounded-3xl bg-black select-none shadow-float max-lg:rounded-none max-lg:shadow-none"
     >
       {/* B5.8 — snap points live ONLY on the direct wrapper children of the
           scroller (see below). Declaring a second, padded snap area here made
@@ -300,10 +301,20 @@ function ReelCard({
       <span className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
 
       {/* Top Header Overlay matching screenshot (Reels title at top-left, Camera & Mute icons at top-right) */}
-      <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between p-4 bg-gradient-to-b from-black/70 via-black/30 to-transparent">
-        <h2 className="font-display text-xl font-extrabold text-white drop-shadow-md tracking-tight">
-          Reels
-        </h2>
+      <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between p-4 max-lg:pt-[max(1rem,env(safe-area-inset-top))] bg-gradient-to-b from-black/70 via-black/30 to-transparent">
+        <div className="flex items-center gap-2">
+          {/* Mobile has no top/bottom bars on this page — keep a way out. */}
+          <Link
+            to="/"
+            aria-label="Back to home"
+            className="press grid size-9 place-items-center rounded-full bg-black/40 text-white backdrop-blur-md lg:hidden"
+          >
+            <ArrowLeft className="size-5" />
+          </Link>
+          <h2 className="font-display text-xl font-extrabold text-white drop-shadow-md tracking-tight">
+            Reels
+          </h2>
+        </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -325,7 +336,7 @@ function ReelCard({
       </div>
 
       {/* Right Side Interaction Rail matching screenshot */}
-      <div className="absolute right-3 bottom-16 z-20 flex flex-col items-center gap-5 text-white">
+      <div className="absolute right-3 bottom-16 max-lg:bottom-[max(2.5rem,env(safe-area-inset-bottom))] z-20 flex flex-col items-center gap-5 text-white">
         {/* Like (Heart Icon + Count below) */}
         <button
           type="button"
@@ -399,7 +410,7 @@ function ReelCard({
       </div>
 
       {/* Bottom Creator & Audio Information Overlay matching screenshot */}
-      <div className="absolute inset-x-0 bottom-0 z-20 p-5 pr-20 text-white space-y-2">
+      <div className="absolute inset-x-0 bottom-0 z-20 p-5 pr-20 max-lg:pb-[max(1.25rem,env(safe-area-inset-bottom))] text-white space-y-2">
         {/* Audio Track Tag Badge Pill */}
         <div className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-extrabold text-white backdrop-blur-md border border-white/20">
           <Music2 className="size-3.5" />
@@ -846,14 +857,13 @@ function ReelsPage() {
   }, []);
 
   return (
-    <AppShell>
+    <AppShell immersiveMobile>
       {/* B5 — ONE scroll container with a definite height (dvh, not vh: the
           mobile-chrome-safe unit), mandatory Y snap, contained overscroll and
           NO gap between cards (padding lives inside each card) so every snap
           point aligns pixel-perfectly. */}
       <div
-        className="mx-auto flex w-full max-w-[460px] flex-col"
-        style={{ height: "calc(100dvh - 9rem)" }}
+        className="mx-auto flex h-[calc(100dvh-9rem)] w-full max-w-[460px] flex-col max-lg:fixed max-lg:inset-0 max-lg:z-40 max-lg:h-dvh max-lg:max-w-none max-lg:bg-black"
       >
         <div className="relative min-h-0 flex-1">
           {/* Sticky arrows — always visible while scrolling, on desktop AND
@@ -882,31 +892,6 @@ function ReelsPage() {
               </button>
             </div>
           )}
-          {/* Mobile/tablet floating arrows (touch users get snap, arrows are
-              a bonus for precision). */}
-          {reels.length > 1 && (
-            <div className="absolute right-3 top-1/2 z-30 flex -translate-y-1/2 flex-col gap-2 lg:hidden">
-              <button
-                type="button"
-                disabled={activeReelIndex === 0}
-                onClick={() => goToReel(activeReelIndex - 1)}
-                className="press grid size-10 place-items-center rounded-full bg-black/40 text-white backdrop-blur-md disabled:opacity-25 focus-visible:ring-2 focus-visible:ring-white"
-                aria-label="Previous reel"
-              >
-                <ChevronUp className="size-5" />
-              </button>
-              <button
-                type="button"
-                disabled={activeReelIndex === reels.length - 1}
-                onClick={() => goToReel(activeReelIndex + 1)}
-                className="press grid size-10 place-items-center rounded-full bg-black/40 text-white backdrop-blur-md disabled:opacity-25 focus-visible:ring-2 focus-visible:ring-white"
-                aria-label="Next reel"
-              >
-                <ChevronDown className="size-5" />
-              </button>
-            </div>
-          )}
-
           {/* The scroller itself */}
           <div
             ref={containerRef}
@@ -932,7 +917,7 @@ function ReelsPage() {
             {reels.map((r, i) => (
               <div
                 key={r._id}
-                className="h-full w-full shrink-0 p-1 pb-2"
+                className="h-full w-full shrink-0 p-1 pb-2 max-lg:p-0"
                 style={{ scrollSnapAlign: "start", scrollSnapStop: "always" }}
               >
                 {/* B5.8 — snap points are declared HERE only (direct children

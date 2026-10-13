@@ -55,10 +55,10 @@ export function CreateHost() {
   ];
 
   const content = (
-    <div className="flex flex-col min-h-0 h-full w-full bg-background">
+    <div className="flex h-full min-h-0 w-full max-w-full flex-col overflow-hidden bg-background">
       {/* Mode Selector Tab Bar */}
       {mode !== "story" && (
-        <div className="flex shrink-0 items-center justify-center gap-1 border-b border-border bg-surface p-2">
+        <div className="flex shrink-0 items-center justify-center gap-1 border-b border-border bg-surface p-1.5 sm:p-2">
           {modeTabs.map((t) => {
             const Icon = t.icon;
             const isActive = mode === t.id;
@@ -68,7 +68,7 @@ export function CreateHost() {
                 type="button"
                 onClick={() => setMode(t.id)}
                 className={cn(
-                  "press flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all",
+                  "press flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-all sm:flex-none sm:px-4",
                   isActive
                     ? "bg-primary-soft text-primary shadow-sm"
                     : "text-muted-foreground hover:bg-muted",
@@ -87,7 +87,7 @@ export function CreateHost() {
       <div
         className={cn(
           "flex-1 min-h-0",
-          mode === "story" ? "overflow-hidden" : "overflow-y-auto no-scrollbar",
+          mode === "story" ? "overflow-hidden" : "overflow-x-hidden overflow-y-auto no-scrollbar",
         )}
       >
         {mode === "post" && <PostCreator onClose={closeCreate} />}
@@ -104,7 +104,7 @@ export function CreateHost() {
             creator; the story mode is full-bleed and safe-area aware. */}
         <DrawerContent
           className={cn(
-            "p-0 overflow-hidden border-none",
+            "w-full max-w-full p-0 overflow-hidden border-none",
             mode === "story"
               ? "h-[100dvh] max-h-[100dvh] rounded-none pb-[env(safe-area-inset-bottom)]"
               : "h-[96dvh] max-h-[96dvh] rounded-t-3xl",

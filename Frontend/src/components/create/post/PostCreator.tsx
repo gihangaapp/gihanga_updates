@@ -199,17 +199,17 @@ export function PostCreator({ onClose }: PostCreatorProps) {
     <div className="flex h-full min-h-0 flex-col max-w-[720px] mx-auto w-full overscroll-contain">
       {/* Header — fixed; the body below scrolls so the footer stays reachable
           on short viewports (B3: header / body / footer structure). */}
-      <div className="flex shrink-0 items-center justify-between border-b border-border p-4 pb-3">
-        <div className="flex items-center gap-2">
-          <div className="grid size-9 place-items-center rounded-xl bg-primary-soft text-primary">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border p-3 sm:p-4 sm:pb-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
             <Sparkles className="size-5" />
           </div>
-          <div>
-            <h2 className="font-display text-lg font-extrabold tracking-tight">Create Post</h2>
-            <p className="text-xs text-muted-foreground">Share photos, videos or updates</p>
+          <div className="min-w-0">
+            <h2 className="truncate font-display text-lg font-extrabold tracking-tight">Create Post</h2>
+            <p className="hidden truncate text-xs text-muted-foreground sm:block">Share photos, videos or updates</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           {hasUnsavedContent && (
             <Button variant="ghost" size="sm" onClick={handleSaveDraft}>
               Save Draft
@@ -227,7 +227,7 @@ export function PostCreator({ onClose }: PostCreatorProps) {
 
       {/* Main Content Area — flex-1 min-h-0 so IT scrolls (not the dialog),
           with the footer always visible and safe-area padded below. */}
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 lg:p-5">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3 sm:p-4 lg:p-5">
         {step === "preview" ? (
           <PostPreview
             user={user}

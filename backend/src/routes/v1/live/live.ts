@@ -226,6 +226,44 @@ router.get("/", optionalAuth, async (_req: AuthenticatedRequest, res: Response) 
 });
 
 // GET /api/v1/live/:id — a single stream's detail (live or ended — stats persist after ending)
+// GET /api/v1/live/:id/viewers — who is watching right now. Host, moderators and
+// co-hosts only. Built from the live Socket.IO room so it is always current.
+router.get("/:id/viewers", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const stream = await LiveStream.findById(req.params.id).select("host moderators coHosts mutedUsers status");
+    if (!stream) return res.status(404).json({ error: "Stream not found" });
+    const uid = req.user!.userId;
+    const allowed =
+      String(stream.host) === uid ||
+      stream.moderators.some((m) => String(m) === uid) ||
+      stream.coHosts.some((c) => String(c) === uid);
+    if (!allowed) return res.status(403).json({ error: "Only the host, a co-host or a moderator can see the viewers list" });
+
+    const io = getIO();
+    const sockets = io ? await io.in(`live:${String(stream._id)}`).fetchSockets() : [];
+    const ids = Array.from(
+      new Set(sockets.map((s) => String(s.data?.userId ?? "")).filter((id) => id && id !== String(stream.host))),
+    );
+    const users = ids.length
+      ? await User.find({ _id: { $in: ids } }).select("name username avatarHue avatarUrl isCreator verified").lean()
+      : [];
+    const muted = new Set(stream.mutedUsers.map((m) => String(m)));
+    const mods = new Set(stream.moderators.map((m) => String(m)));
+    const coHosts = new Set(stream.coHosts.map((c) => String(c)));
+    const viewers = users
+      .map((u) => ({
+        ...u,
+        muted: muted.has(String(u._id)),
+        isModerator: mods.has(String(u._id)),
+        isCoHost: coHosts.has(String(u._id)),
+      }))
+      .sort((a, b) => String(a.username).localeCompare(String(b.username)));
+    return res.json({ viewers, total: viewers.length });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to load viewers", details: error.message });
+  }
+});
+
 router.get("/:id", optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const stream = await LiveStream.findById(req.params.id)

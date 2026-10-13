@@ -135,7 +135,42 @@ export function useMyWallet() {
     queryFn: () =>
       api.get<{
         wallet: { available: number; pending: number; kingdomPoints: number; frozen: boolean };
+        pointsToCashRate?: number;
       }>("/wallet/me"),
+  });
+}
+
+/** Buy Kingdom Points with the cash wallet balance (same rate as converting back). */
+export function useBuyPoints() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (points: number) =>
+      api.post<{ purchased: number; cost: number }>("/wallet/buy-points", { points }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["wallet"] }),
+  });
+}
+
+export interface LiveViewerEntry {
+  _id: string;
+  name: string;
+  username: string;
+  avatarHue?: number;
+  avatarUrl?: string;
+  isCreator?: boolean;
+  verified?: boolean;
+  muted: boolean;
+  isModerator: boolean;
+  isCoHost: boolean;
+}
+
+/** Current viewers of a live (host / co-host / moderator only). */
+export function useLiveViewers(streamId: string, enabled: boolean, asStaff = false) {
+  return useQuery({
+    queryKey: ["live", "viewers", streamId],
+    queryFn: () =>
+      api.get<{ viewers: LiveViewerEntry[]; total: number }>(`/live/${streamId}/viewers`, asStaff),
+    enabled: Boolean(streamId) && enabled,
+    refetchInterval: enabled ? 8_000 : false,
   });
 }
 

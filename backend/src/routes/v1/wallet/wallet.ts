@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import mongoose from "mongoose";
 import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/rbac";
-import { getWalletSummary, applyLedgerEntry } from "../../../lib/wallet";
+import { getWalletSummary, applyLedgerEntry, debitWalletAtomic } from "../../../lib/wallet";
 import { getPointsToCashRate } from "../../../lib/rewards";
 import { Transaction } from "../../../models/Transaction";
 import { Wallet } from "../../../models/Wallet";
@@ -308,6 +308,56 @@ router.post("/convert-points", authenticateConsumer, async (req: AuthenticatedRe
     return res.json({ wallet: updated, converted: cashAmount });
   } catch (error: any) {
     return res.status(500).json({ error: "Conversion failed", details: error.message });
+  }
+});
+
+// POST /api/v1/wallet/buy-points — cash balance → Kingdom Points, at the same admin-set rate
+// used by /convert-points (so buying and converting back is always value-neutral).
+router.post("/buy-points", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const points = Math.floor(Number(req.body?.points));
+    if (!Number.isFinite(points) || points <= 0) {
+      return res.status(400).json({ error: "Enter a valid number of points" });
+    }
+    if (points > 1_000_000) return res.status(400).json({ error: "That is more points than can be bought at once" });
+
+    const rate = await getPointsToCashRate();
+    const cost = Math.max(1, Math.ceil(points / rate));
+
+    // Atomic, race-free debit of the cash balance: refuses to overdraft.
+    const debit = await debitWalletAtomic({
+      userId: req.user!.userId,
+      amount: cost,
+      kind: "fee",
+      label: `Bought ${points} Kingdom Points`,
+      toBalance: "available",
+    });
+    if (!debit.ok) {
+      if (debit.reason === "frozen") return res.status(403).json({ error: "Your wallet is frozen. Contact support." });
+      if (debit.reason === "not-found") return res.status(404).json({ error: "Wallet not found" });
+      return res.status(400).json({
+        error: "Not enough cash balance. Deposit with MTN MoMo first, then buy points.",
+        code: "insufficient-cash",
+        required: cost,
+      });
+    }
+
+    try {
+      const { wallet } = await applyLedgerEntry({
+        userId: req.user!.userId,
+        kind: "bonus",
+        amount: points,
+        label: `Purchased ${points} Kingdom Points (${cost} RWF)`,
+        toBalance: "kingdomPoints",
+      });
+      return res.json({ wallet, purchased: points, cost });
+    } catch (creditError) {
+      // Crediting failed after the cash was taken — give the cash back.
+      await Wallet.updateOne({ user: req.user!.userId }, { $inc: { available: cost } }).catch(() => {});
+      throw creditError;
+    }
+  } catch (error: any) {
+    return res.status(500).json({ error: "Purchase failed", details: error.message });
   }
 });
 
