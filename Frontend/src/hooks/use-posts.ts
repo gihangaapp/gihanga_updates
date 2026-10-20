@@ -142,7 +142,17 @@ export function useCreatePost() {
             kind?: "photo" | "video" | undefined;
           }[]
         | undefined;
-    }) => api.post<{ post: FeedPost }>("/posts", input),
+    }) =>
+      api.post<{
+        post: FeedPost;
+        /** Present when the content-safety pipeline is active. */
+        moderation?: {
+          status: "processing" | "pending_review" | "approved" | "rejected" | "failed";
+          userMessage?: string;
+        };
+        processing?: boolean;
+        duplicate?: boolean;
+      }>("/posts", input),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["posts"] });
       queryClient.invalidateQueries({ queryKey: ["recommendations"] });
@@ -283,4 +293,41 @@ function removePostEverywhere(queryClient: ReturnType<typeof useQueryClient>, po
       });
     }
   }
+}
+
+// ─── Content-safety support ─────────────────────────────────────────────────
+
+/**
+ * Re-runs moderation for the user's own post that ended up "failed" (e.g.
+ * after a provider outage). Rate-limited server-side.
+ */
+export function useRetryModeration() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (postId: string) =>
+      api.post<{ post: FeedPost; moderation: { status: string } }>(
+        `/posts/${encodeURIComponent(postId)}/retry-moderation`,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+    },
+  });
+}
+
+/**
+ * The author's own posts across ALL moderation states (processing /
+ * pending_review / rejected / failed / published) — powers the profile grid
+ * status chips and the post-publish polling loop.
+ */
+export function useMyPosts(filter?: "processing" | "pending_review" | "rejected" | "failed") {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["posts", "mine", user?.id, filter ?? "all"],
+    queryFn: () =>
+      api.get<{ posts: FeedPost[] }>(
+        `/posts/mine${filter ? `?moderation=${filter}` : ""}`,
+      ),
+    enabled: Boolean(user),
+  });
 }

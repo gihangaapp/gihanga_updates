@@ -12,12 +12,15 @@
     "lint": "eslint src test",
     "test:payment": "tsx --test test/payment-regression.test.ts",
     "test:live": "tsx --test test/live-regression.test.ts test/idempotency.test.ts",
-    "test": "tsx --test test/payment-regression.test.ts test/live-regression.test.ts test/idempotency.test.ts test/achievements.test.ts",
+    "test": "tsx --test test/payment-regression.test.ts test/live-regression.test.ts test/idempotency.test.ts test/achievements.test.ts test/moderation-policy.test.ts test/moderation-config.test.ts test/moderation-text.test.ts test/moderation-video.test.ts test/moderation-sanitize.test.ts test/moderation-vision.test.ts",
     "migrate:post-media": "tsx src/scripts/migrate-post-media-meta.ts",
     "seed:achievements": "tsx src/scripts/seed-achievements.ts",
-    "test:achievements": "tsx --test test/achievements.test.ts"
+    "test:achievements": "tsx --test test/achievements.test.ts",
+    "test:moderation": "tsx --test test/moderation-policy.test.ts test/moderation-config.test.ts test/moderation-text.test.ts test/moderation-video.test.ts test/moderation-sanitize.test.ts test/moderation-vision.test.ts",
+    "migrate:moderation": "tsx src/scripts/migrate-moderation-backfill.ts"
   },
   "dependencies": {
+    "@google-cloud/vision": "^4.3.3",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^2.5.1",
     "cors": "^2.8.5",
@@ -33,6 +36,7 @@
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.15",
+    "openai": "^4.104.0",
     "resend": "^6.22.0",
     "socket.io": "^4.8.1",
     "uuid": "^11.0.3"
@@ -47,9 +51,9 @@
     "@types/node": "^22.10.0",
     "@types/nodemailer": "^6.4.17",
     "@types/uuid": "^10.0.0",
+    "eslint": "^9.30.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
-    "eslint": "^9.30.0",
     "typescript-eslint": "^8.35.0"
   }
 }

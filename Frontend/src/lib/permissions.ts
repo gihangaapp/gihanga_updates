@@ -6,6 +6,11 @@ export type Permission =
   | "moderation.queue.escalate"
   | "moderation.rules.view"
   | "moderation.rules.edit"
+  | "moderation.assessments.view"
+  | "moderation.assessments.action"
+  | "moderation.appeals.view"
+  | "moderation.appeals.action"
+  | "moderation.stats.view"
   | "live.forceEnd"
   | "live.alerts.manage"
   | "audit.viewOwn"
@@ -44,6 +49,10 @@ const MODERATOR_PERMISSIONS: Set<Permission> = new Set([
   "moderation.queue.action",
   "moderation.queue.escalate",
   "moderation.rules.view",
+  "moderation.assessments.view",
+  "moderation.assessments.action",
+  "moderation.appeals.view",
+  "moderation.stats.view",
   "live.forceEnd",
   "audit.viewOwn",
   "accounts.view",
@@ -53,6 +62,7 @@ const MODERATOR_PERMISSIONS: Set<Permission> = new Set([
 const ADMIN_PERMISSIONS: Set<Permission> = new Set([
   ...MODERATOR_PERMISSIONS,
   "moderation.rules.edit",
+  "moderation.appeals.action",
   "live.alerts.manage",
   "audit.viewAll",
   "accounts.verify",

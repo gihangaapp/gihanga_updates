@@ -2,7 +2,7 @@ import { o as __toESM } from "../_runtime.mjs";
 import { r as cn } from "./button-CJVUuoS8.mjs";
 import { u as require_react } from "../_libs/@floating-ui/react-dom+[...].mjs";
 import { P as require_jsx_runtime } from "../_libs/@radix-ui/react-alert-dialog+[...].mjs";
-import { $t as EyeOff, Qt as Eye } from "../_libs/lucide-react.mjs";
+import { en as Eye, tn as EyeOff } from "../_libs/lucide-react.mjs";
 import { c as strengthLabels, s as passwordScore } from "./auth-context-Duh7Mq6E.mjs";
 //#region node_modules/.nitro/vite/services/ssr/assets/AuthFields-CwIm0Cxd.js
 var import_react = /* @__PURE__ */ __toESM(require_react());

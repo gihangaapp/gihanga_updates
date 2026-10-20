@@ -1,8 +1,24 @@
 node_modules
 dist
 uploads
+uploads-quarantine
 .env
 .env.local
 .env.*.local
+.env.production
+.env.staging
 *.log
 .DS_Store
+
+# ── Cloud credentials: NEVER commit (service-account keys, key files) ──
+# Production credentials live in Render Secret Files, outside the repo.
+# (Patterns are specific on purpose so package.json / tsconfig.json / lockfiles are never ignored.)
+gihanga-vision-moderation*.json
+gihanga-updates-*.json
+*-service-account*.json
+*service_account*.json
+service-account*.json
+gcp-*.json
+google-credentials*.json
+credentials.json
+secrets/

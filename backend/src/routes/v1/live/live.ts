@@ -74,6 +74,12 @@ router.patch("/:id/settings", authenticateConsumerOrStaff, async (req: Authentic
 });
 
 // POST /api/v1/live/start — a creator, moderator, admin, or superadmin goes live
+//
+// CONTENT SAFETY: the stream title/description are moderated BEFORE the
+// stream is created. Clearly prohibited titles block the start; uncertain
+// titles still allow going live but the stream is flagged for staff review
+// (a live stream cannot wait on a human — the enforcement architecture in
+// lib/liveSignaling.ts handles violations detected mid-stream).
 router.post("/start", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const user = await User.findById(req.user!.userId);
@@ -89,6 +95,25 @@ router.post("/start", authenticateConsumerOrStaff, async (req: AuthenticatedRequ
 
     const { title, description, subsOnly, giftsEnabled, paidInteractions } = req.body;
     if (!title?.trim()) return res.status(400).json({ error: "Give your stream a title" });
+
+    // ── Moderation: title + description ──────────────────────────────────
+    const { moderationActive } = await import("../../../middleware/upload");
+    const { assessLiveTitle } = await import("../../../services/moderation/contentModerationService");
+    if (moderationActive()) {
+      const titleResult = await assessLiveTitle(title.trim(), description?.trim(), String(user._id)).catch(() => null);
+      if (titleResult?.decision === "REJECTED") {
+        return res.status(422).json({
+          error: titleResult.userMessage || "This stream title could not be used.",
+        });
+      }
+      if (titleResult?.decision === "PENDING_REVIEW") {
+        // Staff attention, but the stream may start — live enforcement
+        // (chat moderation, violation counter, force-end) protects viewers.
+        await notifyStaff("all", `A live stream title needs review (host @${user.username}).`, {
+          title: title.slice(0, 120),
+        }).catch(() => undefined);
+      }
+    }
 
     // A4 — server-enforced duration cap: the deadline is stored on the stream
     // and the sweeper is the reader/enforcer. Returned in every stream payload

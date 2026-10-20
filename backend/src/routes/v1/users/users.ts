@@ -3,6 +3,8 @@ import { User } from "../../../models/User";
 import { Follow } from "../../../models/Follow";
 import { optionalAuth } from "../../../middleware/optionalAuth";
 import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/rbac";
+import { moderationActive } from "../../../middleware/upload";
+import { assessProfileText } from "../../../services/moderation/contentModerationService";
 
 const router = Router();
 const PUBLIC_FIELDS =
@@ -82,6 +84,11 @@ router.get("/:username", optionalAuth, async (req: AuthenticatedRequest, res: Re
 });
 
 // PATCH /api/v1/users/profile
+//
+// CONTENT SAFETY: name/username/bio are user-generated text and moderated
+// before the change is applied. An avatarUrl change is only accepted when
+// it points at a Media document previously approved as an avatar (uploads
+// of avatars already run the image check at upload time).
 router.patch("/profile", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
@@ -104,34 +111,74 @@ router.patch("/profile", authenticateConsumer, async (req: AuthenticatedRequest,
 
     if (name !== undefined && name.trim()) user.name = name.trim();
     if (bio !== undefined) user.bio = bio.trim();
-    if (avatarUrl !== undefined) user.avatarUrl = avatarUrl;
     if (avatarHue !== undefined) user.avatarHue = Number(avatarHue) || user.avatarHue;
+
+    // ── Moderation: profile text (name/username/bio) ────────────────────────
+    if (moderationActive() && (name !== undefined || bio !== undefined || username !== undefined)) {
+      const result = await assessProfileText(userId, {
+        name: name !== undefined ? String(name).trim() : undefined,
+        bio: bio !== undefined ? String(bio).trim() : undefined,
+        username: username !== undefined ? String(username).trim().toLowerCase() : undefined,
+      }).catch(() => null);
+
+      if (result?.decision === "REJECTED") {
+        return res.status(422).json({
+          error: result.userMessage || "These profile changes could not be saved.",
+        });
+      }
+      if (result?.decision === "PENDING_REVIEW") {
+        return res.status(202).json({
+          message: "Your profile changes are being reviewed and will appear once cleared.",
+          user: publicUserShape(user),
+        });
+      }
+    }
+
+    // ── Moderation: avatar must reference APPROVED platform media ───────────
+    if (avatarUrl !== undefined && avatarUrl !== user.avatarUrl) {
+      if (moderationActive() && avatarUrl) {
+        const { Media } = await import("../../../models/Media");
+        const media = await Media.findOne({
+          $or: [{ cdnUrl: avatarUrl }, { "variants.url": avatarUrl }],
+        });
+        if (!media || media.moderationStatus !== "approved") {
+          return res.status(400).json({
+            error: "Profile pictures must be uploaded through the platform and pass safety checks",
+          });
+        }
+      }
+      user.avatarUrl = avatarUrl;
+    }
 
     await user.save();
 
     return res.json({
       message: "Profile updated successfully",
-      user: {
-        id: String(user._id),
-        name: user.name,
-        username: user.username,
-        email: user.email,
-        avatarHue: user.avatarHue,
-        avatarUrl: user.avatarUrl || null,
-        bio: user.bio,
-        role: user.role,
-        isCreator: user.isCreator,
-        verified: user.verified,
-        emailVerified: user.emailVerified,
-        followersCount: user.followersCount || 0,
-        followingCount: user.followingCount || 0,
-        postsCount: user.postsCount || 0,
-        createdAt: user.createdAt,
-      },
+      user: publicUserShape(user),
     });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to update profile", details: error.message });
   }
 });
+
+function publicUserShape(user: any) {
+  return {
+    id: String(user._id),
+    name: user.name,
+    username: user.username,
+    email: user.email,
+    avatarHue: user.avatarHue,
+    avatarUrl: user.avatarUrl || null,
+    bio: user.bio,
+    role: user.role,
+    isCreator: user.isCreator,
+    verified: user.verified,
+    emailVerified: user.emailVerified,
+    followersCount: user.followersCount || 0,
+    followingCount: user.followingCount || 0,
+    postsCount: user.postsCount || 0,
+    createdAt: user.createdAt,
+  };
+}
 
 export default router;

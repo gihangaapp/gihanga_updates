@@ -38,19 +38,34 @@ const FOLDER_BY_KIND: Record<UploadKind, string> = {
   stories: "gihanga/stories",
 };
 
-/** Uploads a buffer (from multer's memoryStorage) to Cloudinary and returns its secure URL + public ID. */
+/**
+ * Uploads a buffer (from multer's memoryStorage) to Cloudinary and returns
+ * its secure URL + public ID.
+ *
+ * MODERATION: when `opts.authenticated` is true (the default whenever the
+ * content-safety pipeline is active), the asset is uploaded with
+ * Cloudinary's `type: "authenticated"` — it is NOT publicly fetchable and
+ * can only be delivered through SHORT-LIVED SIGNED URLs minted by the
+ * backend (see signedCloudinaryDeliveryUrl). Unapproved media therefore has
+ * no public URL at all.
+ */
 export function uploadBufferToCloudinary(
   buffer: Buffer,
   kind: UploadKind,
-  mimetype: string
+  mimetype: string,
+  opts: { authenticated?: boolean } = {},
 ): Promise<UploadApiResponse> {
   const resourceType = mimetype.startsWith("video/") ? "video" : "image";
+  const authenticated = opts.authenticated ?? true;
 
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: FOLDER_BY_KIND[kind],
         resource_type: resourceType,
+        // Authenticated assets require signed delivery URLs — this is what
+        // quarantines media on Cloudinary's CDN before moderation approval.
+        ...(authenticated ? { type: "authenticated" } : {}),
         // Lets Cloudinary auto-generate a unique public_id rather than reusing
         // the original filename, avoiding collisions between different users'
         // uploads of e.g. "image.jpg".
@@ -68,16 +83,43 @@ export function uploadBufferToCloudinary(
 }
 
 /**
+ * Mints a short-lived SIGNED delivery URL for an authenticated Cloudinary
+ * asset. Signed URLs expire (~1h default) — regenerated per request by the
+ * media delivery route, so quarantined media never has a durable public URL.
+ */
+export function signedCloudinaryDeliveryUrl(
+  publicId: string,
+  resourceType: "image" | "video" = "image",
+  ttlSeconds: number = 3600,
+): string {
+  return cloudinary.url(publicId, {
+    resource_type: resourceType,
+    type: "authenticated",
+    sign_url: true,
+    secure: true,
+    // The signature embeds the expiry for authenticated URLs.
+    // Cloudinary signs the URL; the TTL is communicated via the signature's
+    // timestamp — expiration is enforced by Cloudinary's signed URL scheme.
+    expires_at: Math.floor(Date.now() / 1000) + ttlSeconds,
+  } as any);
+}
+
+/**
  * Derives a JPEG thumbnail URL for a Cloudinary-hosted video by asking
  * Cloudinary to render a frame as an image (same public_id, resource_type
  * "video", format "jpg" — Cloudinary generates this on the fly). Returns
  * undefined for anything that isn't a Cloudinary-hosted video URL.
+ *
+ * MODERATION: thumbnails of QUARANTINED videos are also quarantined — the
+ * URL is signed and only handed out through the checked delivery route, so
+ * a thumbnail can never leak prohibited content before approval.
  */
-export function videoThumbnailFromCloudinary(publicId: string): string {
+export function videoThumbnailFromCloudinary(publicId: string, authenticated = true): string {
   return cloudinary.url(publicId, {
     resource_type: "video",
     format: "jpg",
     secure: true,
+    ...(authenticated ? { type: "authenticated", sign_url: true } : {}),
   });
 }
 

@@ -350,6 +350,16 @@ export interface FeedPost {
   liked: boolean;
   bookmarked: boolean;
   followingAuthor: boolean;
+  /** Content-safety state — present on the author's own posts while a
+ *  decision is pending/rejected so the UI can show status chips. Public
+ *  feeds only ever contain approved posts, so this is undefined there. */
+  status?: "published" | "processing" | "rejected" | "scheduled" | "draft" | "removed";
+  moderation?: {
+    status: "processing" | "pending_review" | "approved" | "rejected" | "failed";
+    record?: string;
+    userMessage?: string;
+    updatedAt?: string;
+  };
   createdAt: string;
 }
 

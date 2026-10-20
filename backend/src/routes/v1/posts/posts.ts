@@ -7,6 +7,7 @@ import { Like } from "../../../models/Like";
 import { Bookmark } from "../../../models/Bookmark";
 import { Hashtag } from "../../../models/Hashtag";
 import { Comment } from "../../../models/Comment";
+import { Media } from "../../../models/Media";
 import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/rbac";
 import { optionalAuth } from "../../../middleware/optionalAuth";
 import { getIO } from "../../../lib/socket";
@@ -14,6 +15,10 @@ import { awardPoints } from "../../../lib/rewards";
 import { ContentView } from "../../../models/ContentView";
 import { rateLimitHits, redis } from "../../../lib/redis";
 import { invalidateUserMetrics, evaluateUser } from "../../../services/achievementService";
+import { moderationActive } from "../../../middleware/upload";
+import { assessPost } from "../../../services/moderation/contentModerationService";
+import { cancelJobsForContent, retryFailedJob } from "../../../services/moderation/moderationQueue";
+import { decisionToStatus } from "../../../services/moderation/contentModerationService";
 
 const router = Router();
 
@@ -47,7 +52,41 @@ function parsePagination(req: Request) {
   return { limit, before };
 }
 
+/**
+ * Resolves the platform Media documents for the media a post references.
+ * SECURITY: when the moderation pipeline is active, media MUST have been
+ * uploaded through the platform (a resolvable Media doc). This closes the
+ * "paste any external URL" bypass — unverifiable media is refused outright.
+ */
+async function resolveUploadedMedia(mediaKey: unknown, mediaUrl: unknown): Promise<{ ok: boolean; docs: any[] }> {
+  const key = typeof mediaKey === "string" ? mediaKey : undefined;
+  const url = typeof mediaUrl === "string" ? mediaUrl : undefined;
+
+  if (key && Types.ObjectId.isValid(key)) {
+    const doc = await Media.findById(key);
+    if (doc) return { ok: true, docs: [doc] };
+  }
+  if (url) {
+    const urls = url.split(",").map((s) => s.trim()).filter(Boolean);
+    const docs = await Media.find({
+      $or: [{ cdnUrl: { $in: urls } }, { "variants.url": { $in: urls } }],
+    }).limit(10);
+    if (docs.length > 0) return { ok: true, docs };
+  }
+  return { ok: false, docs: [] };
+}
+
 // POST /api/v1/posts — create a post (photo, video, reel or text)
+//
+// CONTENT SAFETY LIFECYCLE: the post is created with status "processing" and
+// is NOT publicly visible (every feed/recommendation/search read path filters
+// status:"published"). The central ContentModerationService then:
+//   - moderates the caption synchronously,
+//   - moderates images synchronously (single/limited) or via the queue,
+//   - queues video frame sampling for videos/reels,
+// and ONLY an APPROVED decision publishes (publishPost()) — with counters,
+// hashtags, socket broadcast and rewards firing at approval time, never
+// before. Duplicate submissions are collapsed via the Idempotency-Key header.
 router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { kind, body, mediaUrl, mediaKey, mediaMimeType, duration, thumbnailUrl, location, tags, audience } =
@@ -61,6 +100,38 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
     }
     if (kind === "text" && !body?.trim()) {
       return res.status(400).json({ error: "Text posts need a body" });
+    }
+
+    // ── Idempotency: a double-clicked "Post" button must not create twice ──
+    const idemHeader = req.headers["idempotency-key"];
+    const idemKey = typeof idemHeader === "string" && idemHeader.trim() ? idemHeader.trim().slice(0, 128) : undefined;
+    if (idemKey) {
+      const redisKey = `idem:post:create:${req.user!.userId}:${idemKey}`;
+      const claimed = await redis.setnx(redisKey, "pending");
+      if (claimed !== 1) {
+        // Duplicate inside the 10-minute window: return the original result.
+        const existingId = await (redis as any).get(redisKey);
+        if (existingId && existingId !== "pending" && Types.ObjectId.isValid(existingId)) {
+          const existing = await Post.findById(existingId).populate("author", AUTHOR_FIELDS);
+          if (existing) {
+            const [flagged] = await withViewerFlags([existing], req.user!.userId);
+            return res.status(200).json({ post: flagged, duplicate: true });
+          }
+        }
+        return res.status(409).json({ error: "This submission is already being processed" });
+      }
+      await redis.expire(redisKey, 600);
+      (req as any).__idemRedisKey = redisKey;
+    }
+
+    // ── Media provenance check (anti-bypass) ─────────────────────────────────
+    if (moderationActive() && kind !== "text") {
+      const resolved = await resolveUploadedMedia(mediaKey, mediaUrl);
+      if (!resolved.ok) {
+        return res.status(400).json({
+          error: "Media must be uploaded through the platform's upload API before posting",
+        });
+      }
     }
 
     // B1 — persist the media geometry the upload API already returns
@@ -113,6 +184,8 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
       ? tags.map((t: string) => String(t).replace(/^#/, "").trim().toLowerCase()).filter(Boolean).slice(0, 10)
       : [];
 
+    // Status starts at "processing" — NOT "published". The moderation
+    // pipeline is the only thing that flips it to "published".
     const post = await Post.create({
       author: req.user!.userId,
       kind,
@@ -130,37 +203,251 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
       location: location?.trim(),
       tags: cleanTags,
       audience: audience && ["public", "followers", "private"].includes(audience) ? audience : "public",
+      status: moderationActive() ? "processing" : "published",
+      moderation: moderationActive()
+        ? { status: "processing", updatedAt: new Date() }
+        : { status: "approved", updatedAt: new Date() },
     });
 
-    await User.findByIdAndUpdate(req.user!.userId, { $inc: { postsCount: 1 } });
-    await awardPoints(req.user!.userId, "upload", `Uploaded a ${kind}`).catch((err) =>
-      console.error("[Rewards] Upload bonus failed:", err),
-    );
+    // Remember the post for idempotent replays (del+setnx works on both the
+    // in-memory shim and real ioredis — neither exposes plain SET).
+    if ((req as any).__idemRedisKey) {
+      await redis.del((req as any).__idemRedisKey);
+      await redis.setnx((req as any).__idemRedisKey, String(post._id));
+      await redis.expire((req as any).__idemRedisKey, 600);
+    }
 
-    if (cleanTags.length) {
-      await Promise.all(
-        cleanTags.map((tag) =>
-          Hashtag.findOneAndUpdate(
-            { tag },
-            { $inc: { postsCount: 1, trend: 1 } },
-            { upsert: true, new: true, setDefaults: true },
+    if (!moderationActive()) {
+      // Pipeline explicitly disabled (local-dev opt-out): legacy behaviour.
+      await User.findByIdAndUpdate(req.user!.userId, { $inc: { postsCount: 1 } });
+      await awardPoints(req.user!.userId, "upload", `Uploaded a ${kind}`).catch((err) =>
+        console.error("[Rewards] Upload bonus failed:", err),
+      );
+      if (cleanTags.length) {
+        await Promise.all(
+          cleanTags.map((tag) =>
+            Hashtag.findOneAndUpdate(
+              { tag },
+              { $inc: { postsCount: 1, trend: 1 } },
+              { upsert: true, new: true, setDefaults: true },
+            ),
           ),
-        ),
+        );
+      }
+      const populated = await post.populate("author", AUTHOR_FIELDS);
+      const responsePost = { ...populated.toObject(), liked: false, bookmarked: false, followingAuthor: false };
+      if (responsePost.audience === "public") {
+        getIO()?.emit("post:created", responsePost);
+      }
+      return res.status(201).json({ post: responsePost });
+    }
+
+    // ── Central moderation pipeline ──────────────────────────────────────────
+    // Fire-and-await: text + (usually) image checks complete inline so the
+    // author immediately sees Published / Could-not-publish / Needs-review.
+    // Videos return PROCESSING and continue in the background queue.
+    const result = await assessPost({
+      postId: String(post._id),
+      authorId: req.user!.userId,
+      body: post.body,
+      kind,
+      mediaUrls: String(mediaUrl ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+      mediaKeys: mediaKey ? [String(mediaKey)] : [],
+    }).catch((err) => {
+      console.error("[Moderation] assessPost failed:", err instanceof Error ? err.message : err);
+      return null;
+    });
+
+    if (!result) {
+      // Pipeline itself errored (DB issue etc.) — fail-closed: the post
+      // simply stays "processing" (private). The retry endpoint can re-run.
+      const populated = await post.populate("author", AUTHOR_FIELDS);
+      return res.status(202).json({
+        post: { ...populated.toObject(), liked: false, bookmarked: false, followingAuthor: false },
+        moderation: { status: "processing", userMessage: "Your content is being checked and will appear once cleared." },
+      });
+    }
+
+    const populated = await Post.findById(post._id).populate("author", AUTHOR_FIELDS);
+    const responsePost = populated
+      ? { ...populated.toObject(), liked: false, bookmarked: false, followingAuthor: false }
+      : { ...post.toObject(), liked: false, bookmarked: false, followingAuthor: false };
+
+    // Rewards fire on APPROVED publication (inside publishPost path) — keep
+    // the original upload bonus semantics for approved posts.
+    if (result.decision === "APPROVED") {
+      await awardPoints(req.user!.userId, "upload", `Uploaded a ${kind}`).catch((err) =>
+        console.error("[Rewards] Upload bonus failed:", err),
       );
     }
 
-    const populated = await post.populate("author", AUTHOR_FIELDS);
-    const responsePost = { ...populated.toObject(), liked: false, bookmarked: false, followingAuthor: false };
-
-    if (responsePost.audience === "public") {
-      getIO()?.emit("post:created", responsePost);
-    }
-
-    return res.status(201).json({ post: responsePost });
+    return res.status(result.decision === "REJECTED" ? 422 : 201).json({
+      post: responsePost,
+      moderation: {
+        status: decisionToStatus(result.decision),
+        userMessage: result.userMessage,
+        critical: false, // never surfaced to clients — see policy.ts
+      },
+      ...(result.decision === "PROCESSING" ? { processing: true } : {}),
+    });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to create post", details: error.message });
   }
 });
+
+// PATCH /api/v1/posts/:id — author edits caption/media. ANY safety-relevant
+// change INVALIDATES the previous approval and re-enters moderation.
+router.patch("/:id", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) return res.status(404).json({ error: "Post not found" });
+    if (String(post.author) !== req.user!.userId) {
+      return res.status(403).json({ error: "You can only edit your own posts" });
+    }
+    if (["removed"].includes(post.status)) {
+      return res.status(400).json({ error: "Removed posts cannot be edited" });
+    }
+
+    const { body, location, tags, mediaUrl, mediaKey, mediaMimeType, thumbnailUrl } = req.body;
+
+    // Determine whether this edit changes safety-relevant content.
+    const textChanged = body !== undefined && body?.trim() !== post.body;
+    const mediaChanged =
+      (mediaUrl !== undefined && mediaUrl !== post.mediaUrl) ||
+      (mediaKey !== undefined && mediaKey !== post.mediaKey);
+
+    if (mediaChanged && moderationActive()) {
+      const resolved = await resolveUploadedMedia(mediaKey ?? post.mediaKey, mediaUrl);
+      if (!resolved.ok) {
+        return res.status(400).json({ error: "Media must be uploaded through the platform's upload API before posting" });
+      }
+    }
+
+    if (body !== undefined) post.body = body?.trim() || "";
+    if (location !== undefined) post.location = location?.trim();
+    if (mediaUrl !== undefined) post.mediaUrl = mediaUrl;
+    if (mediaKey !== undefined) post.mediaKey = mediaKey;
+    if (mediaMimeType !== undefined) post.mediaMimeType = mediaMimeType;
+    if (thumbnailUrl !== undefined) post.thumbnailUrl = thumbnailUrl;
+    if (Array.isArray(tags)) {
+      post.tags = tags.map((t: string) => String(t).replace(/^#/, "").trim().toLowerCase()).filter(Boolean).slice(0, 10);
+    }
+
+    if (!moderationActive()) {
+      await post.save();
+      return res.json({ post: await post.populate("author", AUTHOR_FIELDS) });
+    }
+
+    if (textChanged || mediaChanged) {
+      // Invalidate prior approval: re-enter the pipeline from scratch.
+      post.status = "processing";
+      post.moderation = { status: "processing", updatedAt: new Date() };
+    }
+    await post.save();
+
+    if (textChanged || mediaChanged) {
+      const result = await assessPost({
+        postId: String(post._id),
+        authorId: req.user!.userId,
+        body: post.body,
+        kind: post.kind,
+        mediaUrls: String(post.mediaUrl ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+        mediaKeys: post.mediaKey ? [String(post.mediaKey)] : [],
+      }).catch(() => null);
+
+      const fresh = await Post.findById(post._id).populate("author", AUTHOR_FIELDS);
+      return res.json({
+        post: fresh ?? post,
+        moderation: result
+          ? { status: decisionToStatus(result.decision), userMessage: result.userMessage }
+          : { status: "processing" },
+      });
+    }
+
+    return res.json({ post: await post.populate("author", AUTHOR_FIELDS) });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to edit post", details: error.message });
+  }
+});
+
+// GET /api/v1/posts/mine — the author's own posts including moderation
+// states (processing / pending_review / rejected / failed), so the UI can
+// show "Checking your content…", "Needs review", "Could not be published".
+router.get("/mine", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { limit, before } = parsePagination(req);
+    const statusFilter = typeof req.query.moderation === "string" ? req.query.moderation : undefined;
+    const query: any = {
+      author: new Types.ObjectId(req.user!.userId),
+      status: { $in: ["published", "processing", "rejected"] },
+    };
+    if (statusFilter && ["processing", "pending_review", "rejected", "failed", "approved"].includes(statusFilter)) {
+      query["moderation.status"] = statusFilter;
+    }
+    if (before) query.createdAt = { $lt: before };
+    const posts = await Post.find(query).sort({ createdAt: -1 }).limit(limit).populate("author", AUTHOR_FIELDS);
+    return res.json({
+      posts: await withViewerFlags(posts, req.user!.userId),
+      nextCursor: posts.length === limit ? posts[posts.length - 1].createdAt : null,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to load your posts", details: error.message });
+  }
+});
+
+// POST /api/v1/posts/:id/retry-moderation — re-run checks for a post that
+// ended up "failed" (e.g. after a provider outage). Rate-limited.
+router.post(
+  "/:id/retry-moderation",
+  authenticateConsumer,
+  async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const allowed = await rateLimitHits("post:retry", req.user!.userId, 10, 300);
+      if (!allowed) return res.status(429).json({ error: "Too many retry attempts — try again later" });
+
+      const post = await Post.findById(req.params.id);
+      if (!post) return res.status(404).json({ error: "Post not found" });
+      if (String(post.author) !== req.user!.userId) {
+        return res.status(403).json({ error: "You can only retry your own posts" });
+      }
+      if (!["failed", "rejected"].includes(post.moderation?.status ?? "")) {
+        return res.status(400).json({ error: "This post is not in a retryable state" });
+      }
+      // Rejected posts may only be retried AFTER an edit (new content).
+      if (post.moderation?.status === "rejected") {
+        return res.status(400).json({ error: "Edit the post and save to resubmit it for review" });
+      }
+
+      post.status = "processing";
+      post.moderation = { ...(post.moderation as any), status: "processing", updatedAt: new Date() };
+      await post.save();
+
+      const isVideo = post.kind === "video" || post.kind === "reel";
+      if (isVideo) {
+        await retryFailedJob(`post:video:${String(post._id)}`);
+      } else {
+        await retryFailedJob(`post:images:${String(post._id)}`);
+      }
+
+      const result = await assessPost({
+        postId: String(post._id),
+        authorId: String(post.author),
+        body: post.body,
+        kind: post.kind,
+        mediaUrls: String(post.mediaUrl ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+        mediaKeys: post.mediaKey ? [String(post.mediaKey)] : [],
+      }).catch(() => null);
+
+      const fresh = await Post.findById(post._id).populate("author", AUTHOR_FIELDS);
+      return res.json({
+        post: fresh,
+        moderation: result ? { status: decisionToStatus(result.decision) } : { status: "processing" },
+      });
+    } catch (error: any) {
+      return res.status(500).json({ error: "Failed to retry moderation", details: error.message });
+    }
+  },
+);
 
 // GET /api/v1/posts/feed — own posts + posts from people you follow, newest first
 router.get("/feed", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
@@ -245,14 +532,20 @@ router.get("/tag/:tag", optionalAuth, async (req: AuthenticatedRequest, res: Res
 });
 
 // GET /api/v1/posts/user/:username — a single user's post grid (for their profile page)
+// The OWNER additionally sees their own in-flight moderation states so the
+// profile grid can render "Checking…/Needs review/Could not be published"
+// chips; everyone else sees published posts only.
 router.get("/user/:username", optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const user = await User.findOne({ username: String(req.params.username).toLowerCase() });
     if (!user) return res.status(404).json({ error: "User not found" });
 
     const { limit, before } = parsePagination(req);
-    const query: any = { author: user._id, status: "published" };
     const isOwner = req.user?.userId === String(user._id);
+    const query: any = {
+      author: user._id,
+      status: isOwner ? { $in: ["published", "processing", "rejected"] } : "published",
+    };
     if (!isOwner) query.audience = "public";
     if (before) query.createdAt = { $lt: before };
 
@@ -289,11 +582,16 @@ router.get("/user/:username/liked", authenticateConsumer, async (req: Authentica
   }
 });
 
-// GET /api/v1/posts/:id — single post detail
+// GET /api/v1/posts/:id — single post detail (published only; authors can
+// fetch their own processing/rejected posts to render status + edit UI)
 router.get("/:id", optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const post = await Post.findOne({ _id: req.params.id, status: "published" }).populate("author", AUTHOR_FIELDS);
+    const post = await Post.findOne({ _id: req.params.id }).populate("author", AUTHOR_FIELDS);
     if (!post) return res.status(404).json({ error: "Post not found" });
+    const isOwner = req.user?.userId === String(post.author?._id ?? post.author);
+    if (post.status !== "published" && !isOwner) {
+      return res.status(404).json({ error: "Post not found" });
+    }
     const [withFlags] = await withViewerFlags([post], req.user?.userId);
     return res.json({ post: withFlags });
   } catch {
@@ -407,13 +705,19 @@ router.delete("/:id", authenticateConsumer, async (req: AuthenticatedRequest, re
       return res.status(403).json({ error: "You can only delete your own posts" });
     }
 
+    // Cancel any in-flight moderation jobs for this content.
+    await cancelJobsForContent("post", String(post._id)).catch(() => undefined);
+
+    const wasPublished = post.status === "published";
     await Post.deleteOne({ _id: post._id });
     await Comment.deleteMany({ post: post._id });
     await Like.deleteMany({ target: post._id, kind: "post" });
     await Bookmark.deleteMany({ post: post._id });
-    await User.findByIdAndUpdate(post.author, { $inc: { postsCount: -1 } });
-    if (post.tags.length) {
-      await Promise.all(post.tags.map((tag) => Hashtag.findOneAndUpdate({ tag }, { $inc: { postsCount: -1 } })));
+    if (wasPublished) {
+      await User.findByIdAndUpdate(post.author, { $inc: { postsCount: -1 } });
+      if (post.tags.length) {
+        await Promise.all(post.tags.map((tag) => Hashtag.findOneAndUpdate({ tag }, { $inc: { postsCount: -1 } })));
+      }
     }
 
     return res.json({ success: true, message: "Post deleted successfully" });

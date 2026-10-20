@@ -2,8 +2,10 @@ import { Router, Response } from "express";
 import { User } from "../../../models/User";
 import { optionalAuth } from "../../../middleware/optionalAuth";
 import { AuthenticatedRequest } from "../../../middleware/rbac";
-import { uploaderFor, UploadKind } from "../../../middleware/upload";
+import { uploaderFor, UploadKind, moderationActive } from "../../../middleware/upload";
 import { processAndStoreMedia } from "../../../services/media/mediaService";
+import { assessAvatar } from "../../../services/moderation/contentModerationService";
+import { Media } from "../../../models/Media";
 
 const router = Router();
 
@@ -11,6 +13,11 @@ const VALID_KINDS = new Set<UploadKind>(["photos", "videos", "reels", "avatars",
 
 // POST /api/v1/uploads/:kind — upload a single file (photos | videos | reels | avatars | stories)
 // Avatars are allowed without authentication for registration onboarding; all other kinds require auth.
+//
+// CONTENT SAFETY: uploaded media is stored QUARANTINED (private bucket /
+// non-public directory) with moderationStatus "pending" and a checked
+// delivery URL. Avatars additionally run an immediate synchronous image
+// check — a rejected avatar is never applied to the user's profile.
 router.post("/:kind", optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
   const kind = req.params.kind as UploadKind;
   if (!VALID_KINDS.has(kind)) {
@@ -20,6 +27,10 @@ router.post("/:kind", optionalAuth, async (req: AuthenticatedRequest, res: Respo
   if (kind !== "avatars" && !req.user) {
     return res.status(401).json({ error: "Authentication required" });
   }
+
+  // Anonymous avatar uploads (registration onboarding) skip avatar
+  // application anyway; moderation of stored bytes still applies below when
+  // a user later claims them via profile update.
 
   const uploader = uploaderFor(kind).single("file");
 
@@ -44,8 +55,32 @@ router.post("/:kind", optionalAuth, async (req: AuthenticatedRequest, res: Respo
         kind,
       });
 
-      // If uploading an avatar, automatically update the user's profile avatarUrl in MongoDB
-      if (kind === "avatars" && req.user?.userId) {
+      // Avatar application is gated on the synchronous image check when the
+      // moderation pipeline is active. Rejected avatars return 422 and are
+      // never attached to the profile; uncertain ones stay quarantined for
+      // staff review (the user keeps their previous avatar).
+      let avatarModeration: { status: string; userMessage?: string } | undefined;
+      if (kind === "avatars" && req.user?.userId && moderationActive()) {
+        const mediaDoc = await Media.findById(processed.mediaId);
+        if (mediaDoc) {
+          const result = await assessAvatar(mediaDoc, req.user.userId);
+          if (result.decision === "REJECTED") {
+            return res.status(422).json({
+              error: result.userMessage || "This image could not be used as a profile picture.",
+              moderation: { status: "rejected" },
+            });
+          }
+          avatarModeration = {
+            status: result.decision === "APPROVED" ? "approved" : "needs_review",
+            ...(result.userMessage ? { userMessage: result.userMessage } : {}),
+          };
+          if (result.decision === "APPROVED") {
+            // Only now is the avatar attached to the profile.
+            await User.findByIdAndUpdate(req.user.userId, { avatarUrl: processed.url });
+          }
+        }
+      } else if (kind === "avatars" && req.user?.userId) {
+        // Moderation disabled: legacy behaviour preserved.
         await User.findByIdAndUpdate(req.user.userId, { avatarUrl: processed.url });
       }
 
@@ -62,10 +97,15 @@ router.post("/:kind", optionalAuth, async (req: AuthenticatedRequest, res: Respo
         width: processed.width,
         height: processed.height,
         variants: processed.variants,
+        moderation: avatarModeration ?? { status: processed.moderationStatus },
       });
     } catch (error: any) {
-      console.error("[Upload] Error in processAndStoreMedia:", error);
-      return res.status(500).json({ error: "Failed to store upload", details: error.message });
+      const message = String(error?.message || "Failed to store upload");
+      if (/does not match|Unrecognized|rejected/i.test(message)) {
+        return res.status(400).json({ error: message });
+      }
+      console.error("[Upload] Error in processAndStoreMedia:", message);
+      return res.status(500).json({ error: "Failed to store upload" });
     }
   });
 });

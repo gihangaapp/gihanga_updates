@@ -1,7 +1,8 @@
+import crypto from "crypto";
 import { Types } from "mongoose";
 import { Media, IMedia, MediaContext, MediaType, MediaOrientation, IMediaVariant } from "../../models/Media";
 import { isCloudinaryConfigured, uploadBufferToCloudinary, videoThumbnailFromCloudinary } from "../../lib/cloudinary";
-import { publicUrlFor, UploadKind } from "../../middleware/upload";
+import { publicUrlFor, UploadKind, sniffMimeCategory, moderationActive } from "../../middleware/upload";
 
 export interface ProcessMediaInput {
   ownerId?: string;
@@ -15,6 +16,8 @@ export interface ProcessMediaInput {
 
 export interface ProcessedMediaResult {
   mediaId: string;
+  /** Delivery URL. With the moderation pipeline active this is the CHECKED
+   *  route /api/v1/media/file/:id — quarantined media has no public URL. */
   url: string;
   thumbnailUrl: string;
   blurDataUrl: string;
@@ -24,6 +27,7 @@ export interface ProcessedMediaResult {
   orientation: MediaOrientation;
   variants: IMediaVariant[];
   status: "READY" | "PROCESSING" | "FAILED";
+  moderationStatus: "pending" | "approved";
 }
 
 /** Determines orientation based on dimensions */
@@ -93,6 +97,21 @@ export async function processAndStoreMedia(input: ProcessMediaInput): Promise<Pr
     avatars: "avatar",
   };
   const context = contextMap[input.kind] || "post";
+  const quarantine = moderationActive();
+
+  // ── Content-safety: verify actual file bytes, never trust the client ──────
+  // MIME claim. A buffer whose magic bytes don't match its declared category
+  // is rejected outright BEFORE any storage or provider call.
+  if (input.fileBuffer && quarantine) {
+    const sniffed = sniffMimeCategory(input.fileBuffer);
+    const declared = isVideo ? "video" : "image";
+    if (sniffed !== "unknown" && sniffed !== declared) {
+      throw new Error("File content does not match its declared type — upload rejected");
+    }
+    if (sniffed === "unknown") {
+      throw new Error("Unrecognized or unsupported file format — upload rejected");
+    }
+  }
 
   // Dynamic aspect ratio calculation based on context defaults or extracted parameters
   let width = 1080;
@@ -114,32 +133,42 @@ export async function processAndStoreMedia(input: ProcessMediaInput): Promise<Pr
   const orientation = getOrientation(width, height);
   const blurDataUrl = generateBlurDataUrl(aspectRatio);
 
+  // Content hash of the EXACT uploaded bytes — powers duplicate-scan
+  // avoidance and evasion auditing (same bytes re-uploaded = same verdict).
+  const contentHash = input.fileBuffer ? crypto.createHash("sha256").update(input.fileBuffer).digest("hex") : undefined;
+
   let masterUrl = "";
   let storageKey = "";
   let derivedThumbnailUrl = "";
 
   if (isCloudinaryConfigured && input.fileBuffer) {
-    const cloudRes = await uploadBufferToCloudinary(input.fileBuffer, input.kind, input.mimetype);
+    const cloudRes = await uploadBufferToCloudinary(input.fileBuffer, input.kind, input.mimetype, {
+      authenticated: quarantine,
+    });
     masterUrl = cloudRes.secure_url;
     storageKey = cloudRes.public_id;
     // For videos, derive a real JPEG frame thumbnail from Cloudinary instead of
     // pointing "thumbnail" at the .mp4 itself (which <img> tags can't render).
     if (isVideo) {
       try {
-        derivedThumbnailUrl = videoThumbnailFromCloudinary(cloudRes.public_id);
+        derivedThumbnailUrl = videoThumbnailFromCloudinary(cloudRes.public_id, quarantine);
       } catch {
         derivedThumbnailUrl = "";
       }
     }
   } else {
-    // Local storage fallback
+    // Local storage fallback. With the moderation pipeline active, multer has
+    // already written the file into the QUARANTINE directory (see
+    // middleware/upload.ts); the returned URL routes through the checked
+    // delivery endpoint instead of a public static path.
     const fname = input.filename || `${Date.now()}-${input.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-    masterUrl = publicUrlFor(input.kind, fname);
+    masterUrl = quarantine
+      ? "" // filled in below from the Media id
+      : publicUrlFor(input.kind, fname);
     storageKey = fname;
   }
 
   const thumbnailUrl = derivedThumbnailUrl || masterUrl;
-  const variants = buildVariants(masterUrl, width, height, input.mimetype, thumbnailUrl);
 
   const mediaDoc = await Media.create({
     ownerId: input.ownerId && Types.ObjectId.isValid(input.ownerId) ? new Types.ObjectId(input.ownerId) : undefined,
@@ -154,17 +183,33 @@ export async function processAndStoreMedia(input: ProcessMediaInput): Promise<Pr
     orientation,
     originalSize: input.sizeBytes,
     status: "READY",
-    variants,
+    variants: [],
     thumbnailUrl,
     blurDataUrl,
     storageKey,
-    cdnUrl: masterUrl,
+    cdnUrl: masterUrl || undefined,
+    // Content-safety fields:
+    moderationStatus: quarantine ? "pending" : "approved",
+    contentHash,
+    legacyPublic: !quarantine,
   });
+
+  // Delivery URL: token-routed (checked) while the pipeline is active;
+  // legacy public path otherwise.
+  const deliveryUrl = quarantine
+    ? `/api/v1/media/file/${String(mediaDoc._id)}`
+    : masterUrl;
+
+  const variants = buildVariants(deliveryUrl, width, height, input.mimetype, thumbnailUrl);
+  if (variants.length > 0) {
+    mediaDoc.variants = variants;
+    await mediaDoc.save();
+  }
 
   return {
     mediaId: String(mediaDoc._id),
-    url: masterUrl,
-    thumbnailUrl,
+    url: deliveryUrl,
+    thumbnailUrl: quarantine ? deliveryUrl : thumbnailUrl,
     blurDataUrl,
     width,
     height,
@@ -172,5 +217,6 @@ export async function processAndStoreMedia(input: ProcessMediaInput): Promise<Pr
     orientation,
     variants,
     status: "READY",
+    moderationStatus: quarantine ? "pending" : "approved",
   };
 }

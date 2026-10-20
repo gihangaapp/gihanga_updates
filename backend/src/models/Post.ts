@@ -1,7 +1,16 @@
 import { Schema, model, Document, Types } from "mongoose";
+import { ModerationStatus } from "../lib/moderation/types";
 
 export type MediaKind = "photo" | "video" | "reel" | "text";
-export type PostStatus = "published" | "scheduled" | "draft" | "removed";
+/**
+ * Post lifecycle. "processing" and "rejected" are added by the content-safety
+ * system: a post created through the API starts life as "processing" and is
+ * only flipped to "published" by the moderation pipeline upon APPROVED.
+ * Every existing public read path (feeds, explore, reels, search,
+ * recommendations, profile grids) already filters status:"published", so
+ * unapproved posts are invisible platform-wide WITHOUT touching those routes.
+ */
+export type PostStatus = "published" | "scheduled" | "draft" | "processing" | "rejected" | "removed";
 export type PostAudience = "public" | "followers" | "private";
 
 export interface PostMediaItem {
@@ -10,6 +19,16 @@ export interface PostMediaItem {
   height?: number;
   aspectRatio?: number;
   kind?: "photo" | "video";
+}
+
+/** Moderation sub-document: the detailed safety state behind the lifecycle. */
+export interface PostModerationInfo {
+  status: ModerationStatus;
+  /** Links to the ModerationRecord with the latest assessment. */
+  record?: Types.ObjectId;
+  /** Non-graphic, user-safe explanation. */
+  userMessage?: string;
+  updatedAt?: Date;
 }
 
 export interface IPost extends Document {
@@ -40,6 +59,8 @@ export interface IPost extends Document {
   removedAt?: Date;
   removedBy?: Types.ObjectId;
   removedReason?: string;
+  /** Content-safety state — see PostModerationInfo. */
+  moderation?: PostModerationInfo;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -76,13 +97,23 @@ const PostSchema = new Schema<IPost>(
     viewsCount: { type: Number, default: 0 },
     status: {
       type: String,
-      enum: ["published", "scheduled", "draft", "removed"],
-      default: "published",
+      enum: ["published", "scheduled", "draft", "processing", "rejected", "removed"],
+      default: "processing",
     },
     scheduledFor: { type: Date },
     removedAt: { type: Date },
     removedBy: { type: Schema.Types.ObjectId, ref: "User" },
     removedReason: { type: String },
+    moderation: {
+      status: {
+        type: String,
+        enum: ["processing", "pending_review", "approved", "rejected", "failed"],
+        default: "processing",
+      },
+      record: { type: Schema.Types.ObjectId, ref: "ModerationRecord" },
+      userMessage: { type: String, maxlength: 500 },
+      updatedAt: { type: Date },
+    },
   },
   { timestamps: true },
 );
@@ -90,5 +121,6 @@ const PostSchema = new Schema<IPost>(
 PostSchema.index({ author: 1, status: 1, createdAt: -1 });
 PostSchema.index({ tags: 1 });
 PostSchema.index({ status: 1, scheduledFor: 1 });
+PostSchema.index({ "moderation.status": 1, createdAt: -1 });
 
 export const Post = model<IPost>("Post", PostSchema);

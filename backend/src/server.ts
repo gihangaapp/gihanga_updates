@@ -12,6 +12,10 @@ import { startLiveSweeper } from "./lib/liveSweeper";
 import { startAchievementSweeper } from "./lib/achievementSweeper";
 import { verifyMailer } from "./lib/mailer";
 import { ensureDefaultAchievementDefinitions } from "./services/achievementService";
+import { registerModerationJobHandler } from "./services/moderation/contentModerationService";
+import { startModerationQueue, recoverStuckJobs } from "./services/moderation/moderationQueue";
+import { publicSummary } from "./lib/moderation/config";
+import { inspectVisionCredentials } from "./lib/moderation/visionCredentials";
 
 const PORT = process.env.PORT || 4000;
 
@@ -102,6 +106,37 @@ async function startServer() {
     // (or the in-memory shim's lock on dev); every action is idempotent anyway.
     startLiveSweeper();
     startAchievementSweeper();
+
+    // Content-safety pipeline: bounded in-process queue for async moderation
+    // jobs (video frame sampling, deferred image batches). Recovers jobs that
+    // were mid-flight when the process last died — the DB row is the source
+    // of truth, so nothing is lost and nothing publishes unverified.
+    registerModerationJobHandler();
+    recoverStuckJobs()
+      .then(() => startModerationQueue())
+      .catch((err) => console.error("[ModerationQueue] startup failed:", err));
+
+    // Startup configuration surface — secret-free summary + warnings.
+    const moderationSummary = publicSummary();
+    if (moderationSummary.enabled) {
+      console.log(
+        `[Moderation] pipeline enabled (fail-closed=${moderationSummary.failClosed}). ` +
+          `Providers: OpenAI=${moderationSummary.providers.openai.configured}, ` +
+          `Vision=${moderationSummary.providers.googleVision.configured} ` +
+          `(credential file: ${moderationSummary.providers.googleVision.credentialFile}).`,
+      );
+      for (const warning of moderationSummary.warnings) {
+        console.warn(`[Moderation][WARN] ${warning}`);
+      }
+      // Server-log-only detail: names the configured path so a Render Secret
+      // File filename/path mismatch is obvious. Never sent to any API response.
+      if (moderationSummary.providers.googleVision.enabled && process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+        const cred = inspectVisionCredentials();
+        if (cred.status !== "ok") console.warn(`[Moderation][Vision] ${cred.message}`);
+      }
+    } else {
+      console.log("[Moderation] pipeline DISABLED via CONTENT_MODERATION_ENABLED=false (local dev only — do not disable in production).");
+    }
   });
 }
 

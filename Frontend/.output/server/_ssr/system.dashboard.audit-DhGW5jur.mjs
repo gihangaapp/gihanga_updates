@@ -1,7 +1,7 @@
 import { o as __toESM } from "../_runtime.mjs";
 import { u as require_react } from "../_libs/@floating-ui/react-dom+[...].mjs";
 import { P as require_jsx_runtime } from "../_libs/@radix-ui/react-alert-dialog+[...].mjs";
-import { Vt as History } from "../_libs/lucide-react.mjs";
+import { Ht as History } from "../_libs/lucide-react.mjs";
 import { t as useAuditLog } from "./use-staff-management-DwJBpOj5.mjs";
 //#region node_modules/.nitro/vite/services/ssr/assets/system.dashboard.audit-DhGW5jur.js
 var import_react = /* @__PURE__ */ __toESM(require_react());

@@ -164,7 +164,7 @@ export function PostCreator({ onClose }: PostCreatorProps) {
         .map((m) => m[1])
         .filter((t): t is string => t !== undefined);
 
-      await createPost.mutateAsync({
+      const result = await createPost.mutateAsync({
         kind: isVideo ? "video" : files.length > 0 ? "photo" : "text",
         body: caption.trim(),
         mediaUrl,
@@ -180,6 +180,35 @@ export function PostCreator({ onClose }: PostCreatorProps) {
         blurDataUrl: firstBlur,
         media: mediaItems.length > 0 ? mediaItems : undefined,
       });
+
+      // ── Content-safety outcome UX ────────────────────────────────────────
+      const moderation = result?.moderation;
+      if (moderation?.status === "rejected") {
+        setUploadStage("failed");
+        setUploadError(
+          moderation.userMessage ||
+            "This content could not be published because it may violate our guidelines.",
+        );
+        return;
+      }
+      if (moderation?.status === "pending_review") {
+        setUploadStage("completed");
+        toast.info("Submitted — your post needs a quick review before it becomes visible.");
+        setTimeout(() => {
+          onClose();
+          navigate({ to: "/" });
+        }, 1600);
+        return;
+      }
+      if (moderation?.status === "processing" || result?.processing) {
+        setUploadStage("completed");
+        toast.info("Posted! We're finishing a safety check on the video — it will appear in your feed once cleared.");
+        setTimeout(() => {
+          onClose();
+          navigate({ to: "/" });
+        }, 1600);
+        return;
+      }
 
       setUploadStage("completed");
       toast.success("Posted to your feed!");

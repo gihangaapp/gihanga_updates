@@ -1,9 +1,16 @@
 import { Schema, model, Document, Types } from "mongoose";
+import { ModerationStatus } from "../lib/moderation/types";
 
 export type MediaType = "image" | "video" | "audio";
 export type MediaContext = "post" | "reel" | "story" | "avatar" | "thumbnail";
 export type MediaStatus = "UPLOADING" | "PROCESSING" | "READY" | "FAILED";
 export type MediaOrientation = "portrait" | "landscape" | "square";
+export type MediaModerationStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "review"
+  | "failed";
 
 export interface IMediaVariant {
   label: "thumbnail" | "small" | "medium" | "large" | "master";
@@ -35,6 +42,20 @@ export interface IMedia extends Document {
   storageKey?: string;
   cdnUrl?: string;
   focalPoint?: { x: number; y: number }; // 0-100 percentage coordinates for future smart cropping
+
+  // ── Content-safety fields (see services/moderation) ──────────────────────────
+  /** Delivery gate: ONLY "approved" media may be served through the public
+ *  delivery route. Quarantined (pending/rejected/review) media stays
+ *  undeliverable — Cloudinary copies are uploaded as `authenticated` assets
+ *  (signed delivery only), local copies live outside the static dir. */
+  moderationStatus: MediaModerationStatus;
+  /** sha256 of the exact uploaded bytes — dedupe + rescan avoidance. */
+  contentHash?: string;
+  /** true when the asset was uploaded before the moderation system existed
+ *  (legacy delivery keeps working via its original public URL). */
+  legacyPublic?: boolean;
+  moderationRecord?: Types.ObjectId;
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -88,6 +109,14 @@ const MediaSchema = new Schema<IMedia>(
       x: { type: Number, default: 50 },
       y: { type: Number, default: 50 },
     },
+    moderationStatus: {
+      type: String,
+      enum: ["pending", "approved", "rejected", "review", "failed"],
+      default: "pending",
+    },
+    contentHash: { type: String, index: true },
+    legacyPublic: { type: Boolean, default: false },
+    moderationRecord: { type: Schema.Types.ObjectId, ref: "ModerationRecord" },
   },
   { timestamps: true }
 );

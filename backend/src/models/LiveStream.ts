@@ -32,6 +32,17 @@ export interface ILiveStream extends Document {
   bannedUsers: Types.ObjectId[];
   coHosts: Types.ObjectId[];
   status: LiveStreamStatus;
+
+  // ── Live safety (content moderation) ────────────────────────────────────────
+  /** Moderation violations detected in chat/title. Repeated or severe
+ *  violations auto-enforce: the stream is force-ended through the SAME
+ *  endStream() service staff use, with an audit trail. */
+  moderationViolations: number;
+  /** "clean" | "warned" | "enforced" — one-line state for dashboards. */
+  moderationState: "clean" | "warned" | "enforced";
+  /** Staff-only note trail for the safety escalation protocol. */
+  moderationNotes: { at: Date; by?: Types.ObjectId; note: string; violationsAt?: number }[];
+
   startedAt?: Date;
   lastHeartbeatAt?: Date;
   /** Server-enforced end-of-stream deadline (startedAt + cap). */
@@ -72,6 +83,24 @@ const LiveStreamSchema = new Schema<ILiveStream>(
       enum: ["pending", "live", "ended", "force_ended"],
       default: "pending",
     },
+    moderationViolations: { type: Number, default: 0 },
+    moderationState: {
+      type: String,
+      enum: ["clean", "warned", "enforced"],
+      default: "clean",
+    },
+    moderationNotes: {
+      type: [
+        {
+          _id: false,
+          at: { type: Date, default: Date.now },
+          by: { type: Schema.Types.ObjectId, ref: "User" },
+          note: { type: String, maxlength: 500 },
+          violationsAt: { type: Number },
+        },
+      ],
+      default: [],
+    },
     startedAt: { type: Date },
     lastHeartbeatAt: { type: Date },
     maxEndsAt: { type: Date, index: true },
@@ -86,6 +115,7 @@ const LiveStreamSchema = new Schema<ILiveStream>(
 
 LiveStreamSchema.index({ host: 1, status: 1 });
 LiveStreamSchema.index({ status: 1, startedAt: -1 });
+LiveStreamSchema.index({ moderationState: 1, updatedAt: -1 });
 
 export const LiveStream = model<ILiveStream>("LiveStream", LiveStreamSchema);
 

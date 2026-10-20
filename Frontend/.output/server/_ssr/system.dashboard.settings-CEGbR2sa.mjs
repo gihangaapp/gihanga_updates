@@ -2,7 +2,7 @@ import { o as __toESM } from "../_runtime.mjs";
 import { r as cn, t as Button } from "./button-CJVUuoS8.mjs";
 import { u as require_react } from "../_libs/@floating-ui/react-dom+[...].mjs";
 import { P as require_jsx_runtime } from "../_libs/@radix-ui/react-alert-dialog+[...].mjs";
-import { E as Trash2, Pt as Layers, Y as Settings, c as Wallet, ot as Plus } from "../_libs/lucide-react.mjs";
+import { E as Trash2, Ft as Layers, Y as Settings, c as Wallet, ot as Plus } from "../_libs/lucide-react.mjs";
 import { n as toast } from "../_libs/sonner.mjs";
 import { c as useSetMomoVisibility, d as useStaffSettings, f as useUpdateCategory, i as useDeleteCategory, l as useStaffCategories, n as useCreateCategory, s as useSetFeatureFlag } from "./use-staff-management-DwJBpOj5.mjs";
 //#region node_modules/.nitro/vite/services/ssr/assets/system.dashboard.settings-CEGbR2sa.js

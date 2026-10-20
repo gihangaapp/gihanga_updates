@@ -4,6 +4,10 @@ import { ModerationRule } from "../models/ModerationRule";
 import { User } from "../models/User";
 import { addLiveViewer, removeLiveViewer, clearLiveViewers, incrLiveReactions } from "./redis";
 import { endStream } from "../services/liveStreamService";
+import { notifyStaff } from "./staffNotify";
+import { logAudit } from "../utils/auditLogger";
+import { getModerationConfig } from "./moderation/config";
+import { moderateText } from "../services/moderation/contentModerationService";
 import {
   chargePaidInteraction,
   resolveInteractionAccess,
@@ -15,6 +19,64 @@ async function getFlaggedKeywords(): Promise<string[]> {
   const rule = await ModerationRule.findOne({ key: "live_chat_keywords" });
   const list = (rule?.config as any)?.keywords;
   return Array.isArray(list) ? list.map((w: string) => String(w).toLowerCase()) : [];
+}
+
+/**
+ * LIVE SAFETY ENFORCEMENT — registers a violation on a live stream and,
+ * when the configured limit is reached, force-ends the stream through the
+ * SAME endStream() service staff use (viewers are kicked from the room, the
+ * host is marked offline, stats persist, audit trail written).
+ *
+ * LIMITATION (documented in MODERATION_SETUP.md): frame-level moderation of
+ * the live VIDEO itself requires LiveKit Egress (or an equivalent recording
+ * pipeline) which the current deployment does not enable. What IS enforced
+ * today: title/description moderation at start, AI moderation of every chat
+ * message, violation counting with automatic stream termination, staff
+ * alerts, and report-driven priority escalation.
+ */
+async function enforceLiveViolation(opts: {
+  streamId: string;
+  reason: string;
+  note: string;
+  actorId?: string;
+}): Promise<{ violations: number; enforced: boolean }> {
+  const stream = await LiveStream.findById(opts.streamId);
+  if (!stream || stream.status !== "live") return { violations: 0, enforced: false };
+
+  stream.moderationViolations = (stream.moderationViolations ?? 0) + 1;
+  stream.moderationState = "warned";
+  stream.moderationNotes.push({
+    at: new Date(),
+    note: opts.note.slice(0, 500),
+    violationsAt: stream.moderationViolations,
+  });
+
+  const limit = getModerationConfig().liveViolationLimit;
+  if (stream.moderationViolations >= limit) {
+    stream.moderationState = "enforced";
+    await stream.save();
+    await endStream({
+      streamId: String(stream._id),
+      reason: "Stream ended by automated safety enforcement",
+      status: "force_ended",
+      notifyHost: true,
+    }).catch((err) => console.error("[LiveModeration] endStream failed:", err));
+    await notifyStaff("all", "A live stream was force-ended by automated safety enforcement.", {
+      streamId: String(stream._id),
+      violations: stream.moderationViolations,
+      reason: opts.reason,
+    }).catch(() => undefined);
+    await logAudit({
+      actor: "system",
+      action: "moderation.live_auto_enforce",
+      targetId: String(stream._id),
+      meta: { violations: stream.moderationViolations, reason: opts.reason },
+    }).catch(() => undefined);
+    return { violations: stream.moderationViolations, enforced: true };
+  }
+
+  await stream.save();
+  return { violations: stream.moderationViolations, enforced: false };
 }
 
 function canModerate(stream: any, userId: string) {
@@ -316,10 +378,61 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
 
     const keywords = await getFlaggedKeywords();
     const lower = body.toLowerCase();
-    const flagged = keywords.some((kw) => kw && lower.includes(kw));
+    const keywordFlagged = keywords.some((kw) => kw && lower.includes(kw));
 
-    const message = await LiveChatMessage.create({ stream: streamId, sender: userId, body: body.trim(), flagged });
+    // ── AI safety check on every chat message ────────────────────────────────
+    // Local keywords act as the instant first pass (as before); the AI text
+    // moderation runs when enabled and configured. A REJECTED message is
+    // never broadcast; repeated violations auto-terminate the stream.
+    let aiDecision: string | null = null;
+    const config = getModerationConfig();
+    if (config.enabled && config.liveChatModerationEnabled && config.anyProviderConfigured) {
+      const result = await moderateText({ text: body, surface: "live_chat" }).catch(() => null);
+      aiDecision = result?.decision ?? null;
+    }
+
+    const flagged = keywordFlagged || aiDecision === "REJECTED" || aiDecision === "PENDING_REVIEW";
+    const prohibited = aiDecision === "REJECTED";
+
+    const message = await LiveChatMessage.create({
+      stream: streamId,
+      sender: userId,
+      body: body.trim(),
+      flagged,
+    });
     const sender = await User.findById(userId).select("name username avatarHue avatarUrl isCreator verified");
+
+    if (prohibited) {
+      // Never broadcast prohibited chat. The sender gets a private notice.
+      // Viewer violations auto-MUTE the sender (protecting the host's stream
+      // from bad-faith viewers); HOST/co-host violations count toward the
+      // stream's enforcement counter and can terminate it.
+      socket.emit("live:chat-blocked", {
+        streamId,
+        reason: "Your message was blocked by our safety systems.",
+      });
+      const isStreamHost = String(stream.host) === userId || stream.coHosts.some((c) => String(c) === userId);
+      if (isStreamHost) {
+        await enforceLiveViolation({
+          streamId,
+          reason: "prohibited chat message from host/co-host",
+          note: "Automated AI moderation rejected a chat message from the host side.",
+          actorId: userId,
+        });
+      } else {
+        // Auto-mute the offending viewer after their first prohibited message
+        // and alert staff (the message row stays as audit evidence).
+        if (!stream.mutedUsers.some((m: any) => String(m) === userId)) {
+          stream.mutedUsers.push(userId as any);
+          await stream.save().catch(() => undefined);
+        }
+        await notifyStaff("all", "A viewer was auto-muted for a prohibited live chat message.", {
+          streamId,
+          messageId: String(message._id),
+        }).catch(() => undefined);
+      }
+      return;
+    }
 
     io.to(`live:${streamId}`).emit("live:chat", {
       _id: message._id,
@@ -328,6 +441,7 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
       body: message.body,
       isGift: false,
       pinned: false,
+      flagged,
       createdAt: message.createdAt,
     });
 
@@ -338,7 +452,21 @@ export function attachLiveHandlers(io: SocketIOServer, socket: Socket, userId?: 
         sender: { username: sender?.username, name: sender?.name },
         body: message.body,
         createdAt: message.createdAt,
+        aiDecision: aiDecision ?? "keyword",
       });
+      // Borderline chat from the HOST side counts as a soft violation so
+      // repeated borderline behavior still triggers stream enforcement.
+      // Viewer borderline messages only alert staff — never punish a stream
+      // for its audience.
+      const isStreamHost = String(stream.host) === userId || stream.coHosts.some((c) => String(c) === userId);
+      if (aiDecision === "PENDING_REVIEW" && isStreamHost) {
+        await enforceLiveViolation({
+          streamId,
+          reason: "borderline chat message from host/co-host",
+          note: "AI moderation routed a host-side chat message to review.",
+          actorId: userId,
+        });
+      }
     }
   };
 

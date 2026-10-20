@@ -4,15 +4,22 @@ import { Story } from "../../../models/Story";
 import { Follow } from "../../../models/Follow";
 import { Notification } from "../../../models/Notification";
 import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/rbac";
+import { moderationActive } from "../../../middleware/upload";
+import { assessStory } from "../../../services/moderation/contentModerationService";
+import { cancelJobsForContent } from "../../../services/moderation/moderationQueue";
 
 const router = Router();
 const AUTHOR_FIELDS = "name username avatarHue avatarUrl isCreator verified";
 const STORY_LIFETIME_MS = 24 * 60 * 60 * 1000;
 
 // POST /api/v1/stories — create (auto-expires 24h from now)
+//
+// CONTENT SAFETY: stories are created with moderation.status "processing"
+// and are invisible in the story tray until APPROVED. Video stories go
+// through the async frame-sampling queue; image + caption checks run inline.
 router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const { mediaUrl, mediaKey, mediaType, caption, duration, audience } = req.body;
+    const { mediaUrl, mediaKey, mediaType, caption, duration } = req.body;
     if (!mediaUrl) return res.status(400).json({ error: "mediaUrl is required" });
 
     const story = await Story.create({
@@ -23,27 +30,80 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
       caption: caption?.trim(),
       duration: duration || 4200,
       expiresAt: new Date(Date.now() + STORY_LIFETIME_MS),
+      moderation: moderationActive() ? { status: "processing", updatedAt: new Date() } : undefined,
     });
 
-    const populated = await story.populate("author", AUTHOR_FIELDS);
-    return res.status(201).json({ story: populated });
+    if (!moderationActive()) {
+      const populated = await story.populate("author", AUTHOR_FIELDS);
+      return res.status(201).json({ story: populated });
+    }
+
+    const result = await assessStory({
+      storyId: String(story._id),
+      authorId: req.user!.userId,
+      caption: story.caption,
+      mediaUrl: story.mediaUrl,
+      mediaKey: story.mediaKey ? String(story.mediaKey) : undefined,
+      isVideo: story.mediaType === "video",
+    }).catch((err) => {
+      console.error("[Moderation] assessStory failed:", err instanceof Error ? err.message : err);
+      return null;
+    });
+
+    const fresh = await Story.findById(story._id).populate("author", AUTHOR_FIELDS);
+    const responseStory = fresh ?? story;
+    const moderationStatus = result
+      ? result.decision === "APPROVED"
+        ? "approved"
+        : result.decision === "REJECTED"
+          ? "rejected"
+          : result.decision === "PENDING_REVIEW"
+            ? "pending_review"
+            : result.decision === "FAILED"
+              ? "failed"
+              : "processing"
+      : "processing";
+
+    return res.status(result?.decision === "REJECTED" ? 422 : 201).json({
+      story: responseStory,
+      moderation: {
+        status: moderationStatus,
+        userMessage: result?.userMessage,
+      },
+      ...(result?.decision === "PROCESSING" ? { processing: true } : {}),
+    });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to create story", details: error.message });
   }
 });
 
 // GET /api/v1/stories — active stories from you + people you follow, grouped by author
+// Only APPROVED (or legacy) stories are listed; the author's own pending
+// stories are included so they can see the "Checking…" state.
 router.get("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const following = await Follow.find({ follower: req.user!.userId }).select("following").lean();
     const authorIds = [...following.map((f) => f.following), new Types.ObjectId(req.user!.userId)];
 
-    const stories = await Story.find({ author: { $in: authorIds }, expiresAt: { $gt: new Date() } })
+    const query: any = { author: { $in: authorIds }, expiresAt: { $gt: new Date() } };
+    if (moderationActive()) {
+      // Own stories: any state; others': approved or legacy only.
+      query.$or = [
+        { author: new Types.ObjectId(req.user!.userId) },
+        { "moderation.status": "approved" },
+        { moderation: { $exists: false } },
+      ];
+    }
+
+    const stories = await Story.find(query)
       .sort({ createdAt: 1 })
       .populate("author", AUTHOR_FIELDS);
 
     const grouped = new Map<string, { author: any; items: any[]; seen: boolean }>();
     for (const story of stories) {
+      const isOwn = String(story.author._id) === req.user!.userId;
+      const st = (story as any).moderation?.status ?? "approved";
+      if (!isOwn && st !== "approved") continue; // defence in depth
       const key = String(story.author._id);
       if (!grouped.has(key)) grouped.set(key, { author: story.author, items: [], seen: true });
       const group = grouped.get(key)!;
@@ -64,6 +124,15 @@ router.post("/:id/reply", authenticateConsumer, async (req: AuthenticatedRequest
     const { message } = req.body;
     if (!message || !message.trim()) {
       return res.status(400).json({ error: "Reply message is required" });
+    }
+
+    // Replies are user-generated text too — moderated before delivery.
+    if (moderationActive()) {
+      const { moderateText } = await import("../../../services/moderation/contentModerationService");
+      const result = await moderateText({ text: message, surface: "story_reply" }).catch(() => null);
+      if (result?.decision === "REJECTED") {
+        return res.status(422).json({ error: result.userMessage || "This reply could not be sent." });
+      }
     }
 
     const story = await Story.findById(req.params.id).populate("author", "name username");
@@ -130,6 +199,7 @@ router.delete("/:id", authenticateConsumer, async (req: AuthenticatedRequest, re
     if (String(story.author) !== req.user!.userId) {
       return res.status(403).json({ error: "You can only delete your own stories" });
     }
+    await cancelJobsForContent("story", String(story._id)).catch(() => undefined);
     await Story.deleteOne({ _id: story._id });
     return res.status(204).end();
   } catch (error: any) {

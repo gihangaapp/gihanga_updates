@@ -24,9 +24,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { formatCount, timeAgo } from "@/lib/format";
 import { FeedPost } from "@/lib/api-client";
-import { useToggleLike, useToggleBookmark, useDeletePost } from "@/hooks/use-posts";
+import { useToggleLike, useToggleBookmark, useDeletePost, useRetryModeration } from "@/hooks/use-posts";
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { useAuth } from "@/lib/auth-context";
+import { ModerationStatusBadge } from "@/components/moderation/ModerationStatusBadge";
+import { ReportDialog } from "@/components/moderation/ReportDialog";
+import { AppealDialog } from "@/components/moderation/AppealDialog";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { PostMediaCarousel } from "@/components/viewing/PostMediaCarousel";
 import { CommentSheet, InlineComments } from "@/components/viewing/CommentSheet";
@@ -51,6 +54,9 @@ function toDisplayUser(author: FeedPost["author"]) {
 }
 
 export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }) {
+  const [reportOpen, setReportOpen] = useState(false);
+  const [appealOpen, setAppealOpen] = useState(false);
+  const retryModeration = useRetryModeration();
   const { user } = useAuth();
   const isMobile = useIsMobile();
   const submitNotInterested = useSubmitNotInterested();
@@ -66,6 +72,11 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
   const { data: followingSet } = useFollowingSet();
 
   const isOwnPost = user?.username === post.author.username;
+  // Own content in a non-public moderation state (processing / rejected /
+  // failed) renders a status banner so the author always knows where their
+  // content stands. Public feeds only contain approved posts.
+  const moderationState =
+    isOwnPost && post.moderation && post.moderation.status !== "approved" ? post.moderation : undefined;
   const following = followingSet?.has(post.author.username) ?? post.followingAuthor;
 
   const handleLike = useCallback(() => {
@@ -201,13 +212,18 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
                   <Trash2 className="size-4" />
                   Delete post
                 </DropdownMenuItem>
+                {moderationState?.status === "rejected" && (
+                  <DropdownMenuItem onClick={() => setAppealOpen(true)}>
+                    Appeal this decision
+                  </DropdownMenuItem>
+                )}
               </>
             ) : (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   className="text-danger focus:bg-danger/10 focus:text-danger"
-                  onClick={() => toast.success("Report sent to moderation team")}
+                  onClick={() => setReportOpen(true)}
                 >
                   Report
                 </DropdownMenuItem>
@@ -216,6 +232,25 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
+
+      {/* Moderation status banner (own content only — public feeds only
+          contain approved posts, so this never renders for other viewers). */}
+      {moderationState && (
+        <div className="px-4 pt-1 pb-2">
+          <ModerationStatusBadge
+            status={moderationState.status}
+            userMessage={moderationState.userMessage}
+            onRetry={
+              moderationState.status === "failed"
+                ? () => retryModeration.mutate(post._id)
+                : undefined
+            }
+            onAppeal={
+              moderationState.status === "rejected" ? () => setAppealOpen(true) : undefined
+            }
+          />
+        </div>
+      )}
 
       {/* Caption Body */}
       {post.body && (
@@ -343,6 +378,20 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
         text={post.body}
         url={`${typeof window !== "undefined" ? window.location.origin : ""}/post/${post._id}`}
       />
+
+      <ReportDialog
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        targetType="post"
+        targetId={post._id}
+      />
+      {moderationState?.record && (
+        <AppealDialog
+          open={appealOpen}
+          onOpenChange={setAppealOpen}
+          recordId={moderationState.record}
+        />
+      )}
     </motion.article>
   );
 }

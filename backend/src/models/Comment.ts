@@ -1,4 +1,5 @@
 import { Schema, model, Document, Types } from "mongoose";
+import { ModerationStatus } from "../lib/moderation/types";
 
 export interface IComment extends Document {
   post: Types.ObjectId;
@@ -7,7 +8,16 @@ export interface IComment extends Document {
   parent?: Types.ObjectId;
   likesCount: number;
   repliesCount: number;
+  /** Existing soft-visibility gate — every read path already filters
+ *  hidden:false, so the moderation pipeline keeps pending comments hidden
+ *  and flips hidden back to false only on APPROVED. */
   hidden: boolean;
+  moderation?: {
+    status: ModerationStatus;
+    record?: Types.ObjectId;
+    userMessage?: string;
+    updatedAt?: Date;
+  };
   removedAt?: Date;
   removedBy?: Types.ObjectId;
   createdAt: Date;
@@ -23,6 +33,16 @@ const CommentSchema = new Schema<IComment>(
     likesCount: { type: Number, default: 0 },
     repliesCount: { type: Number, default: 0 },
     hidden: { type: Boolean, default: false },
+    moderation: {
+      status: {
+        type: String,
+        enum: ["processing", "pending_review", "approved", "rejected", "failed"],
+        default: "processing",
+      },
+      record: { type: Schema.Types.ObjectId, ref: "ModerationRecord" },
+      userMessage: { type: String, maxlength: 500 },
+      updatedAt: { type: Date },
+    },
     removedAt: { type: Date },
     removedBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
@@ -31,5 +51,6 @@ const CommentSchema = new Schema<IComment>(
 
 CommentSchema.index({ post: 1, parent: 1, createdAt: 1 });
 CommentSchema.index({ author: 1 });
+CommentSchema.index({ "moderation.status": 1, createdAt: -1 });
 
 export const Comment = model<IComment>("Comment", CommentSchema);
