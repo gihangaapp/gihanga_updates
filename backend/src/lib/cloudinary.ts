@@ -123,4 +123,27 @@ export function videoThumbnailFromCloudinary(publicId: string, authenticated = t
   });
 }
 
+/**
+ * Deletes a Cloudinary asset (story expiry / content deletion). Stories are
+ * 24-hour content, so their media must not outlive them in storage. Tries
+ * the "authenticated" upload type first (everything uploaded while the
+ * moderation pipeline is active), then the default "upload" type as a
+ * fallback for assets created while it was disabled. Errors are swallowed —
+ * a failed destroy must never crash the caller.
+ */
+export async function deleteCloudinaryAsset(
+  publicId: string,
+  resourceType: "image" | "video" = "image",
+): Promise<void> {
+  if (!isCloudinaryConfigured || !publicId) return;
+  for (const type of ["authenticated", "upload"] as const) {
+    try {
+      const res = await cloudinary.uploader.destroy(publicId, { resource_type: resourceType, type });
+      if (res?.result === "ok" || res?.result === "not found") return;
+    } catch {
+      // try the next type; if all fail the asset is orphaned (harmless)
+    }
+  }
+}
+
 export { cloudinary };

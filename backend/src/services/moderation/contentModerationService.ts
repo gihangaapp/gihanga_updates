@@ -801,9 +801,25 @@ export async function applyStoryDecision(
   );
 
   if (result.decision === "APPROVED") {
-    const story = await Story.findById(storyId).select("mediaUrl");
-    if (story?.mediaUrl) {
-      await Media.updateMany({ cdnUrl: story.mediaUrl }, { $set: { moderationStatus: "approved" } });
+    const story = await Story.findById(storyId).select("mediaUrl mediaKey");
+    if (story) {
+      // Resolve the story's Media doc(s) by id (mediaKey), cdnUrl or variant
+      // URL. The old lookup matched ONLY `cdnUrl === story.mediaUrl`, but for
+      // moderated uploads mediaUrl is the checked route
+      // (/api/v1/media/file/:id) while cdnUrl is the raw Cloudinary URL —
+      // they never matched, the Media doc stayed "pending" and the story
+      // rendered as an empty box for every viewer except its author.
+      const docs = await resolveMediaDocs(
+        story.mediaUrl ? [story.mediaUrl] : [],
+        story.mediaKey ? [story.mediaKey] : [],
+      );
+      const conditions: any[] = [];
+      const ids = docs.map((d) => d._id).filter(Boolean);
+      if (ids.length > 0) conditions.push({ _id: { $in: ids } });
+      if (story.mediaUrl) conditions.push({ cdnUrl: story.mediaUrl });
+      if (conditions.length > 0) {
+        await Media.updateMany({ $or: conditions }, { $set: { moderationStatus: "approved" } });
+      }
     }
     return;
   }

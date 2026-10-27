@@ -10,6 +10,7 @@ import { setIO } from "./lib/socket";
 import { attachLiveHandlers } from "./lib/liveSignaling";
 import { startLiveSweeper } from "./lib/liveSweeper";
 import { startAchievementSweeper } from "./lib/achievementSweeper";
+import { startStorySweeper } from "./lib/storySweeper";
 import { verifyMailer } from "./lib/mailer";
 import { ensureDefaultAchievementDefinitions } from "./services/achievementService";
 import { registerModerationJobHandler } from "./services/moderation/contentModerationService";
@@ -106,6 +107,9 @@ async function startServer() {
     // (or the in-memory shim's lock on dev); every action is idempotent anyway.
     startLiveSweeper();
     startAchievementSweeper();
+    // Stories are 24-hour content — purge expired stories AND their
+    // Cloudinary-hosted media (see lib/storySweeper.ts).
+    startStorySweeper();
 
     // Content-safety pipeline: bounded in-process queue for async moderation
     // jobs (video frame sampling, deferred image batches). Recovers jobs that

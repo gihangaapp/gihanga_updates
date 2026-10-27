@@ -251,10 +251,6 @@ export const api = {
     apiFetch<T>(endpoint, { method: "DELETE" }, isStaff),
 };
 
-/**
- * Uploads a single file with progress reporting (fetch can't report upload progress,
- * so this uses XHR under the hood). Used for photos/videos/reels/avatars/stories.
- */
 export interface UploadedMediaInfo {
   url: string;
   key: string;
@@ -270,35 +266,72 @@ export interface UploadedMediaInfo {
   thumbnailUrl?: string;
 }
 
+/**
+ * Like mediaUrl, but appends the consumer access token as a query parameter
+ * for CHECKED media delivery URLs (/api/v1/media/file/:id). Plain
+ * <img>/<video> tags can't attach an Authorization header, so without this
+ * an author's own still-pending story media rendered as an empty box.
+ */
+export function mediaUrlWithAuth(path?: string | null): string | undefined {
+  const url = mediaUrl(path);
+  if (!url || !url.includes("/api/v1/media/file/")) return url;
+  const token = getConsumerAccessToken();
+  if (!token) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+}
+
+/**
+ * Uploads a single file with progress reporting (fetch can't report upload progress,
+ * so this uses XHR under the hood). Used for photos/videos/reels/avatars/stories.
+ *
+ * If the access token has expired the first attempt comes back 401
+ * ("Authentication required") — this transparently refreshes the consumer
+ * token and retries ONCE so long sessions never break mid-upload.
+ */
 export function uploadFile(
   kind: "photos" | "videos" | "reels" | "avatars" | "stories",
   file: File,
   onProgress?: (pct: number) => void,
 ): Promise<UploadedMediaInfo> {
-  return new Promise((resolve, reject) => {
-    const token = getConsumerAccessToken();
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${API_BASE_URL}/uploads/${kind}`);
-    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+  const attempt = () =>
+    new Promise<UploadedMediaInfo>((resolve, reject) => {
+      const token = getConsumerAccessToken();
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${API_BASE_URL}/uploads/${kind}`);
+      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
 
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
-    };
-    xhr.onload = () => {
-      try {
-        const data = JSON.parse(xhr.responseText);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+      };
+      xhr.onload = () => {
+        let data: any = null;
+        try {
+          data = JSON.parse(xhr.responseText);
+        } catch {
+          data = null;
+        }
         if (xhr.status >= 200 && xhr.status < 300) resolve(data);
-        else reject(new Error(data.error || "Upload failed"));
-      } catch {
-        reject(new Error("Upload failed"));
-      }
-    };
-    xhr.onerror = () => reject(new Error("Upload failed — check your connection"));
+        else reject(new Error(data?.error || "Upload failed"));
+      };
+      xhr.onerror = () => reject(new Error("Upload failed — check your connection"));
 
-    const form = new FormData();
-    form.append("file", file);
-    xhr.send(form);
-  });
+      const form = new FormData();
+      form.append("file", file);
+      xhr.send(form);
+    });
+
+  return (async () => {
+    try {
+      return await attempt();
+    } catch (err: any) {
+      const msg = String(err?.message || "");
+      if (msg.includes("Authentication required") || msg.includes("401")) {
+        const refreshed = await refreshConsumerToken();
+        if (refreshed) return attempt();
+      }
+      throw err;
+    }
+  })();
 }
 
 // ── Social feature types ────────────────────────────────────────────────────

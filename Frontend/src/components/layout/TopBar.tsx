@@ -1,4 +1,4 @@
-import { Bell, Moon, Search, Sun } from "lucide-react";
+import { Bell, Moon, Radio, Search, Sun } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Logo } from "@/components/common/Logo";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,10 @@ export function TopBar() {
   const unread = useUnreadNotificationCount();
 
   return (
-    <header className="glass sticky top-0 z-40 border-b">
+    <>
+    {/* Spacer reserves the top bar's height on mobile, where the bar is fixed */}
+    <div aria-hidden className="h-16 lg:hidden" />
+    <header className="glass fixed inset-x-0 top-0 z-40 border-b lg:sticky lg:inset-x-auto">
       <div className="mx-auto flex h-16 max-w-[1600px] items-center gap-3 px-4 sm:px-6">
         <div className="lg:hidden">
           <Logo compact />
@@ -29,14 +32,15 @@ export function TopBar() {
         </div>
 
         <div className="ml-auto flex items-center gap-1.5">
-          <Button variant="ghost" size="icon" className="md:hidden" aria-label="Search" asChild>
-            <Link to="/explore">
-              <Search />
+          <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Live" asChild>
+            <Link to="/live">
+              <Radio />
             </Link>
           </Button>
           <Button
             variant="ghost"
             size="icon"
+            className="max-lg:hidden"
             aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
             onClick={toggle}
           >
@@ -64,5 +68,6 @@ export function TopBar() {
         </div>
       </div>
     </header>
+    </>
   );
 }

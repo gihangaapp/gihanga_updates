@@ -40,7 +40,32 @@ export function useReplyToStory() {
   return useMutation({
     mutationFn: ({ storyId, message }: { storyId: string; message: string }) =>
       api.post<{ success: boolean; message: string }>(`/stories/${storyId}/reply`, { message }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+    onSuccess: (_data, vars) =>
+      queryClient.invalidateQueries({ queryKey: ["story-replies", vars.storyId] }),
+  });
+}
+
+export interface StoryReply {
+  _id: string;
+  text: string;
+  createdAt: string;
+  user: {
+    _id: string;
+    name: string;
+    username: string;
+    avatarHue: number;
+    avatarUrl: string | null;
+    verified: boolean;
+    isCreator: boolean;
+  } | null;
+}
+
+/** Comment thread for one story (stored as story_reply notifications). */
+export function useStoryReplies(storyId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["story-replies", storyId],
+    queryFn: () => api.get<{ replies: StoryReply[] }>(`/stories/${storyId}/replies`),
+    enabled: Boolean(storyId),
   });
 }
 

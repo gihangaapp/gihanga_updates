@@ -46,6 +46,20 @@ export function CreateHost() {
     }
   }, [s.open, s.mode]);
 
+  // Story mode renders as its own full-screen section (see below) instead of
+  // the Dialog/Drawer shell. Lock body scroll behind it so the page cannot
+  // scroll while the story creator is open.
+  useEffect(() => {
+    if (s.open && mode === "story") {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => {
+        document.body.style.overflow = prev;
+      };
+    }
+    return undefined;
+  }, [s.open, mode]);
+
   if (!s.open) return null;
 
   const modeTabs = [
@@ -97,17 +111,29 @@ export function CreateHost() {
     </div>
   );
 
+  // STORY MODE — a true full-screen SECTION, not a modal. No rounded sheet,
+  // no vaul drag handle, no drag-to-close: the user closes it explicitly
+  // with the ✕ button, and closing simply returns to whatever page they
+  // were on before opening the creator (no navigation anywhere).
+  if (mode === "story") {
+    return (
+      <div className="fixed inset-0 z-[70] overflow-hidden bg-slate-950">
+        <div className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-slate-950">
+          {content}
+        </div>
+      </div>
+    );
+  }
+
   if (isMobile) {
     return (
       <Drawer open={s.open} onOpenChange={(o) => (!o ? closeCreate() : null)}>
         {/* B3 — dvh (not vh) so mobile browser chrome doesn't clip the
-            creator; the story mode is full-bleed and safe-area aware. */}
+            creator. */}
         <DrawerContent
           className={cn(
             "w-full max-w-full p-0 overflow-hidden border-none",
-            mode === "story"
-              ? "h-[100dvh] max-h-[100dvh] rounded-none pb-[env(safe-area-inset-bottom)]"
-              : "h-[96dvh] max-h-[96dvh] rounded-t-3xl",
+            "h-[96dvh] max-h-[96dvh] rounded-t-3xl",
           )}
         >
           {content}
@@ -119,8 +145,7 @@ export function CreateHost() {
   return (
     <Dialog open={s.open} onOpenChange={(o) => (!o ? closeCreate() : null)}>
       {/* B3 — a DEFINITE height (min(92dvh, 900px)) instead of a bare
-          max-height: the story shell renders at full size immediately, with
-          the camera fading in on top — zero layout jump. */}
+          max-height: the shell renders at full size immediately. */}
       <DialogContent className="h-[min(92dvh,900px)] max-h-[min(92dvh,900px)] max-w-[760px] overflow-hidden p-0 gap-0 rounded-3xl border-border">
         <DialogHeader className="sr-only">
           <DialogTitle>Content Creator</DialogTitle>

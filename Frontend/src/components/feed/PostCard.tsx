@@ -112,8 +112,8 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
       className="surface-card mb-4 overflow-hidden border border-border bg-card shadow-soft"
     >
       {/* Header */}
-      <header className="flex items-center gap-3 p-4 pb-3">
-        <Link to="/profile/$username" params={{ username: post.author.username }} className="press">
+      <header className="flex items-center gap-2 p-3 pb-3 sm:gap-3 sm:p-4 sm:pb-3">
+        <Link to="/profile/$username" params={{ username: post.author.username }} className="press shrink-0">
           <GAvatar
             user={toDisplayUser(post.author)}
             size="md"
@@ -125,13 +125,13 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
             <Link
               to="/profile/$username"
               params={{ username: post.author.username }}
-              className="truncate text-[15px] font-bold hover:underline"
+              className="min-w-0 truncate text-sm font-bold hover:underline sm:text-[15px]"
             >
               {post.author.name}
             </Link>
             {post.author.verified && <VerifiedBadge />}
             {post.author.isCreator && (
-              <span className="shrink-0 rounded-md bg-primary-soft px-1.5 py-px text-[10px] font-bold tracking-wide text-primary uppercase">
+              <span className="shrink-0 rounded-md bg-primary-soft px-1.5 py-px text-[10px] font-bold tracking-wide text-primary uppercase max-[400px]:hidden">
                 Creator
               </span>
             )}
@@ -154,6 +154,7 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
           <Button
             variant={following ? "soft" : "default"}
             size="sm"
+            className="shrink-0"
             onClick={() =>
               followUser.mutate(
                 { username: post.author.username, follow: !following },
@@ -170,7 +171,7 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon-sm" aria-label="Post options">
+            <Button variant="ghost" size="icon-sm" className="shrink-0" aria-label="Post options">
               <MoreHorizontal className="size-5" />
             </Button>
           </DropdownMenuTrigger>

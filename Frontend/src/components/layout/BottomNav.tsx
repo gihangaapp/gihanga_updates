@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Home, Radio, Film, User, Plus } from "lucide-react";
+import { Home, Search, Film, User, Plus } from "lucide-react";
 import { openCreate } from "@/components/create/CreateHub";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -11,7 +11,7 @@ export function BottomNav() {
 
   const items = [
     { label: "Home", icon: Home, to: "/" },
-    { label: "Live", icon: Radio, to: "/live" },
+    { label: "Search", icon: Search, to: "/explore" },
     { label: "Reels", icon: Film, to: "/reels" },
     { label: "Profile", icon: User, to: profileLink },
   ];
@@ -46,7 +46,7 @@ export function BottomNav() {
 
         {/* Navigation Bar Items Content Overlay */}
         <div className="relative z-10 flex h-full items-center justify-between px-3">
-          {/* Left Items (Home, Live) */}
+          {/* Left Items (Home, Search) */}
           <div className="flex flex-1 items-center justify-around pr-3">
             {leftItems.map((item) => {
               const active = pathname === item.to;
@@ -57,19 +57,13 @@ export function BottomNav() {
                   className={cn(
                     "flex flex-col items-center gap-0.5 py-1 text-center transition-colors",
                     active
-                      ? "text-primary font-bold"
+                      ? "text-primary"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  <item.icon
-                    className={cn("size-[22px]", active && "fill-current")}
-                    strokeWidth={active ? 2.5 : 1.9}
-                  />
+                  <item.icon className="size-[22px]" strokeWidth={1.9} />
                   <span
-                    className={cn(
-                      "text-[11px] leading-none tracking-tight",
-                      active ? "font-bold" : "font-medium",
-                    )}
+                    className="text-[11px] leading-none font-medium tracking-tight"
                   >
                     {item.label}
                   </span>
@@ -92,19 +86,13 @@ export function BottomNav() {
                   className={cn(
                     "flex flex-col items-center gap-0.5 py-1 text-center transition-colors",
                     active
-                      ? "text-primary font-bold"
+                      ? "text-primary"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  <item.icon
-                    className={cn("size-[22px]", active && "fill-current")}
-                    strokeWidth={active ? 2.5 : 1.9}
-                  />
+                  <item.icon className="size-[22px]" strokeWidth={1.9} />
                   <span
-                    className={cn(
-                      "text-[11px] leading-none tracking-tight",
-                      active ? "font-bold" : "font-medium",
-                    )}
+                    className="text-[11px] leading-none font-medium tracking-tight"
                   >
                     {item.label}
                   </span>

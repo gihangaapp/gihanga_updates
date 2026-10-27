@@ -8,7 +8,6 @@ import {
   X,
   Zap,
   ZapOff,
-  MicOff,
   Mic,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -65,7 +64,6 @@ export function StoryCamera({
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
-  const wantAudioRef = useRef(false);
 
   // hasPermission === null → the camera is still STARTING (skeleton state).
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
@@ -141,26 +139,32 @@ export function StoryCamera({
   }, [facingMode]);
 
   // ── Lazy audio: attach a mic track the FIRST time Video mode is used ────
-  async function ensureAudioTrack() {
-    if (wantAudioRef.current) return;
-    wantAudioRef.current = true;
-    const stream = mediaStreamRef.current;
-    if (!stream) return;
-    if (stream.getAudioTracks().length > 0) {
-      setHasAudio(true);
-      return;
-    }
-    try {
-      const audio = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      // Merge the mic track into the existing stream — no camera re-acquire.
-      audio.getAudioTracks().forEach((track) => stream.addTrack(track));
-      setHasAudio(true);
-    } catch {
-      // Video recording without audio is fine — don't block the user.
-      setHasAudio(false);
-    }
+  // The in-flight attempt is memoised, so every caller (mode switch, shutter
+  // press) awaits the SAME attach attempt instead of racing it — recording
+  // always starts with the mic track already merged into the stream.
+  const audioAttachRef = useRef<Promise<void> | null>(null);
+
+  function ensureAudioTrack(): Promise<void> {
+    const pending = audioAttachRef.current ?? (audioAttachRef.current = (async () => {
+      const stream = mediaStreamRef.current;
+      if (!stream) return;
+      if (stream.getAudioTracks().length > 0) {
+        setHasAudio(true);
+        return;
+      }
+      try {
+        const audio = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+        // Merge the mic track into the existing stream — no camera re-acquire.
+        audio.getAudioTracks().forEach((track) => stream.addTrack(track));
+        setHasAudio(true);
+      } catch {
+        // Video recording without audio is fine — don't block the user.
+        setHasAudio(false);
+      }
+    })());
+    return pending;
   }
 
   // Toggle Torch/Flash if supported
@@ -232,11 +236,21 @@ export function StoryCamera({
         if (e.data.size > 0) recordedChunksRef.current.push(e.data);
       };
 
+      // Derive the real container extension from the blob type — MediaRecorder
+      // may produce webm OR mp4 depending on the browser; a mismatched .mp4
+      // extension on webm bytes made the backend's extension/MIME check reject
+      // the upload ("File extension does not match an allowed video type").
       recorder.onstop = () => {
         const blob = new Blob(recordedChunksRef.current, {
           type: recorder.mimeType || "video/mp4",
         });
-        const file = new File([blob], `story_video_${Date.now()}.mp4`, { type: blob.type });
+        const cleanType = ((blob.type || "video/mp4").split(";")[0] ?? "video/mp4").trim();
+        const ext = cleanType.includes("webm")
+          ? ".webm"
+          : cleanType.includes("quicktime") || cleanType.includes("mov")
+            ? ".mov"
+            : ".mp4";
+        const file = new File([blob], `story_video_${Date.now()}${ext}`, { type: cleanType });
         const previewUrl = URL.createObjectURL(blob);
         onCaptureMedia({ file, previewUrl, isVideo: true });
       };
@@ -375,16 +389,16 @@ export function StoryCamera({
         </button>
 
         <div className="flex items-center gap-3">
-          {mode === "video" && (
+          {/* Only a positive confirmation is shown: when the mic is attached
+              the chip reads "Mic on". No "No mic" banner — a missing mic
+              must not scare the user; the video still records silently. */}
+          {mode === "video" && hasAudio && (
             <span
-              className={cn(
-                "flex items-center gap-1 rounded-full bg-black/40 px-2.5 py-1 text-[10px] font-bold text-white/80 backdrop-blur-md",
-                hasAudio ? "text-emerald-300" : "text-amber-300",
-              )}
-              title={hasAudio ? "Microphone active" : "No microphone — video will be silent"}
+              className="flex items-center gap-1 rounded-full bg-black/40 px-2.5 py-1 text-[10px] font-bold text-emerald-300 backdrop-blur-md"
+              title="Microphone active — your video will have sound"
             >
-              {hasAudio ? <Mic className="size-3" /> : <MicOff className="size-3" />}
-              {hasAudio ? "Mic on" : "No mic"}
+              <Mic className="size-3" />
+              Mic on
             </span>
           )}
           <button
@@ -478,6 +492,10 @@ export function StoryCamera({
             type="button"
             onClick={() => {
               setMode("video");
+              // Attach the microphone as soon as the user enters Video mode
+              // (not only on shutter press) so "Mic on" is accurate and the
+              // recording definitively captures sound.
+              void ensureAudioTrack();
             }}
             className={cn(
               "text-xs font-extrabold uppercase tracking-widest transition-colors",

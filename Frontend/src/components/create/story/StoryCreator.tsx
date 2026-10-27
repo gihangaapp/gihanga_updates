@@ -1,30 +1,19 @@
 import { useState, useRef } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import {
   UploadCloud,
-  Eye,
-  Radio,
-  Sparkles,
-  X,
-  Type,
   Smile,
   PenTool,
   Palette,
-  Send,
   ArrowLeft,
-  Image as ImageIcon,
   Star,
-  Video as VideoIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { GAvatar } from "@/components/common/GAvatar";
 import { StoryCanvas } from "./StoryCanvas";
 import { StoryCamera, type CapturedMedia } from "./StoryCamera";
 import { StoryTextEditor } from "./StoryTextEditor";
 import { StoryStickerPicker, type StorySticker } from "./StoryStickerPicker";
 import { StoryDrawingTool } from "./StoryDrawingTool";
-import { StoryEffects } from "./StoryEffects";
 import { StoryBackgroundPicker } from "./StoryBackgroundPicker";
 import { StoryPreview } from "./StoryPreview";
 import { CloseFriendsModal } from "./CloseFriendsModal";
@@ -42,10 +31,9 @@ interface StoryCreatorProps {
 
 type CreatorView = "camera" | "editor" | "preview";
 type StoryModalView =
-  "none" | "text" | "stickers" | "draw" | "effects" | "background" | "close_friends";
+  "none" | "text" | "stickers" | "draw" | "background" | "close_friends";
 
 export function StoryCreator({ onClose }: StoryCreatorProps) {
-  const navigate = useNavigate();
   const { user } = useSessionUser();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -170,6 +158,7 @@ export function StoryCreator({ onClose }: StoryCreatorProps) {
 
     try {
       let finalMediaUrl = "";
+      let uploadedMediaKey: string | undefined = undefined;
       let mediaType: "image" | "video" = currentSlide.mediaIsVideo ? "video" : "image";
 
       if (currentSlide.mediaIsVideo && currentSlide.mediaFile) {
@@ -178,6 +167,7 @@ export function StoryCreator({ onClose }: StoryCreatorProps) {
           setUploadProgress(pct),
         );
         finalMediaUrl = uploaded.url;
+        uploadedMediaKey = uploaded.key;
       } else {
         // Render composite story canvas (Media + Drawings + Text + Stickers)
         // to a JPEG blob at 1080x1920 (retina) — pixel-faithful to the live
@@ -193,12 +183,17 @@ export function StoryCreator({ onClose }: StoryCreatorProps) {
         const storyFile = new File([canvasBlob], `story_${Date.now()}.jpg`, { type: "image/jpeg" });
         const uploaded = await uploadFile("stories", storyFile, (pct) => setUploadProgress(pct));
         finalMediaUrl = uploaded.url;
+        uploadedMediaKey = uploaded.key;
         mediaType = "image";
       }
 
       setUploadStage("publishing");
       await createStory.mutateAsync({
         mediaUrl: finalMediaUrl,
+        // mediaKey is the Media doc id — the moderation pipeline uses it to
+        // approve the exact uploaded asset, which is what makes the story
+        // image/video visible to every viewer instead of an empty box.
+        mediaKey: uploadedMediaKey,
         mediaType,
         caption: currentSlide.textElements[0]?.text || undefined,
         audience: selectedAudience,
@@ -210,9 +205,10 @@ export function StoryCreator({ onClose }: StoryCreatorProps) {
           ? "Shared with Close Friends!"
           : "Story shared with your followers!",
       );
+      // Stay exactly where the user was — closing the creator returns to the
+      // page it was opened from; never redirect (e.g. to the live page).
       setTimeout(() => {
         onClose();
-        navigate({ to: "/" });
       }, 1000);
     } catch (err: any) {
       setUploadStage("failed");
@@ -222,15 +218,48 @@ export function StoryCreator({ onClose }: StoryCreatorProps) {
 
   if (!user) return null;
 
-  // Render Camera Mode (Default state on Add Story click)
+  // Render Camera Mode (Default state on Add Story click).
+  // The hidden gallery input lives HERE too (not only in the editor) — it
+  // was previously unmounted in camera view, so the gallery button silently
+  // did nothing.
   if (view === "camera") {
     return (
-      <StoryCamera
-        onCaptureMedia={handleCameraCapture}
-        onOpenGallery={() => fileInputRef.current?.click()}
-        onOpenTextStory={() => setView("editor")}
-        onClose={onClose}
-      />
+      <>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*"
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) handleFileSelect(f);
+            e.target.value = "";
+          }}
+        />
+        <StoryCamera
+          onCaptureMedia={handleCameraCapture}
+          onOpenGallery={() => fileInputRef.current?.click()}
+          onOpenTextStory={() => setView("editor")}
+          onClose={() => {
+            // The editor's top-left button is now a BACK button (to here), so
+            // the unsaved-changes guard lives on the camera screen's close.
+            if (slides.some((s) => s.mediaFile || s.textElements.length > 0)) {
+              setShowUnsavedGuard(true);
+            } else {
+              onClose();
+            }
+          }}
+        />
+        <UnsavedChangesGuard
+          open={showUnsavedGuard}
+          onSaveDraft={handleSaveDraft}
+          onDiscard={() => {
+            setShowUnsavedGuard(false);
+            onClose();
+          }}
+          onContinue={() => setShowUnsavedGuard(false)}
+        />
+      </>
     );
   }
 
@@ -283,18 +312,15 @@ export function StoryCreator({ onClose }: StoryCreatorProps) {
 
       {/* Top Header Tools matching design reference */}
       <div className="relative z-30 flex items-center justify-between p-4 bg-gradient-to-b from-black/80 via-black/40 to-transparent">
+        {/* Back button — returns to the capture/pick screen (retake or pick a
+            new photo/video) instead of closing the whole creator. */}
         <button
           type="button"
-          onClick={() => {
-            if (slides.some((s) => s.mediaFile || s.textElements.length > 0)) {
-              setShowUnsavedGuard(true);
-            } else {
-              onClose();
-            }
-          }}
+          onClick={() => setView("camera")}
           className="press grid size-10 place-items-center rounded-full bg-black/40 text-white hover:bg-black/60 backdrop-blur-md"
+          title="Back to camera / gallery"
         >
-          <X className="size-6" />
+          <ArrowLeft className="size-6" />
         </button>
 
         {/* Top Creative Action Toolbar */}
@@ -352,16 +378,6 @@ export function StoryCreator({ onClose }: StoryCreatorProps) {
           >
             <Palette className="size-5" />
           </button>
-
-          {/* Effects / Filters */}
-          <button
-            type="button"
-            onClick={() => setActiveModal("effects")}
-            className="press grid size-10 place-items-center rounded-full bg-black/40 text-white hover:bg-black/60 backdrop-blur-md text-amber-400"
-            title="Filters"
-          >
-            <Sparkles className="size-5" />
-          </button>
         </div>
       </div>
 
@@ -413,8 +429,10 @@ export function StoryCreator({ onClose }: StoryCreatorProps) {
         />
       </div>
 
-      {/* Bottom Audience & Publish Bar */}
-      <div className="relative z-30 flex flex-wrap items-center justify-between gap-2 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-black/95 via-black/60 to-transparent">
+      {/* Bottom Audience & Publish Bar — always ONE horizontal line:
+          no flex-wrap, horizontally scrollable on tiny screens so the
+          three actions never stack vertically. */}
+      <div className="relative z-30 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-black/95 via-black/60 to-transparent">
         {/* B4 — makes the documented multi-slide limitation visible: only the
             CURRENT slide is shared (the API publishes one story per post). */}
         {slides.length > 1 && (
@@ -422,40 +440,42 @@ export function StoryCreator({ onClose }: StoryCreatorProps) {
             Sharing slide {activeSlideIndex + 1} of {slides.length}
           </span>
         )}
-        {/* Your Story Button */}
-        <button
-          type="button"
-          onClick={() => {
-            setAudience("everyone");
-            handlePublish("everyone");
-          }}
-          className="press flex items-center gap-2 rounded-full bg-white/15 px-3.5 py-2 text-xs font-bold text-white hover:bg-white/25 backdrop-blur-md"
-        >
-          <GAvatar user={user} size="xs" />
-          <span>Your Story</span>
-        </button>
+        <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
+          {/* Your Story Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setAudience("everyone");
+              handlePublish("everyone");
+            }}
+            className="press flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-white/15 px-3.5 py-2 text-xs font-bold text-white hover:bg-white/25 backdrop-blur-md"
+          >
+            <GAvatar user={user} size="xs" />
+            <span>Your Story</span>
+          </button>
 
-        {/* Close Friends Button (Opens Close Friends selection modal) */}
-        <button
-          type="button"
-          onClick={() => setActiveModal("close_friends")}
-          className="press flex items-center gap-1.5 rounded-full bg-white/15 px-3.5 py-2 text-xs font-bold text-white hover:bg-white/25 backdrop-blur-md"
-        >
-          <div className="grid size-5 place-items-center rounded-full bg-emerald-500 text-slate-950 font-bold">
-            <Star className="size-3 fill-slate-950" />
-          </div>
-          <span>Close Friends {closeFriendIds.length > 0 ? `(${closeFriendIds.length})` : ""}</span>
-        </button>
+          {/* Close Friends Button (Opens Close Friends selection modal) */}
+          <button
+            type="button"
+            onClick={() => setActiveModal("close_friends")}
+            className="press flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-white/15 px-3.5 py-2 text-xs font-bold text-white hover:bg-white/25 backdrop-blur-md"
+          >
+            <div className="grid size-5 place-items-center rounded-full bg-emerald-500 text-slate-950 font-bold">
+              <Star className="size-3 fill-slate-950" />
+            </div>
+            <span>Close Friends {closeFriendIds.length > 0 ? `(${closeFriendIds.length})` : ""}</span>
+          </button>
 
-        {/* Send To > Pill */}
-        <button
-          type="button"
-          onClick={() => setView("preview")}
-          className="press flex items-center gap-1 rounded-full bg-white px-4 py-2 text-xs font-extrabold text-slate-950 shadow-lg hover:bg-white/90"
-        >
-          <span>Sent to</span>
-          <span className="font-bold">›</span>
-        </button>
+          {/* Send To > Pill */}
+          <button
+            type="button"
+            onClick={() => setView("preview")}
+            className="press flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full bg-white px-4 py-2 text-xs font-extrabold text-slate-950 shadow-lg hover:bg-white/90"
+          >
+            <span>Sent to</span>
+            <span className="font-bold">›</span>
+          </button>
+        </div>
       </div>
 
       {/* Dynamic Popup Overlays */}

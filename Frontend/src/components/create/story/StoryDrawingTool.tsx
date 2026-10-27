@@ -342,20 +342,74 @@ export function StoryDrawingTool({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-between bg-black/95 p-3 sm:p-4 backdrop-blur-2xl select-none text-white">
-      {/* Top Header Controls */}
-      <div className="flex items-center justify-between z-10 gap-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="press grid size-9 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25"
-          title="Cancel"
-        >
-          <X className="size-5" />
-        </button>
+    <div className="fixed inset-0 z-50 flex flex-col justify-between bg-black/95 p-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:p-4 backdrop-blur-2xl select-none text-white">
+      {/* Top bar — TWO stacked rows so nothing is squeezed off-screen on
+          narrow phones: row 1 = navigation/actions, row 2 = tool modes
+          (horizontally scrollable). The old single row forced the close
+          button and actions to compete for width and made them unresponsive. */}
+      <div className="flex flex-col gap-2 z-10">
+        {/* Row 1 — close (left) + undo/clear/done (right) */}
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="press grid size-9 shrink-0 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25"
+            title="Cancel"
+          >
+            <X className="size-5" />
+          </button>
 
-        {/* Tool Mode Buttons */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar max-w-[280px]">
+          {/* Fill Toggle for Shapes */}
+          {tool !== "pen" && tool !== "eraser" && (
+            <button
+              type="button"
+              onClick={() => setIsFilled(!isFilled)}
+              className={cn(
+                "press shrink-0 whitespace-nowrap rounded-full border border-white/30 px-3 py-1.5 text-xs font-extrabold transition-all",
+                isFilled ? "bg-white text-slate-950" : "bg-white/15 text-white",
+              )}
+            >
+              {isFilled ? "Fill" : "Outline"}
+            </button>
+          )}
+
+          <div className="flex-1" />
+
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Undo */}
+            <button
+              type="button"
+              onClick={handleUndo}
+              className="press grid size-9 shrink-0 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25"
+              title="Undo"
+            >
+              <Undo2 className="size-4" />
+            </button>
+
+            {/* Clear */}
+            <button
+              type="button"
+              onClick={clearCanvas}
+              className="press grid size-9 shrink-0 place-items-center rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/30"
+              title="Clear all"
+            >
+              <Trash2 className="size-4" />
+            </button>
+
+            {/* Done / Save */}
+            <Button
+              variant="brand"
+              size="sm"
+              onClick={handleDone}
+              className="shrink-0 whitespace-nowrap rounded-full font-bold px-4"
+            >
+              <Check className="size-4 mr-1" /> Done
+            </Button>
+          </div>
+        </div>
+
+        {/* Row 2 — tool modes, full width, horizontally scrollable */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar -mx-0.5 px-0.5">
           {shapeTools.map((t) => {
             const Icon = t.icon;
             return (
@@ -375,52 +429,6 @@ export function StoryDrawingTool({
               </button>
             );
           })}
-        </div>
-
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Fill Toggle for Shapes */}
-          {tool !== "pen" && tool !== "eraser" && (
-            <button
-              type="button"
-              onClick={() => setIsFilled(!isFilled)}
-              className={cn(
-                "press rounded-full border border-white/30 px-3 py-1.5 text-xs font-extrabold transition-all",
-                isFilled ? "bg-white text-slate-950" : "bg-white/15 text-white",
-              )}
-            >
-              {isFilled ? "Fill" : "Outline"}
-            </button>
-          )}
-
-          {/* Undo */}
-          <button
-            type="button"
-            onClick={handleUndo}
-            className="press grid size-9 place-items-center rounded-full bg-white/15 text-white hover:bg-white/25"
-            title="Undo"
-          >
-            <Undo2 className="size-4" />
-          </button>
-
-          {/* Clear */}
-          <button
-            type="button"
-            onClick={clearCanvas}
-            className="press grid size-9 place-items-center rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/30"
-            title="Clear all"
-          >
-            <Trash2 className="size-4" />
-          </button>
-
-          {/* Done / Save */}
-          <Button
-            variant="brand"
-            size="sm"
-            onClick={handleDone}
-            className="rounded-full font-bold px-4"
-          >
-            <Check className="size-4 mr-1" /> Done
-          </Button>
         </div>
       </div>
 

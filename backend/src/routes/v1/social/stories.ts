@@ -7,6 +7,8 @@ import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/
 import { moderationActive } from "../../../middleware/upload";
 import { assessStory } from "../../../services/moderation/contentModerationService";
 import { cancelJobsForContent } from "../../../services/moderation/moderationQueue";
+import { purgeStoryMedia } from "../../../lib/storySweeper";
+import { deleteCloudinaryAsset, isCloudinaryConfigured } from "../../../lib/cloudinary";
 
 const router = Router();
 const AUTHOR_FIELDS = "name username avatarHue avatarUrl isCreator verified";
@@ -118,7 +120,8 @@ router.get("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Res
   }
 });
 
-// POST /api/v1/stories/:id/reply — reply to story & generate notification
+// POST /api/v1/stories/:id/reply — comment on a story & notify the author
+// Own-story comments are allowed (they are just not self-notified).
 router.post("/:id/reply", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { message } = req.body;
@@ -139,22 +142,60 @@ router.post("/:id/reply", authenticateConsumer, async (req: AuthenticatedRequest
     if (!story) return res.status(404).json({ error: "Story not found" });
 
     const authorId = String(story.author._id || story.author);
-    if (authorId === req.user!.userId) {
-      return res.status(400).json({ error: "You cannot reply to your own story" });
-    }
+    const isOwnStory = authorId === req.user!.userId;
 
-    // Create Notification for the story author
-    await Notification.create({
-      recipient: story.author._id || story.author,
-      actor: req.user!.userId,
-      kind: "story_reply",
-      text: `replied to your story: "${message.trim().slice(0, 80)}"`,
-      relatedPost: story._id as any,
-    });
+    // Create Notification for the story author (skip self-notifications).
+    if (!isOwnStory) {
+      await Notification.create({
+        recipient: story.author._id || story.author,
+        actor: req.user!.userId,
+        kind: "story_reply",
+        text: `replied to your story: "${message.trim().slice(0, 80)}"`,
+        relatedPost: story._id as any,
+      });
+    }
 
     return res.status(201).json({ success: true, message: "Reply sent successfully!" });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to send story reply", details: error.message });
+  }
+});
+
+// GET /api/v1/stories/:id/replies — comment thread for a story.
+// Replies are stored as story_reply notifications tied to the story id
+// (relatedPost), so the thread is readable by anyone who can see the story.
+router.get("/:id/replies", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const story = await Story.findById(req.params.id).select("_id author");
+    if (!story) return res.status(404).json({ error: "Story not found" });
+
+    const { Notification } = await import("../../../models/Notification");
+    const replies = await Notification.find({ kind: "story_reply", relatedPost: story._id })
+      .sort({ createdAt: 1 })
+      .limit(200)
+      .populate("actor", AUTHOR_FIELDS)
+      .lean();
+
+    return res.json({
+      replies: replies.map((r: any) => ({
+        _id: String(r._id),
+        text: r.text,
+        createdAt: r.createdAt,
+        user: r.actor
+          ? {
+              _id: String(r.actor._id ?? r.actor),
+              name: r.actor.name,
+              username: r.actor.username,
+              avatarHue: r.actor.avatarHue,
+              avatarUrl: r.actor.avatarUrl,
+              verified: r.actor.verified,
+              isCreator: r.actor.isCreator,
+            }
+          : null,
+      })),
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to load story replies", details: error.message });
   }
 });
 
@@ -191,7 +232,8 @@ router.get("/:id/viewers", authenticateConsumer, async (req: AuthenticatedReques
   }
 });
 
-// DELETE /api/v1/stories/:id — author only
+// DELETE /api/v1/stories/:id — author only. Also purges the story's
+// Cloudinary-hosted media + Media docs so deleted stories leave nothing behind.
 router.delete("/:id", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const story = await Story.findById(req.params.id);
@@ -200,6 +242,16 @@ router.delete("/:id", authenticateConsumer, async (req: AuthenticatedRequest, re
       return res.status(403).json({ error: "You can only delete your own stories" });
     }
     await cancelJobsForContent("story", String(story._id)).catch(() => undefined);
+    await purgeStoryMedia(
+      story.mediaKey ? String(story.mediaKey) : undefined,
+      story.mediaUrl,
+      story.mediaType === "video" ? "video" : "image",
+    ).catch(() => undefined);
+    if (story.mediaKey && story.mediaKey.startsWith("gihanga/") && isCloudinaryConfigured) {
+      await deleteCloudinaryAsset(story.mediaKey, story.mediaType === "video" ? "video" : "image").catch(
+        () => undefined,
+      );
+    }
     await Story.deleteOne({ _id: story._id });
     return res.status(204).end();
   } catch (error: any) {
