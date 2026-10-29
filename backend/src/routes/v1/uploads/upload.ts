@@ -2,7 +2,7 @@ import { Router, Response } from "express";
 import { User } from "../../../models/User";
 import { optionalAuth } from "../../../middleware/optionalAuth";
 import { AuthenticatedRequest } from "../../../middleware/rbac";
-import { uploaderFor, UploadKind, moderationActive } from "../../../middleware/upload";
+import { uploaderFor, UploadKind, moderationActive, normalizeMimetype } from "../../../middleware/upload";
 import { processAndStoreMedia } from "../../../services/media/mediaService";
 import { assessAvatar } from "../../../services/moderation/contentModerationService";
 import { Media } from "../../../models/Media";
@@ -43,6 +43,11 @@ router.post("/:kind", optionalAuth, async (req: AuthenticatedRequest, res: Respo
     if (!file) {
       return res.status(400).json({ error: "No file provided" });
     }
+
+    // MediaRecorder blobs carry a codecs suffix (e.g. "video/webm;codecs=vp9").
+    // Normalize BEFORE storing/processing so type detection, the media doc's
+    // `format` field and Cloudinary's resource_type resolution all stay clean.
+    file.mimetype = normalizeMimetype(file.mimetype);
 
     try {
       const processed = await processAndStoreMedia({

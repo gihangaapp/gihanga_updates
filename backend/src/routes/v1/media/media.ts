@@ -6,6 +6,7 @@ import { optionalAuth } from "../../../middleware/optionalAuth";
 import { uploaderFor, UploadKind } from "../../../middleware/upload";
 import { processAndStoreMedia } from "../../../services/media/mediaService";
 import { Media } from "../../../models/Media";
+import { Story } from "../../../models/Story";
 import { quarantineRoot, UPLOAD_ROOT, moderationActive } from "../../../middleware/upload";
 import { isCloudinaryConfigured, signedCloudinaryDeliveryUrl } from "../../../lib/cloudinary";
 
@@ -99,8 +100,28 @@ router.get("/file/:mediaId", optionalAuth, async (req: AuthenticatedRequest, res
     }
 
     if (!approved && !isOwner && !isReviewer) {
-      // 404 (not 403): do not confirm existence of quarantined media.
-      return res.status(404).json({ error: "Media not found" });
+      // Story-referenced media: when the parent STORY itself is approved (or
+      // legacy without a moderation block), its media is deliverable. This
+      // rescues story rows whose Media doc stayed "pending" because the old
+      // cdnUrl-based approval never matched — those stories otherwise showed
+      // an empty photo for every viewer except the author.
+      const parentStory = await Story.findOne({
+        $or: [
+          { mediaKey: String(media._id) },
+          { mediaUrl: `/api/v1/media/file/${media._id}` },
+        ],
+      })
+        .select("moderation.status")
+        .lean();
+
+      if (!parentStory) {
+        // 404 (not 403): do not confirm existence of quarantined media.
+        return res.status(404).json({ error: "Media not found" });
+      }
+      const storyStatus = (parentStory as any).moderation?.status ?? "approved";
+      if (storyStatus !== "approved") {
+        return res.status(404).json({ error: "Media not found" });
+      }
     }
 
     // ── Cloudinary-hosted asset ──────────────────────────────────────────────

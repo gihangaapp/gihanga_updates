@@ -105,28 +105,40 @@ const ALLOWED_EXTENSIONS: Record<string, Set<string>> = {
   video: new Set([".mp4", ".webm", ".mov"]),
 };
 
+/**
+ * Normalizes a browser/MediaRecorder MIME type for comparison. Recorded
+ * blobs often carry codecs (e.g. "video/webm;codecs=vp9") which made the
+ * strict Set lookups below reject perfectly valid story/post videos with
+ * "Stories must be an image or a short video" — strip everything after ";"
+ * and lowercase before matching.
+ */
+export function normalizeMimetype(raw: string | undefined): string {
+  return (raw || "").split(";")[0].trim().toLowerCase();
+}
+
 function fileFilterFor(kind: UploadKind) {
   return (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
     const ext = path.extname(file.originalname || "").toLowerCase();
+    const mimetype = normalizeMimetype(file.mimetype);
 
     if (kind === "avatars" || kind === "photos") {
-      if (!IMAGE_TYPES.has(file.mimetype)) return cb(new Error("Only JPEG, PNG, WEBP or GIF images are allowed"));
+      if (!IMAGE_TYPES.has(mimetype)) return cb(new Error("Only JPEG, PNG, WEBP or GIF images are allowed"));
       if (!ALLOWED_EXTENSIONS.image.has(ext)) return cb(new Error("File extension does not match an allowed image type"));
     } else if (kind === "videos" || kind === "reels") {
-      if (!IMAGE_TYPES.has(file.mimetype) && !VIDEO_TYPES.has(file.mimetype)) {
+      if (!IMAGE_TYPES.has(mimetype) && !VIDEO_TYPES.has(mimetype)) {
         return cb(new Error("Only MP4, WEBM or MOV videos (or an image thumbnail) are allowed"));
       }
-      if (VIDEO_TYPES.has(file.mimetype) && !ALLOWED_EXTENSIONS.video.has(ext)) {
+      if (VIDEO_TYPES.has(mimetype) && !ALLOWED_EXTENSIONS.video.has(ext)) {
         return cb(new Error("File extension does not match an allowed video type"));
       }
     } else if (kind === "stories") {
-      if (!IMAGE_TYPES.has(file.mimetype) && !VIDEO_TYPES.has(file.mimetype)) {
+      if (!IMAGE_TYPES.has(mimetype) && !VIDEO_TYPES.has(mimetype)) {
         return cb(new Error("Stories must be an image or a short video"));
       }
-      if (VIDEO_TYPES.has(file.mimetype) && !ALLOWED_EXTENSIONS.video.has(ext)) {
+      if (VIDEO_TYPES.has(mimetype) && !ALLOWED_EXTENSIONS.video.has(ext)) {
         return cb(new Error("File extension does not match an allowed video type"));
       }
-      if (IMAGE_TYPES.has(file.mimetype) && !ALLOWED_EXTENSIONS.image.has(ext)) {
+      if (IMAGE_TYPES.has(mimetype) && !ALLOWED_EXTENSIONS.image.has(ext)) {
         return cb(new Error("File extension does not match an allowed image type"));
       }
     }
@@ -170,7 +182,17 @@ export function uploaderFor(kind: UploadKind) {
   return multer({
     storage: storageFor(kind),
     fileFilter: fileFilterFor(kind),
-    limits: { fileSize: kind === "videos" ? MAX_VIDEO_BYTES : kind === "reels" ? MAX_REEL_BYTES : MAX_IMAGE_BYTES },
+    // Story videos were silently capped at the image limit (15 MB) here even
+    // though maxBytesFor allows MAX_VIDEO_BYTES for story videos — real video
+    // stories then died mid-upload. Use the same table as maxBytesFor.
+    limits: {
+      fileSize:
+        kind === "videos" || kind === "stories"
+          ? MAX_VIDEO_BYTES
+          : kind === "reels"
+            ? MAX_REEL_BYTES
+            : MAX_IMAGE_BYTES,
+    },
   });
 }
 

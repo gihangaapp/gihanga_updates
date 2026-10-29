@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import {
   ChevronLeft,
   ChevronRight,
+  MessageCircle,
   MoreHorizontal,
   Send,
   Trash2,
@@ -22,8 +23,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ShareSheet } from "@/components/viewing/ShareSheet";
+import { StoryComments } from "@/components/feed/StoryComments";
 import { formatCount, timeAgo } from "@/lib/format";
-import { mediaUrl, StoryGroup } from "@/lib/api-client";
+import { mediaUrlWithAuth, StoryGroup } from "@/lib/api-client";
 import { useMarkStoryViewed, useDeleteStory, useReplyToStory } from "@/hooks/use-stories";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
@@ -62,6 +64,7 @@ export function StoryViewer({
   const [muted, setMuted] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [shareOpen, setShareOpen] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const raf = useRef<number | null>(null);
@@ -166,15 +169,24 @@ export function StoryViewer({
     }
   }, [item?._id]);
 
-  // Handle RAF progress timer for image slides
+  // Reset the loading line the moment the displayed story changes — moving
+  // back (or forward) must NEVER show the previous line re-filling from its
+  // old position; the target story starts a fresh loading line at 0.
+  useEffect(() => {
+    setProgress(0);
+  }, [index, step]);
+
+  // Handle RAF progress timer for image slides. `cancelled` guards against a
+  // stale frame from an earlier slide firing next() after the user navigated.
   useEffect(() => {
     if (paused || item?.mediaType === "video") return;
+    let cancelled = false;
     let start = performance.now();
     const tick = (now: number) => {
+      if (cancelled) return;
       const p = Math.min(1, (now - start) / duration);
       setProgress(p);
       if (p >= 1) {
-        start = now;
         next();
         return;
       }
@@ -182,6 +194,7 @@ export function StoryViewer({
     };
     raf.current = requestAnimationFrame(tick);
     return () => {
+      cancelled = true;
       if (raf.current) cancelAnimationFrame(raf.current);
     };
   }, [index, step, paused, next, duration, item?.mediaType]);
@@ -213,7 +226,10 @@ export function StoryViewer({
   }, [next, prev, onClose]);
 
   if (!group || !item) return null;
-  const image = mediaUrl(item.mediaUrl);
+  // Token-aware URL: checked media (/api/v1/media/file/:id) is consumed by
+  // plain <img>/<video> tags that cannot send an Authorization header, so the
+  // token rides in the query string for the author's own pending media.
+  const image = mediaUrlWithAuth(item.mediaUrl);
 
   const handleDeleteCurrentStory = () => {
     if (!item) return;
@@ -323,6 +339,16 @@ export function StoryViewer({
             {group.author.username}
           </Link>
           <span className="text-xs text-white/70 shrink-0">{timeAgo(item.createdAt)}</span>
+
+          {/* Story comments */}
+          <button
+            type="button"
+            aria-label="View comments"
+            onClick={() => setCommentsOpen(true)}
+            className="press grid size-8 place-items-center rounded-full bg-black/40 text-white backdrop-blur-md"
+          >
+            <MessageCircle className="size-4" />
+          </button>
 
           {item.mediaType === "video" && (
             <button
@@ -447,6 +473,15 @@ export function StoryViewer({
         title={`Story by @${group.author.username}`}
         url={`${typeof window !== "undefined" ? window.location.origin : ""}/story/${item._id}`}
       />
+
+      {/* Story comment thread */}
+      {commentsOpen && (
+        <StoryComments
+          storyId={item._id}
+          authorUsername={group.author.username}
+          onClose={() => setCommentsOpen(false)}
+        />
+      )}
     </div>
   );
 }

@@ -41,8 +41,8 @@ interface PostMediaCarouselProps {
  * aspect-ratio BEFORE load (zero layout shift), with a lazy natural-size
  * fallback for legacy posts that never persisted their geometry.
  */
-const RATIO_MIN = 4 / 5; // portrait clamp (0.8)
-const RATIO_MAX = 1.91; // landscape clamp
+const RATIO_MIN = 0.4; // extreme-portrait safety clamp only
+const RATIO_MAX = 4; // extreme-panorama safety clamp only
 const DEFAULT_RATIO = 4 / 3; // legacy posts with no metadata at all
 
 function clampRatio(r: number | undefined): number | undefined {
@@ -70,10 +70,9 @@ export function PostMediaCarousel({
 
   // Lazy fallback (B1): legacy posts without persisted geometry report their
   // natural size on load; the stage then adopts the true ratio once.
-  const [measuredRatio, setMeasuredRatio] = useState<number | undefined>(undefined);
-  const handleMeasured = (w: number, h: number) => {
-    if (h > 0 && measuredRatio === undefined) setMeasuredRatio(w / h);
-  };
+  // Measured natural ratio per media URL (true pixel dimensions win over
+  // persisted metadata so the stage always matches the real media exactly).
+  const [measured, setMeasured] = useState<Record<string, number>>({});
 
   if (!mediaUrlString || kind === "text") return null;
 
@@ -86,6 +85,14 @@ export function PostMediaCarousel({
 
   const activeRawUrl = rawUrls[activeIdx] ?? rawUrls[0];
   const activeFullUrl = mediaUrl(activeRawUrl);
+  const measuredRatio = measured[rawUrls[0] ?? ""];
+  const activeMeasured = measured[activeRawUrl ?? ""];
+  const handleMeasured = (w: number, h: number) => {
+    const key = activeRawUrl ?? "";
+    if (w > 0 && h > 0 && measured[key] === undefined) {
+      setMeasured((m) => ({ ...m, [key]: w / h }));
+    }
+  };
 
   // B1.4 — the stage ratio is the FIRST item's ratio (or the tallest clamped
   // one), so swiping multi-image posts never jumps the layout.
@@ -94,14 +101,16 @@ export function PostMediaCarousel({
     firstItem?.aspectRatio ??
     (firstItem?.width && firstItem?.height ? firstItem.width / firstItem.height : undefined);
   const stageRatio = clampRatio(measuredRatio ?? aspectRatio ?? firstItemRatio) ?? DEFAULT_RATIO;
+  const activeItem = mediaItems?.find((m) => m.url === activeRawUrl);
+  const activeItemRatio =
+    activeItem?.aspectRatio ??
+    (activeItem?.width && activeItem?.height ? activeItem.width / activeItem.height : undefined);
   const intrinsicRatio: number =
-    measuredRatio ??
-    aspectRatio ??
-    mediaItems?.find((m) => m.url === activeRawUrl)?.aspectRatio ??
-    stageRatio ??
-    DEFAULT_RATIO;
-  // Contain only when clamping actually applies (ratio outside the window).
-  const needsContain = intrinsicRatio < RATIO_MIN || intrinsicRatio > RATIO_MAX;
+    activeMeasured ?? activeItemRatio ?? (activeIdx === 0 ? aspectRatio : undefined) ?? stageRatio;
+  // Cover (edge-to-edge, no bars) whenever the media matches the stage ratio;
+  // contain only when it genuinely differs (extreme clamp, or a carousel item
+  // with a different shape than the first) so nothing is ever cropped.
+  const needsContain = Math.abs(intrinsicRatio / stageRatio - 1) > 0.02;
 
   const handleMediaTap = () => {
     const now = Date.now();
@@ -156,11 +165,9 @@ export function PostMediaCarousel({
       aria-label="Double tap to like or swipe to view next image"
       className="relative mx-4 mb-3 w-[calc(100%-2rem)] overflow-hidden rounded-2xl bg-black select-none group flex items-center justify-center"
       style={{
-        // B1.3 — the image's own height at container width, clamped: ratio
-        // clamped to [4:5 … 1.91:1], max height min(80dvh, 720px). Reserved
-        // BEFORE load → zero layout shift.
+        // B1.3 — the media's own height at container width (true ratio, no
+        // letterbox bars). Reserved BEFORE load → zero layout shift.
         aspectRatio: `${stageRatio ?? DEFAULT_RATIO}`,
-        maxHeight: "min(80dvh, 720px)",
       }}
     >
       {/* Current Active Item Stage */}

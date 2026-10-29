@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { ArrowUpRight, Flame, Loader2, Radio, Sparkles, TrendingUp, UserPlus } from "lucide-react";
+import { ArrowUpRight, Loader2, Radio, Sparkles, TrendingUp, UserPlus } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { StoryRail } from "@/components/feed/StoryRail";
 import { Composer } from "@/components/feed/Composer";
@@ -11,7 +11,6 @@ import { FeedAdCard } from "@/components/ads/FeedAdCard";
 import { Button } from "@/components/ui/button";
 import { useFeed, useExplore, useTrending } from "@/hooks/use-posts";
 import { useFeedAds } from "@/hooks/use-ads";
-import { useTrendingTags } from "@/hooks/use-search";
 import { useLiveStreams } from "@/hooks/use-live";
 import { useAuth } from "@/lib/auth-context";
 import { LandingPage } from "./landing";
@@ -62,33 +61,15 @@ const tabs = [
 
 /**
  * Mobile/tablet discovery strip (hidden on xl+, where the right rail already
- * shows trending): a scrollable row of trending tags plus a swipeable banner
- * carousel. Both scroll horizontally with snap, so they never push the feed.
+ * shows trending): a swipeable banner carousel that scrolls horizontally with
+ * snap, so it never pushes the feed.
  */
 function MobileDiscovery() {
-  const { data: tagsData } = useTrendingTags();
   const { data: liveData } = useLiveStreams();
-  const tags = (tagsData?.tags ?? []).slice(0, 10);
   const liveStreams = liveData?.streams ?? [];
 
   return (
     <div className="mb-4 space-y-3 xl:hidden">
-      {tags.length > 0 && (
-        <div className="-mx-3 flex items-center gap-2 overflow-x-auto overscroll-x-contain px-3 no-scrollbar [touch-action:pan-x_pan-y] sm:-mx-5 sm:px-5">
-          <Flame className="size-4 shrink-0 text-primary" />
-          {tags.map((t) => (
-            <Link
-              key={t.tag}
-              to="/tag/$tag"
-              params={{ tag: t.tag }}
-              className="press shrink-0 rounded-full bg-muted px-3 py-1.5 text-xs font-bold text-foreground"
-            >
-              #{t.tag}
-            </Link>
-          ))}
-        </div>
-      )}
-
       <div className="-mx-3 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain scroll-px-3 px-3 pb-1 no-scrollbar [touch-action:pan-x_pan-y] sm:-mx-5 sm:px-5">
         {liveStreams.length > 0 && (
           <Link
@@ -169,7 +150,7 @@ function HomeFeed() {
       <div className="mx-auto w-full max-w-[620px]">
         <h1 className="sr-only">Gihanga Updates home feed</h1>
 
-        <div className="glass no-scrollbar sticky top-16 z-30 -mx-3 mb-4 flex snap-x gap-1 overflow-x-auto overscroll-x-contain rounded-none border-b px-3 py-2 [touch-action:pan-x_pan-y] sm:-mx-5 sm:px-5 lg:static lg:mx-0 lg:rounded-2xl lg:border lg:px-2">
+        <div className="glass no-scrollbar max-lg:hidden sticky top-16 z-30 -mx-3 mb-4 flex snap-x gap-1 overflow-x-auto overscroll-x-contain rounded-none border-b px-3 py-2 [touch-action:pan-x_pan-y] sm:-mx-5 sm:px-5 lg:static lg:mx-0 lg:rounded-2xl lg:border lg:px-2">
           {tabs.map((t) => {
             const isActive = t.id === tab;
             return (
