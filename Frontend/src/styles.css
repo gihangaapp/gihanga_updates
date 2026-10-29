@@ -311,11 +311,26 @@
     -webkit-tap-highlight-color: transparent;
   }
 
+  /* Stable feed-media height. Uses the SMALL viewport unit (svh) so the value
+     never changes when the mobile browser title/address bar shows or hides
+     while scrolling (dvh does, which re-scaled every post). */
+  :root {
+    --feed-media-max-h: min(78vh, 760px);
+  }
+  @supports (height: 1svh) {
+    :root {
+      --feed-media-max-h: min(78svh, 760px);
+    }
+  }
+
   /* Only app-shell routes replace the viewport bar with the inset indicator;
      public/auth pages retain the browser's native scrollbar. */
   html.app-scrollbar-active {
     scrollbar-width: none;
-    overscroll-behavior-y: contain;
+    overscroll-behavior-y: none;
+  }
+  html.app-scrollbar-active body {
+    overscroll-behavior-y: none;
   }
 
   html.app-scrollbar-active::-webkit-scrollbar {
@@ -448,6 +463,23 @@
   &::-webkit-scrollbar-thumb:hover {
     background: var(--color-primary);
   }
+}
+
+/* Desktop: the right rail sits under the top bar; when the bar slides away on
+   scroll-down, the rail reclaims that space (and returns with the bar). */
+.right-rail {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  transition: top 300ms ease-out, height 300ms ease-out;
+}
+.right-rail::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+html.topbar-hidden .right-rail {
+  top: 0;
+  height: 100dvh;
 }
 
 /* A viewport scrollbar inset below the app header and above mobile navigation.

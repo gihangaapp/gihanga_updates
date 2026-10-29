@@ -15,6 +15,13 @@ export function TopBar() {
 
   // Keep the top bar out of the way while scrolling down, and bring it back
   // as soon as the user scrolls upward (on every page that uses AppShell).
+  // Mirror the hidden state on <html> so sticky sidebars (desktop right rail)
+  // can reclaim the space while the bar is away.
+  useEffect(() => {
+    document.documentElement.classList.toggle("topbar-hidden", isHidden);
+  }, [isHidden]);
+  useEffect(() => () => document.documentElement.classList.remove("topbar-hidden"), []);
+
   useEffect(() => {
     let previousY = window.scrollY;
     let lastDirectionChange = 0;
@@ -35,8 +42,16 @@ export function TopBar() {
         previousY = currentY;
       }
     };
+    // Keyboard users tabbing into the bar always get it back.
+    const handleFocusIn = (e: FocusEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.("[data-topbar]")) setIsHidden(false);
+    };
     window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
+    document.addEventListener("focusin", handleFocusIn);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      document.removeEventListener("focusin", handleFocusIn);
+    };
   }, []);
 
   return (
@@ -44,6 +59,7 @@ export function TopBar() {
     {/* Spacer reserves the top bar's height on mobile, where the bar is fixed */}
     <div aria-hidden className="h-16 lg:hidden" />
     <header
+      data-topbar
       aria-hidden={isHidden || undefined}
       className={`glass fixed inset-x-0 top-0 z-40 border-b transition-transform duration-300 ease-out will-change-transform lg:sticky lg:inset-x-auto ${isHidden ? "-translate-y-[110%]" : "translate-y-0"}`}
     >

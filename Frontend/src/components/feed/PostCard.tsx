@@ -109,7 +109,7 @@ export const PostCard = memo(function PostCard({ post, index = 0 }: {
     isLongCaption && !isExpanded ? `${post.body.slice(0, maxCharLimit)}…` : post.body;
 
   return (
-    <article className="feed-card surface-card mb-4 overflow-hidden border border-border bg-card shadow-soft">
+    <article className="feed-card animate-in fade-in duration-300 surface-card mb-4 overflow-hidden border border-border bg-card shadow-soft">
       {/* Header */}
       <header className="flex items-center gap-2 p-3 pb-3 sm:gap-3 sm:p-4 sm:pb-3">
         <Link to="/profile/$username" params={{ username: post.author.username }} className="press shrink-0">

@@ -22,7 +22,7 @@ export function BottomNav() {
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 lg:hidden pointer-events-none">
       {/* Container for mobile navigation bar */}
-      <div className="relative w-full h-[68px] pb-[env(safe-area-inset-bottom)] pointer-events-auto">
+      <div className="relative w-full h-[68px] pb-[env(safe-area-inset-bottom)] pointer-events-auto transform-gpu">
         {/* SVG Scooped Cutout Background using Gihanga Updates brand surface/card colors */}
         <svg
           className="absolute inset-0 w-full h-full text-card fill-current drop-shadow-[0_-4px_16px_rgba(0,0,0,0.12)] dark:drop-shadow-[0_-6px_20px_rgba(0,0,0,0.45)]"

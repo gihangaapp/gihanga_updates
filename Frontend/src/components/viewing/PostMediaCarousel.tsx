@@ -34,7 +34,7 @@ interface PostMediaCarouselProps {
  * B1/B2 — best-fit media stage.
  *
  * Each active item uses its own measured/persisted aspect ratio and the stage
- * is capped at 56dvh (or 680px) so feed cards stay compact on short screens.
+ * is capped by --feed-media-max-h (small-viewport based, so it never changes when the mobile browser bars show/hide) so feed cards stay compact on short screens.
  * Nothing important is cropped: common photo/video ratios use object-contain
  * over a blurred backdrop when the stage is height-limited. Aspect-ratio
  * reserves space before load, with a natural-size fallback for legacy posts.
@@ -179,7 +179,7 @@ export function PostMediaCarousel({
         // media on large screens narrows the stage proportionally instead of
         // adding bars, so the picture/video always fits 100%.
         aspectRatio: `${stageRatio ?? DEFAULT_RATIO}`,
-        width: `min(calc(100% - 2rem), calc(min(78dvh, 760px) * ${stageRatio ?? DEFAULT_RATIO}))`,
+        width: `min(calc(100% - 2rem), calc(var(--feed-media-max-h, 760px) * ${stageRatio ?? DEFAULT_RATIO}))`,
         contain: "layout paint",
         touchAction: "pan-y",
       }}

@@ -84,17 +84,30 @@ export function ResponsiveVideo({
   const effectiveAutoPlay = autoPlay && !reducedMotion && !dataSaver;
 
   // ── Observer A (near-viewport): attach src generously early. ──────────────
+  // Attach when close; only DETACH when far away (hysteresis), so scrolling
+  // back up a little never tears the source down and re-buffers it (which
+  // caused spinners/jank while scrolling up).
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const observer = new IntersectionObserver(
+    const attach = new IntersectionObserver(
       (entries) => {
-        for (const entry of entries) setNearViewport(entry.isIntersecting);
+        for (const entry of entries) if (entry.isIntersecting) setNearViewport(true);
       },
       { rootMargin: preloadRootMargin },
     );
-    observer.observe(el);
-    return () => observer.disconnect();
+    const detach = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) if (!entry.isIntersecting) setNearViewport(false);
+      },
+      { rootMargin: "600% 0px" },
+    );
+    attach.observe(el);
+    detach.observe(el);
+    return () => {
+      attach.disconnect();
+      detach.disconnect();
+    };
   }, [preloadRootMargin]);
 
   // ── Observer B (play threshold): play only when sufficiently visible. ────

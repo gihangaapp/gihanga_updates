@@ -72,7 +72,7 @@ export function RightRail() {
   );
 
   return (
-    <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] w-[336px] min-w-0 shrink-0 flex-col gap-4 overflow-x-hidden overflow-y-auto overscroll-y-contain px-4 py-5 custom-scrollbar xl:flex">
+    <aside className="right-rail sticky top-16 hidden h-[calc(100dvh-4rem)] w-[336px] min-w-0 shrink-0 flex-col gap-4 overflow-x-hidden overflow-y-auto overscroll-y-contain px-4 py-5 no-scrollbar xl:flex">
       {(tags.length > 0 || isTagsLoading) && (
         <Panel title="Trending" icon={Flame} action="Explore">
           {isTagsLoading && tags.length === 0 ? (
