@@ -73,9 +73,9 @@ function SheetHandle({
       onTouchMove={onMove}
       onTouchEnd={onEnd}
       onTouchCancel={onEnd}
-      className="absolute inset-x-0 top-0 z-10 flex h-8 touch-none items-start justify-center pt-2.5 sm:hidden"
+      className="absolute inset-x-0 top-0 z-10 flex h-6 touch-none items-start justify-center pt-1.5 sm:hidden"
     >
-      <span className="h-1.5 w-11 rounded-full bg-muted-foreground/30" />
+      <span className="h-1 w-10 rounded-full bg-muted-foreground/30" />
     </div>
   );
 }

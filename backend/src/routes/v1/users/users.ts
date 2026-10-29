@@ -4,11 +4,12 @@ import { Follow } from "../../../models/Follow";
 import { optionalAuth } from "../../../middleware/optionalAuth";
 import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/rbac";
 import { moderationActive } from "../../../middleware/upload";
+import { Media } from "../../../models/Media";
 import { assessProfileText } from "../../../services/moderation/contentModerationService";
 
 const router = Router();
 const PUBLIC_FIELDS =
-  "name username avatarHue avatarUrl bio isCreator verified isLive followersCount followingCount postsCount createdAt";
+  "name username avatarHue avatarUrl coverUrl bio isCreator verified isLive followersCount followingCount postsCount createdAt";
 
 // GET /api/v1/users/top-creators — top creators and users with high follower counts for onboarding
 router.get("/top-creators", optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
@@ -92,7 +93,7 @@ router.get("/:username", optionalAuth, async (req: AuthenticatedRequest, res: Re
 router.patch("/profile", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
-    const { name, username, bio, avatarUrl, avatarHue } = req.body;
+    const { name, username, bio, avatarUrl, coverUrl, avatarHue } = req.body;
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: "User not found" });
@@ -150,6 +151,35 @@ router.patch("/profile", authenticateConsumer, async (req: AuthenticatedRequest,
       user.avatarUrl = avatarUrl;
     }
 
+    // A cover may only reference this user's approved image upload while media
+    // moderation is enabled. Cover is optional, so existing profiles are unchanged.
+    if (coverUrl !== undefined && coverUrl !== user.coverUrl) {
+      if (moderationActive() && coverUrl) {
+        const mediaId = typeof coverUrl === "string"
+          ? coverUrl.match(/\/media\/file\/([a-f0-9]{24})(?:[/?#]|$)/i)?.[1]
+          : undefined;
+        const coverMedia = mediaId
+          ? await Media.findOne({
+              _id: mediaId,
+              ownerId: userId,
+              context: "cover",
+              moderationStatus: "approved",
+            })
+          : await Media.findOne({
+              ownerId: userId,
+              context: "cover",
+              moderationStatus: "approved",
+              $or: [{ cdnUrl: coverUrl }, { "variants.url": coverUrl }],
+            });
+        if (!coverMedia) {
+          return res.status(400).json({
+            error: "Cover photos must be uploaded through the platform and pass safety checks",
+          });
+        }
+      }
+      user.coverUrl = coverUrl || undefined;
+    }
+
     await user.save();
 
     return res.json({
@@ -169,6 +199,7 @@ function publicUserShape(user: any) {
     email: user.email,
     avatarHue: user.avatarHue,
     avatarUrl: user.avatarUrl || null,
+    coverUrl: user.coverUrl || null,
     bio: user.bio,
     role: user.role,
     isCreator: user.isCreator,

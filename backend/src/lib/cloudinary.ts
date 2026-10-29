@@ -36,6 +36,7 @@ const FOLDER_BY_KIND: Record<UploadKind, string> = {
   reels: "gihanga/reels",
   avatars: "gihanga/avatars",
   stories: "gihanga/stories",
+  covers: "gihanga/covers",
 };
 
 /**

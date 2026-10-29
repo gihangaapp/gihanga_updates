@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { LogOut, Settings, User2 } from "lucide-react";
+import { LogOut, Megaphone, Settings, User2 } from "lucide-react";
 import { toast } from "sonner";
 import { GAvatar } from "@/components/common/GAvatar";
 import { Button } from "@/components/ui/button";
@@ -83,6 +83,12 @@ export function AccountMenu({ compact }: { compact?: boolean }) {
           <Link to="/settings">
             <Settings />
             Settings
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link to="/ads">
+            <Megaphone />
+            Grow with Gihanga Ads
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />

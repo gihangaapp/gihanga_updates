@@ -11,7 +11,7 @@ export interface ProcessMediaInput {
   originalname: string;
   mimetype: string;
   sizeBytes: number;
-  kind: UploadKind; // "photos" | "videos" | "reels" | "avatars" | "stories"
+  kind: UploadKind; // "photos" | "videos" | "reels" | "avatars" | "stories" | "covers"
 }
 
 export interface ProcessedMediaResult {
@@ -95,6 +95,7 @@ export async function processAndStoreMedia(input: ProcessMediaInput): Promise<Pr
     reels: "reel",
     stories: "story",
     avatars: "avatar",
+    covers: "cover",
   };
   const context = contextMap[input.kind] || "post";
   const quarantine = moderationActive();
@@ -123,6 +124,9 @@ export async function processAndStoreMedia(input: ProcessMediaInput): Promise<Pr
   } else if (context === "avatar") {
     width = 400;
     height = 400; // 1:1 square
+  } else if (context === "cover") {
+    width = 1500;
+    height = 500; // landscape banner
   } else {
     // Post default
     width = 1080;

@@ -253,7 +253,14 @@ export function ExplorePage() {
 
             {/* High-Performance, Density-Optimized Responsive User Grid (Handles 100+ accounts gracefully) */}
             {filteredUsers.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              <div
+                className={cn(
+                  "gap-3.5",
+                  term
+                    ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+                    : "-mx-3 flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain px-3 pb-2 no-scrollbar sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-3",
+                )}
+              >
                 {filteredUsers.slice(0, visibleCount).map((u) => {
                   const isFollowing = followingSet?.has(u.username) ?? false;
                   const isSelf = currentUser?.username === u.username;
@@ -261,7 +268,10 @@ export function ExplorePage() {
                   return (
                     <div
                       key={u._id}
-                      className="surface-card group relative flex flex-col justify-between rounded-2xl p-4 border border-border shadow-soft hover:border-primary/40 hover:shadow-hover transition-all duration-200"
+                      className={cn(
+                        "surface-card group relative flex flex-col justify-between rounded-2xl border border-border p-4 shadow-soft transition-all duration-200 hover:border-primary/40 hover:shadow-hover",
+                        !term && "w-[82%] max-w-[340px] shrink-0 snap-start sm:w-auto sm:max-w-none",
+                      )}
                     >
                       {/* Top Header with Avatar and Follow Action */}
                       <div className="flex items-start justify-between gap-3">
@@ -382,13 +392,13 @@ export function ExplorePage() {
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="-mx-3 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-3 pb-2 no-scrollbar sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-3">
               {trendingTags.map((t, idx) => (
                 <Link
                   key={t.tag}
                   to="/tag/$tag"
                   params={{ tag: t.tag }}
-                  className="surface-card lift group flex items-center gap-3.5 rounded-2xl p-3.5 border border-border hover:border-primary/50 transition-all"
+                  className="surface-card lift group flex w-[82%] max-w-[340px] shrink-0 snap-start items-center gap-3.5 rounded-2xl border border-border p-3.5 transition-all hover:border-primary/50 sm:w-auto sm:max-w-none"
                 >
                   <span
                     className={cn(

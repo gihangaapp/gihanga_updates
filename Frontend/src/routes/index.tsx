@@ -92,7 +92,7 @@ function MobileDiscovery() {
         )}
         <Link
           to="/explore"
-          className="surface-card press flex w-[82%] max-w-[360px] shrink-0 snap-start items-center gap-3 p-4"
+          className="surface-card press hidden w-[82%] max-w-[360px] shrink-0 snap-start items-center gap-3 p-4 sm:flex"
         >
           <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-primary-soft text-primary">
             <TrendingUp className="size-5" />
@@ -107,7 +107,7 @@ function MobileDiscovery() {
         </Link>
         <Link
           to="/ads"
-          className="surface-card press flex w-[82%] max-w-[360px] shrink-0 snap-start items-center gap-3 p-4"
+          className="surface-card press hidden w-[82%] max-w-[360px] shrink-0 snap-start items-center gap-3 p-4 sm:flex"
         >
           <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-primary-soft text-primary">
             <Sparkles className="size-5" />

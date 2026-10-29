@@ -316,12 +316,17 @@ export function PostCreator({ onClose }: PostCreatorProps) {
             {/* Right Column: Composer Controls */}
             <div className="flex flex-col gap-4 lg:col-span-6">
               {/* User & Audience */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 sm:flex-nowrap">
+                <div className="flex min-w-0 items-center gap-2.5">
                   <GAvatar user={user} size="sm" />
-                  <span className="text-sm font-bold">{user.name}</span>
+                  <span className="min-w-0 truncate text-sm font-bold">{user.name}</span>
                 </div>
-                <AudienceSelector value={audience} onChange={setAudience} compact />
+                <AudienceSelector
+                  value={audience}
+                  onChange={setAudience}
+                  compact
+                  className="ml-auto shrink-0"
+                />
               </div>
 
               {/* Caption Textarea */}

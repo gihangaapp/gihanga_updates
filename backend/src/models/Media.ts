@@ -2,7 +2,7 @@ import { Schema, model, Document, Types } from "mongoose";
 import { ModerationStatus } from "../lib/moderation/types";
 
 export type MediaType = "image" | "video" | "audio";
-export type MediaContext = "post" | "reel" | "story" | "avatar" | "thumbnail";
+export type MediaContext = "post" | "reel" | "story" | "avatar" | "cover" | "thumbnail";
 export type MediaStatus = "UPLOADING" | "PROCESSING" | "READY" | "FAILED";
 export type MediaOrientation = "portrait" | "landscape" | "square";
 export type MediaModerationStatus =
@@ -82,7 +82,7 @@ const MediaSchema = new Schema<IMedia>(
     type: { type: String, enum: ["image", "video", "audio"], required: true },
     context: {
       type: String,
-      enum: ["post", "reel", "story", "avatar", "thumbnail"],
+      enum: ["post", "reel", "story", "avatar", "cover", "thumbnail"],
       default: "post",
     },
     originalName: { type: String, required: true },

@@ -108,7 +108,7 @@ export function createApp(): Express {
     res.json({ status: "ok", service: "Gihanga Updates API", timestamp: new Date().toISOString() });
   });
 
-  // Uploaded media (photos, videos, reels, avatars, stories)
+  // Uploaded media (photos, videos, reels, avatars, stories, covers)
   app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 
   // API v1 Routes

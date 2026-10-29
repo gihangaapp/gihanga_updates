@@ -10,6 +10,7 @@ export interface IUser extends Document {
   passwordHash: string;
   avatarHue: number;
   avatarUrl?: string;
+  coverUrl?: string;
   bio: string;
   role: UserRole;
   isCreator: boolean;
@@ -52,6 +53,7 @@ const UserSchema = new Schema<IUser>(
     passwordHash: { type: String, required: true },
     avatarHue: { type: Number, default: 205 },
     avatarUrl: { type: String },
+    coverUrl: { type: String },
     bio: { type: String, maxlength: 160, default: "" },
 
     role: {

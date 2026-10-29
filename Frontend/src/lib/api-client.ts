@@ -62,6 +62,7 @@ export interface UserProfile {
   emailVerified: boolean;
   avatarHue: number;
   avatarUrl: string | null;
+  coverUrl?: string | null;
   bio: string;
   interests: string[];
   onboarded: boolean;
@@ -306,14 +307,14 @@ export function mediaUrlWithAuth(path?: string | null): string | undefined {
 
 /**
  * Uploads a single file with progress reporting (fetch can't report upload progress,
- * so this uses XHR under the hood). Used for photos/videos/reels/avatars/stories.
+ * so this uses XHR under the hood). Used for photos/videos/reels/avatars/stories/covers.
  *
  * If the access token has expired the first attempt comes back 401
  * ("Authentication required") — this transparently refreshes the consumer
  * token and retries ONCE so long sessions never break mid-upload.
  */
 export function uploadFile(
-  kind: "photos" | "videos" | "reels" | "avatars" | "stories",
+  kind: "photos" | "videos" | "reels" | "avatars" | "stories" | "covers",
   file: File,
   onProgress?: (pct: number) => void,
 ): Promise<UploadedMediaInfo> {
@@ -475,6 +476,7 @@ export interface PublicUser {
   username: string;
   avatarHue: number;
   avatarUrl: string | null;
+  coverUrl?: string | null;
   bio: string;
   isCreator: boolean;
   verified: boolean;

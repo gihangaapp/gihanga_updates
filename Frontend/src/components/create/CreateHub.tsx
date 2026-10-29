@@ -132,7 +132,7 @@ export function CreateHost() {
             creator. */}
         <DrawerContent
           className={cn(
-            "w-full max-w-full p-0 overflow-hidden border-none",
+            "left-0 right-0 w-full max-w-none p-0 overflow-hidden border-none",
             "h-[96dvh] max-h-[96dvh] rounded-t-3xl",
           )}
         >
@@ -146,7 +146,7 @@ export function CreateHost() {
     <Dialog open={s.open} onOpenChange={(o) => (!o ? closeCreate() : null)}>
       {/* B3 — a DEFINITE height (min(92dvh, 900px)) instead of a bare
           max-height: the shell renders at full size immediately. */}
-      <DialogContent className="h-[min(92dvh,900px)] max-h-[min(92dvh,900px)] max-w-[760px] overflow-hidden p-0 gap-0 rounded-3xl border-border">
+      <DialogContent className="h-[min(92dvh,900px)] max-h-[min(92dvh,900px)] w-[calc(100vw-1rem)] max-w-[760px] overflow-hidden p-0 gap-0 rounded-3xl border-border">
         <DialogHeader className="sr-only">
           <DialogTitle>Content Creator</DialogTitle>
         </DialogHeader>

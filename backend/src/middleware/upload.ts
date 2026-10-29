@@ -5,7 +5,7 @@ import multer from "multer";
 import { Request } from "express";
 
 const UPLOAD_ROOT = path.join(__dirname, "..", "..", "uploads");
-const SUBDIRS = ["photos", "videos", "reels", "avatars", "stories"] as const;
+const SUBDIRS = ["photos", "videos", "reels", "avatars", "stories", "covers"] as const;
 export type UploadKind = (typeof SUBDIRS)[number];
 
 /**
@@ -121,7 +121,7 @@ function fileFilterFor(kind: UploadKind) {
     const ext = path.extname(file.originalname || "").toLowerCase();
     const mimetype = normalizeMimetype(file.mimetype);
 
-    if (kind === "avatars" || kind === "photos") {
+    if (kind === "avatars" || kind === "photos" || kind === "covers") {
       if (!IMAGE_TYPES.has(mimetype)) return cb(new Error("Only JPEG, PNG, WEBP or GIF images are allowed"));
       if (!ALLOWED_EXTENSIONS.image.has(ext)) return cb(new Error("File extension does not match an allowed image type"));
     } else if (kind === "videos" || kind === "reels") {

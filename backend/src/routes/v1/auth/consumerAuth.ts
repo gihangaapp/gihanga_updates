@@ -41,6 +41,7 @@ function serializeUser(user: IUser) {
     emailVerified: user.emailVerified,
     avatarHue: user.avatarHue,
     avatarUrl: user.avatarUrl || null,
+    coverUrl: user.coverUrl || null,
     bio: user.bio,
     interests: user.interests,
     onboarded: user.onboarded,

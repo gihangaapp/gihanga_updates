@@ -9,9 +9,9 @@ import { Media } from "../../../models/Media";
 
 const router = Router();
 
-const VALID_KINDS = new Set<UploadKind>(["photos", "videos", "reels", "avatars", "stories"]);
+const VALID_KINDS = new Set<UploadKind>(["photos", "videos", "reels", "avatars", "stories", "covers"]);
 
-// POST /api/v1/uploads/:kind — upload a single file (photos | videos | reels | avatars | stories)
+// POST /api/v1/uploads/:kind — upload a single file (photos | videos | reels | avatars | stories | covers)
 // Avatars are allowed without authentication for registration onboarding; all other kinds require auth.
 //
 // CONTENT SAFETY: uploaded media is stored QUARANTINED (private bucket /
@@ -65,6 +65,7 @@ router.post("/:kind", optionalAuth, async (req: AuthenticatedRequest, res: Respo
       // never attached to the profile; uncertain ones stay quarantined for
       // staff review (the user keeps their previous avatar).
       let avatarModeration: { status: string; userMessage?: string } | undefined;
+      let coverModeration: { status: string; userMessage?: string } | undefined;
       if (kind === "avatars" && req.user?.userId && moderationActive()) {
         const mediaDoc = await Media.findById(processed.mediaId);
         if (mediaDoc) {
@@ -87,6 +88,24 @@ router.post("/:kind", optionalAuth, async (req: AuthenticatedRequest, res: Respo
       } else if (kind === "avatars" && req.user?.userId) {
         // Moderation disabled: legacy behaviour preserved.
         await User.findByIdAndUpdate(req.user.userId, { avatarUrl: processed.url });
+      } else if (kind === "covers" && req.user?.userId && moderationActive()) {
+        const mediaDoc = await Media.findById(processed.mediaId);
+        if (mediaDoc) {
+          const result = await assessAvatar(mediaDoc, req.user.userId);
+          if (result.decision === "REJECTED") {
+            return res.status(422).json({
+              error: result.userMessage || "This image could not be used as a cover photo.",
+              moderation: { status: "rejected" },
+            });
+          }
+          if (result.decision !== "APPROVED") {
+            return res.status(422).json({
+              error: result.userMessage || "This cover photo needs review before it can be used.",
+              moderation: { status: "needs_review" },
+            });
+          }
+          coverModeration = { status: "approved" };
+        }
       }
 
       return res.status(201).json({
@@ -102,7 +121,7 @@ router.post("/:kind", optionalAuth, async (req: AuthenticatedRequest, res: Respo
         width: processed.width,
         height: processed.height,
         variants: processed.variants,
-        moderation: avatarModeration ?? { status: processed.moderationStatus },
+        moderation: avatarModeration ?? coverModeration ?? { status: processed.moderationStatus },
       });
     } catch (error: any) {
       const message = String(error?.message || "Failed to store upload");
