@@ -45,7 +45,7 @@ export function AppShell({
     <div className="flex min-h-screen w-full">
       <SideNav />
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className={immersiveMobile ? "max-lg:hidden" : undefined}>
+        <div className={immersiveMobile ? "contents max-lg:hidden" : "contents"}>
           <TopBar />
         </div>
         <div className="mx-auto flex min-w-0 w-full max-w-[1400px] flex-1 justify-center">

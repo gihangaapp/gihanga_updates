@@ -347,14 +347,14 @@ function ProfilePage() {
         <header className="surface-card relative mb-4 overflow-hidden rounded-3xl border border-border p-0 shadow-soft">
           <div className="px-4 pb-5 sm:px-6">
             <div className="flex items-end gap-4 pt-5 sm:pt-6">
-              <span className="rounded-full ring-4 ring-card shadow-lg">
+              <span className="shrink-0 rounded-full ring-4 ring-card shadow-lg">
                 <GAvatar
                   user={displayUser}
                   size="xl"
                   ring={displayUser.live ? "live" : displayUser.creator ? "creator" : "none"}
                 />
               </span>
-              <div className="ml-auto flex gap-2 pb-1">
+              <div className="ml-auto flex min-w-0 shrink-0 flex-nowrap items-center gap-1.5 pb-1 sm:gap-2">
                 {isMe ? (
                   <>
                     <Button
@@ -363,12 +363,16 @@ function ProfilePage() {
                       className="shrink-0 whitespace-nowrap rounded-xl px-2.5 text-xs font-bold sm:px-4 sm:text-sm"
                     >
                       <Link to="/settings" className="flex flex-nowrap items-center whitespace-nowrap">
-                        <Settings className="mr-1 size-3.5 shrink-0 sm:mr-1.5 sm:size-4" />
+                        <Settings className="mr-1 size-3.5 shrink-0 max-[400px]:hidden sm:mr-1.5 sm:size-4" />
                         <span className="whitespace-nowrap">Edit profile</span>
                       </Link>
                     </Button>
                     {authUser?.isCreator && (
-                      <Button variant="brand" asChild className="rounded-xl font-bold">
+                      <Button
+                        variant="brand"
+                        asChild
+                        className="shrink-0 whitespace-nowrap rounded-xl px-3 text-xs font-bold sm:px-4 sm:text-sm"
+                      >
                         <Link to="/studio">Studio</Link>
                       </Button>
                     )}

@@ -384,7 +384,7 @@ function LiveDiscoveryPage() {
     <AppShell>
       <div className="mx-auto w-full max-w-[900px] space-y-6">
         <header className="flex items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0 flex-1">
             <h1 className="font-display text-2xl font-extrabold tracking-tight">Live Streams</h1>
             <p className="mt-0.5 text-sm text-muted-foreground">
               What's happening right now on Gihanga Updates
@@ -393,6 +393,7 @@ function LiveDiscoveryPage() {
           {canGoLive && (
             <Button
               variant="brand"
+              className="shrink-0 whitespace-nowrap"
               onClick={() =>
                 activeOwnStream
                   ? navigate({ to: "/live/$streamId", params: { streamId: activeOwnStream._id } })
@@ -552,6 +553,7 @@ function LiveDiscoveryPage() {
             <Button
               variant="brand"
               size="sm"
+              className="shrink-0 whitespace-nowrap"
               onClick={() =>
                 activeOwnStream
                   ? navigate({ to: "/live/$streamId", params: { streamId: activeOwnStream._id } })

@@ -37,10 +37,17 @@ export function AppScrollbar() {
     let frame = 0;
     let idleTimer: number | undefined;
 
-    const measure = () => {
+    // A scroll-driven update must track the finger 1:1 (no easing); an update
+    // caused by the CONTENT changing (media measured, next page appended,
+    // skeleton swapped) would otherwise teleport the thumb, so those are eased.
+    let pendingScroll = false;
+    const measure = (fromScroll = false) => {
+      pendingScroll = fromScroll || (frame !== 0 && pendingScroll);
       if (frame) return; // coalesce: at most one measurement per frame
       frame = requestAnimationFrame(() => {
         frame = 0;
+        const smooth = !pendingScroll;
+        pendingScroll = false;
         const scrollHeight = pageHeight();
         const vh = viewportHeight();
         const maxScroll = Math.max(0, scrollHeight - vh);
@@ -61,6 +68,9 @@ export function AppScrollbar() {
         // Thumb position goes straight to the DOM (no React render per scroll
         // frame); React state only changes when the geometry itself changes.
         if (thumbRef.current) {
+          thumbRef.current.style.transition = smooth
+            ? "transform 240ms cubic-bezier(0.22, 1, 0.36, 1), height 240ms cubic-bezier(0.22, 1, 0.36, 1)"
+            : "none";
           thumbRef.current.style.transform = `translate3d(0, ${next.thumbOffset}px, 0)`;
         }
         trackRef.current?.setAttribute("aria-valuenow", String(next.percent));
@@ -80,15 +90,16 @@ export function AppScrollbar() {
         if (idleTimer !== undefined) window.clearTimeout(idleTimer);
         idleTimer = window.setTimeout(() => setIsScrolling(false), 850);
       }
-      measure();
+      measure(true);
     };
 
     measure();
     window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", measure, { passive: true });
-    window.addEventListener("orientationchange", measure, { passive: true });
+    const onResize = () => measure();
+    window.addEventListener("resize", onResize, { passive: true });
+    window.addEventListener("orientationchange", onResize, { passive: true });
     const resizeObserver = typeof ResizeObserver !== "undefined"
-      ? new ResizeObserver(measure)
+      ? new ResizeObserver(onResize)
       : null;
     resizeObserver?.observe(document.body);
     return () => {
@@ -96,8 +107,8 @@ export function AppScrollbar() {
       frame = 0;
       if (idleTimer !== undefined) window.clearTimeout(idleTimer);
       window.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("orientationchange", measure);
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
       resizeObserver?.disconnect();
       document.documentElement.classList.remove("app-scrollbar-active");
     };
