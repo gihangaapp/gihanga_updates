@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { ArrowUpRight, Loader2, Radio, Sparkles, TrendingUp, UserPlus } from "lucide-react";
@@ -13,6 +14,14 @@ import { useFeed, useExplore, useTrending } from "@/hooks/use-posts";
 import { useFeedAds } from "@/hooks/use-ads";
 import { useLiveStreams } from "@/hooks/use-live";
 import { useAuth } from "@/lib/auth-context";
+import { api, type FeedPost } from "@/lib/api-client";
+import {
+  consumeRecentPostHomeVisit,
+  isRecentPostReady,
+  readRecentPublishedPost,
+  RECENT_POST_PIN_EVENT,
+  type RecentPostPin,
+} from "@/lib/recent-post-pin";
 import { LandingPage } from "./landing";
 import { cn } from "@/lib/utils";
 
@@ -128,7 +137,33 @@ function MobileDiscovery() {
 }
 
 function HomeFeed() {
+  const { user } = useAuth();
   const [tab, setTab] = useState<(typeof tabs)[number]["id"]>("foryou");
+  const [recentPostPin, setRecentPostPin] = useState<RecentPostPin | null>(() =>
+    user?.id ? readRecentPublishedPost(user.id) : null,
+  );
+  const pinVisitConsumed = useRef(false);
+  const pendingPinId = recentPostPin && !isRecentPostReady(recentPostPin.post)
+    ? recentPostPin.postId
+    : "";
+  // Videos can remain in moderation processing after upload. Poll only that
+  // one post (without blocking the feed) so it can be promoted once approved.
+  const pendingPinStatus = useQuery({
+    queryKey: ["posts", "recent-pin-status", user?.id, pendingPinId],
+    queryFn: ({ signal }) =>
+      api.get<{ post: FeedPost }>(`/posts/${encodeURIComponent(pendingPinId)}`, false, signal),
+    enabled: Boolean(user?.id && pendingPinId),
+    staleTime: 0,
+    refetchInterval: (query) => {
+      const post = query.state.data?.post;
+      if (!post) return query.state.error ? false : 5_000;
+      if (
+        post.status === "published" ||
+        ["approved", "rejected", "pending_review", "failed"].includes(post.moderation?.status ?? "")
+      ) return false;
+      return 5_000;
+    },
+  });
   const forYou = useFeed();
   const trending = useTrending();
   const explore = useExplore();
@@ -148,6 +183,57 @@ function HomeFeed() {
     }
     return next;
   }, [activePages, tab, trendingEmpty]);
+
+  // A successful post gets priority in the home feed for four visits by its
+  // author. The counter lives in user-scoped localStorage so it survives reloads;
+  // pending moderation posts do not consume a visit until they are approved.
+  useEffect(() => {
+    if (!user?.id) {
+      setRecentPostPin(null);
+      return;
+    }
+    const handlePinUpdate = (event: Event) => {
+      const detail = (event as CustomEvent<{ userId?: string }>).detail;
+      if (detail?.userId !== user.id) return;
+      pinVisitConsumed.current = false;
+      setRecentPostPin(readRecentPublishedPost(user.id));
+    };
+    window.addEventListener(RECENT_POST_PIN_EVENT, handlePinUpdate);
+    setRecentPostPin(readRecentPublishedPost(user.id));
+    return () => window.removeEventListener(RECENT_POST_PIN_EVENT, handlePinUpdate);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user?.id || !recentPostPin || pinVisitConsumed.current) return;
+    const feedVersion = posts.find(
+      (post) => post._id === recentPostPin.postId && isRecentPostReady(post),
+    );
+    const checkedVersion = pendingPinStatus.data?.post?._id === recentPostPin.postId &&
+      isRecentPostReady(pendingPinStatus.data.post)
+      ? pendingPinStatus.data.post
+      : null;
+    const postToPin = feedVersion ?? checkedVersion ??
+      (isRecentPostReady(recentPostPin.post) ? recentPostPin.post : null);
+    if (!postToPin) return;
+
+    pinVisitConsumed.current = true;
+    setRecentPostPin(consumeRecentPostHomeVisit(user.id, postToPin));
+  }, [user?.id, recentPostPin, posts, pendingPinStatus.data]);
+
+  const displayedPosts = useMemo(() => {
+    if (!recentPostPin) return posts;
+    const feedVersion = posts.find(
+      (post) => post._id === recentPostPin.postId && isRecentPostReady(post),
+    );
+    const checkedVersion = pendingPinStatus.data?.post?._id === recentPostPin.postId &&
+      isRecentPostReady(pendingPinStatus.data.post)
+      ? pendingPinStatus.data.post
+      : null;
+    const pinned = feedVersion ?? checkedVersion ??
+      (isRecentPostReady(recentPostPin.post) ? recentPostPin.post : null);
+    if (!pinned) return posts;
+    return [pinned, ...posts.filter((post) => post._id !== pinned._id)];
+  }, [posts, recentPostPin, pendingPinStatus.data]);
 
   const isFollowingAnyone = forYou.data?.pages[0]?.isFollowingAnyone ?? true;
 
@@ -200,18 +286,18 @@ function HomeFeed() {
           </div>
         )}
 
-        {active.isLoading ? (
+        {active.isLoading && displayedPosts.length === 0 ? (
           <>
             <PostSkeleton />
             <PostSkeleton />
           </>
-        ) : posts.length === 0 ? (
+        ) : displayedPosts.length === 0 ? (
           <p className="py-16 text-center text-sm text-muted-foreground">
             Nothing here yet — be the first to post something.
           </p>
         ) : (
           <>
-            {posts.map((p, i) => {
+            {displayedPosts.map((p, i) => {
               // Inject a sponsored ad every 4th post if ads are available
               const adIndex = Math.floor(i / 4) % (feedAds.length || 1);
               const showAd = (i + 1) % 4 === 0 && feedAds.length > 0 && feedAds[adIndex];

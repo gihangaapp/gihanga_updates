@@ -8,7 +8,7 @@ import { processAndStoreMedia } from "../../../services/media/mediaService";
 import { Media } from "../../../models/Media";
 import { Story } from "../../../models/Story";
 import { quarantineRoot, UPLOAD_ROOT, moderationActive } from "../../../middleware/upload";
-import { isCloudinaryConfigured, signedCloudinaryDeliveryUrl } from "../../../lib/cloudinary";
+import { isCloudinaryConfigured, signedCloudinaryDeliveryUrl, signedCloudinaryVideoThumbnailUrl } from "../../../lib/cloudinary";
 
 const router = Router();
 
@@ -31,6 +31,7 @@ router.post("/upload", authenticateConsumer, async (req: AuthenticatedRequest, r
       const result = await processAndStoreMedia({
         ownerId: req.user!.userId,
         fileBuffer: file.buffer,
+        filePath: file.path,
         filename: file.filename,
         originalname: file.originalname,
         mimetype: file.mimetype,
@@ -47,6 +48,10 @@ router.post("/upload", authenticateConsumer, async (req: AuthenticatedRequest, r
       }
       console.error("[Media] upload processing failed:", message);
       return res.status(500).json({ error: "Failed to process media" });
+    } finally {
+      if (isCloudinaryConfigured && file.path) {
+        await fs.promises.rm(file.path, { force: true }).catch(() => undefined);
+      }
     }
   });
 });
@@ -126,6 +131,9 @@ router.get("/file/:mediaId", optionalAuth, async (req: AuthenticatedRequest, res
 
     // ── Cloudinary-hosted asset ──────────────────────────────────────────────
     if (media.storageKey && media.storageKey.startsWith("gihanga/") && isCloudinaryConfigured) {
+      if (media.type === "video" && req.query.variant === "thumbnail") {
+        return res.redirect(302, signedCloudinaryVideoThumbnailUrl(media.storageKey));
+      }
       const resourceType = media.type === "video" ? "video" : "image";
       const signed = signedCloudinaryDeliveryUrl(media.storageKey, resourceType as "image" | "video");
       return res.redirect(302, signed);
@@ -133,14 +141,29 @@ router.get("/file/:mediaId", optionalAuth, async (req: AuthenticatedRequest, res
 
     // ── Local-disk asset ─────────────────────────────────────────────────────
     if (media.storageKey) {
-      const inQuarantine = path.join(quarantineRoot(), media.storageKey);
-      const inPublic = path.join(UPLOAD_ROOT, media.storageKey);
-      const filePath = fs.existsSync(inQuarantine) ? inQuarantine : fs.existsSync(inPublic) ? inPublic : null;
+      // New uploads include their kind folder in storageKey. Try the older
+      // filename-only layout too so existing local assets remain readable.
+      const legacyKind = media.context === "reel" ? "reels"
+        : media.context === "story" ? "stories"
+          : media.context === "avatar" ? "avatars"
+            : media.context === "cover" ? "covers"
+              : media.type === "video" ? "videos" : "photos";
+      const candidates = [
+        path.join(quarantineRoot(), media.storageKey),
+        path.join(UPLOAD_ROOT, media.storageKey),
+        path.join(quarantineRoot(), legacyKind, media.storageKey),
+        path.join(UPLOAD_ROOT, legacyKind, media.storageKey),
+      ];
+      const filePath = candidates.find((candidate) => fs.existsSync(candidate));
       if (!filePath) return res.status(404).json({ error: "Media not found" });
 
       // Path-traversal defense: resolved path must remain inside a root we own.
       const resolved = path.resolve(filePath);
-      if (!resolved.startsWith(path.resolve(quarantineRoot())) && !resolved.startsWith(path.resolve(UPLOAD_ROOT))) {
+      const withinRoot = (root: string) => {
+        const relative = path.relative(path.resolve(root), resolved);
+        return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+      };
+      if (!withinRoot(quarantineRoot()) && !withinRoot(UPLOAD_ROOT)) {
         return res.status(404).json({ error: "Media not found" });
       }
 

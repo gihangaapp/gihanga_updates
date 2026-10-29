@@ -1,12 +1,16 @@
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import { Types } from "mongoose";
 import { Media, IMedia, MediaContext, MediaType, MediaOrientation, IMediaVariant } from "../../models/Media";
-import { isCloudinaryConfigured, uploadBufferToCloudinary, videoThumbnailFromCloudinary } from "../../lib/cloudinary";
+import { isCloudinaryConfigured, uploadBufferToCloudinary, uploadFileToCloudinary, videoThumbnailFromCloudinary } from "../../lib/cloudinary";
 import { publicUrlFor, UploadKind, sniffMimeCategory, moderationActive } from "../../middleware/upload";
 
 export interface ProcessMediaInput {
   ownerId?: string;
   fileBuffer?: Buffer;
+  /** Temporary or local-disk path; preferred for large uploads to bound RAM. */
+  filePath?: string;
   filename?: string;
   originalname: string;
   mimetype: string;
@@ -19,7 +23,7 @@ export interface ProcessedMediaResult {
   /** Delivery URL. With the moderation pipeline active this is the CHECKED
    *  route /api/v1/media/file/:id — quarantined media has no public URL. */
   url: string;
-  thumbnailUrl: string;
+  thumbnailUrl?: string;
   blurDataUrl: string;
   width: number;
   height: number;
@@ -103,8 +107,19 @@ export async function processAndStoreMedia(input: ProcessMediaInput): Promise<Pr
   // ── Content-safety: verify actual file bytes, never trust the client ──────
   // MIME claim. A buffer whose magic bytes don't match its declared category
   // is rejected outright BEFORE any storage or provider call.
-  if (input.fileBuffer && quarantine) {
-    const sniffed = sniffMimeCategory(input.fileBuffer);
+  if ((input.fileBuffer || input.filePath) && quarantine) {
+    let header = input.fileBuffer;
+    if (!header && input.filePath) {
+      const handle = await fs.promises.open(input.filePath, "r");
+      try {
+        header = Buffer.alloc(64);
+        const { bytesRead } = await handle.read(header, 0, header.length, 0);
+        header = header.subarray(0, bytesRead);
+      } finally {
+        await handle.close();
+      }
+    }
+    const sniffed = header ? sniffMimeCategory(header) : "unknown";
     const declared = isVideo ? "video" : "image";
     if (sniffed !== "unknown" && sniffed !== declared) {
       throw new Error("File content does not match its declared type — upload rejected");
@@ -139,16 +154,23 @@ export async function processAndStoreMedia(input: ProcessMediaInput): Promise<Pr
 
   // Content hash of the EXACT uploaded bytes — powers duplicate-scan
   // avoidance and evasion auditing (same bytes re-uploaded = same verdict).
-  const contentHash = input.fileBuffer ? crypto.createHash("sha256").update(input.fileBuffer).digest("hex") : undefined;
+  let contentHash: string | undefined;
+  if (input.fileBuffer) {
+    contentHash = crypto.createHash("sha256").update(input.fileBuffer).digest("hex");
+  } else if (input.filePath) {
+    const hash = crypto.createHash("sha256");
+    for await (const chunk of fs.createReadStream(input.filePath)) hash.update(chunk);
+    contentHash = hash.digest("hex");
+  }
 
   let masterUrl = "";
   let storageKey = "";
   let derivedThumbnailUrl = "";
 
-  if (isCloudinaryConfigured && input.fileBuffer) {
-    const cloudRes = await uploadBufferToCloudinary(input.fileBuffer, input.kind, input.mimetype, {
-      authenticated: quarantine,
-    });
+  if (isCloudinaryConfigured && (input.fileBuffer || input.filePath)) {
+    const cloudRes = input.filePath
+      ? await uploadFileToCloudinary(input.filePath, input.kind, input.mimetype, { authenticated: quarantine })
+      : await uploadBufferToCloudinary(input.fileBuffer!, input.kind, input.mimetype, { authenticated: quarantine });
     masterUrl = cloudRes.secure_url;
     storageKey = cloudRes.public_id;
     // For videos, derive a real JPEG frame thumbnail from Cloudinary instead of
@@ -165,11 +187,13 @@ export async function processAndStoreMedia(input: ProcessMediaInput): Promise<Pr
     // already written the file into the QUARANTINE directory (see
     // middleware/upload.ts); the returned URL routes through the checked
     // delivery endpoint instead of a public static path.
-    const fname = input.filename || `${Date.now()}-${input.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const fname = input.filename || (input.filePath ? path.basename(input.filePath) : `${Date.now()}-${input.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`);
     masterUrl = quarantine
       ? "" // filled in below from the Media id
       : publicUrlFor(input.kind, fname);
-    storageKey = fname;
+    // Include the kind subdirectory so /media/file/:id can locate local files
+    // in uploads-quarantine/<kind>/ or uploads/<kind> correctly.
+    storageKey = `${input.kind}/${fname}`;
   }
 
   const thumbnailUrl = derivedThumbnailUrl || masterUrl;
@@ -213,7 +237,13 @@ export async function processAndStoreMedia(input: ProcessMediaInput): Promise<Pr
   return {
     mediaId: String(mediaDoc._id),
     url: deliveryUrl,
-    thumbnailUrl: quarantine ? deliveryUrl : thumbnailUrl,
+    thumbnailUrl: quarantine
+      ? isVideo && isCloudinaryConfigured
+        ? `${deliveryUrl}?variant=thumbnail`
+        : isVideo
+          ? undefined
+          : deliveryUrl
+      : thumbnailUrl,
     blurDataUrl,
     width,
     height,

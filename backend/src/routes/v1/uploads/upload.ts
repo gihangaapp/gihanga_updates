@@ -1,4 +1,5 @@
 import { Router, Response } from "express";
+import fs from "fs";
 import { User } from "../../../models/User";
 import { optionalAuth } from "../../../middleware/optionalAuth";
 import { AuthenticatedRequest } from "../../../middleware/rbac";
@@ -6,6 +7,7 @@ import { uploaderFor, UploadKind, moderationActive, normalizeMimetype } from "..
 import { processAndStoreMedia } from "../../../services/media/mediaService";
 import { assessAvatar } from "../../../services/moderation/contentModerationService";
 import { Media } from "../../../models/Media";
+import { isCloudinaryConfigured } from "../../../lib/cloudinary";
 
 const router = Router();
 
@@ -53,6 +55,7 @@ router.post("/:kind", optionalAuth, async (req: AuthenticatedRequest, res: Respo
       const processed = await processAndStoreMedia({
         ownerId: req.user?.userId,
         fileBuffer: file.buffer,
+        filePath: file.path,
         filename: file.filename,
         originalname: file.originalname,
         mimetype: file.mimetype,
@@ -130,6 +133,12 @@ router.post("/:kind", optionalAuth, async (req: AuthenticatedRequest, res: Respo
       }
       console.error("[Upload] Error in processAndStoreMedia:", message);
       return res.status(500).json({ error: "Failed to store upload" });
+    } finally {
+      // Only Cloudinary uploads use private temporary files. Local fallback
+      // files are the persistent asset and must not be removed here.
+      if (isCloudinaryConfigured && file.path) {
+        await fs.promises.rm(file.path, { force: true }).catch(() => undefined);
+      }
     }
   });
 });

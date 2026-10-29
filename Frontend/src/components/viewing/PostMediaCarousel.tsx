@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeft, ChevronRight, Heart } from "lucide-react";
-import { mediaUrl } from "@/lib/api-client";
+import { mediaUrlWithAuth } from "@/lib/api-client";
 import { ResponsiveImage } from "@/components/media/ResponsiveImage";
 import { ResponsiveVideo } from "@/components/media/ResponsiveVideo";
 import { cn } from "@/lib/utils";
@@ -84,7 +84,7 @@ export function PostMediaCarousel({
   if (rawUrls.length === 0) return null;
 
   const activeRawUrl = rawUrls[activeIdx] ?? rawUrls[0];
-  const activeFullUrl = mediaUrl(activeRawUrl);
+  const activeFullUrl = mediaUrlWithAuth(activeRawUrl);
   const measuredRatio = measured[rawUrls[0] ?? ""];
   const activeMeasured = measured[activeRawUrl ?? ""];
   const handleMeasured = (w: number, h: number) => {
@@ -183,7 +183,7 @@ export function PostMediaCarousel({
           {currentIsVideo ? (
             <ResponsiveVideo
               src={activeFullUrl ?? ""}
-              posterUrl={mediaUrl(thumbnailUrl)}
+              posterUrl={mediaUrlWithAuth(thumbnailUrl)}
               blurDataUrl={blurDataUrl}
               onDoubleTap={onDoubleTapLike}
               onMeasured={handleMeasured}

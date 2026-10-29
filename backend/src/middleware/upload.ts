@@ -80,22 +80,29 @@ function destinationFor(kind: UploadKind) {
  * express.static); when the pipeline is disabled (explicit local-dev opt-out)
  * the original public-dirs behaviour is preserved.
  */
+const TEMP_UPLOAD_ROOT = path.join(path.dirname(UPLOAD_ROOT), "uploads-temp");
+
+function generatedUploadName(file: Express.Multer.File): string {
+  const ext = path.extname(file.originalname || "").toLowerCase();
+  const unique = crypto.randomBytes(16).toString("hex");
+  return `${Date.now()}-${unique}${ext}`;
+}
+
 function storageFor(kind: UploadKind) {
-  // When Cloudinary is configured, files are buffered in memory and streamed
-  // up to Cloudinary by the upload route (see routes/v1/uploads/upload.ts) —
-  // nothing is written to local disk, which is what makes this work on
-  // Render's ephemeral filesystem. Otherwise, fall back to disk storage for
-  // local development.
+  // Spool Cloudinary-bound uploads to a private temporary file instead of
+  // keeping the entire file in RAM. Large phone videos can otherwise consume
+  // most of a small server's memory before Cloudinary even starts receiving
+  // the bytes, causing the connection to reset in the browser.
   if (cloudinaryConfigured()) {
-    return multer.memoryStorage();
+    if (!fs.existsSync(TEMP_UPLOAD_ROOT)) fs.mkdirSync(TEMP_UPLOAD_ROOT, { recursive: true });
+    return multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, TEMP_UPLOAD_ROOT),
+      filename: (_req, file, cb) => cb(null, generatedUploadName(file)),
+    });
   }
   return multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, moderationActive() ? quarantineDirFor(kind) : destinationFor(kind)),
-    filename: (_req, file, cb) => {
-      const ext = path.extname(file.originalname) || "";
-      const unique = crypto.randomBytes(16).toString("hex");
-      cb(null, `${Date.now()}-${unique}${ext.toLowerCase()}`);
-    },
+    filename: (_req, file, cb) => cb(null, generatedUploadName(file)),
   });
 }
 

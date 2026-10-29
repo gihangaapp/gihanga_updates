@@ -1,6 +1,8 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, FeedPost } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { isRecentPostReady, rememberRecentPublishedPost } from "@/lib/recent-post-pin";
+import type { InfiniteData } from "@tanstack/react-query";
 
 interface PostsPage {
   posts: FeedPost[];
@@ -132,6 +134,7 @@ export function useSinglePost(postId: string) {
 
 export function useCreatePost() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: (input: {
       kind: "photo" | "video" | "reel" | "text";
@@ -168,7 +171,33 @@ export function useCreatePost() {
         processing?: boolean;
         duplicate?: boolean;
       }>("/posts", input),
-    onSuccess: () => {
+    onSuccess: (result) => {
+      const newPost = result?.post;
+      if (newPost && user?.id && !result.duplicate) {
+        // Keep a newly published post at the top immediately. Processing media
+        // is remembered too, but it is only injected once it is approved.
+        rememberRecentPublishedPost(user.id, newPost);
+        if (isRecentPostReady(newPost)) {
+          queryClient.setQueriesData<InfiniteData<PostsPage, string | undefined>>(
+            { queryKey: ["posts", "feed"] },
+            (old) => {
+              if (!old?.pages.length) return old;
+              const [first, ...rest] = old.pages;
+              if (!first) return old;
+              return {
+                ...old,
+                pages: [
+                  { ...first, posts: [newPost, ...first.posts.filter((post) => post._id !== newPost._id)] },
+                  ...rest.map((page) => ({
+                    ...page,
+                    posts: page.posts.filter((post) => post._id !== newPost._id),
+                  })),
+                ],
+              };
+            },
+          );
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ["posts"] });
       queryClient.invalidateQueries({ queryKey: ["recommendations"] });
       queryClient.invalidateQueries({ queryKey: ["user-profile"] });

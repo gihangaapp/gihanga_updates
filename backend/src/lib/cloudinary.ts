@@ -1,4 +1,5 @@
 import { v2 as cloudinary, UploadApiResponse } from "cloudinary";
+import fs from "fs";
 import { Readable } from "stream";
 import { UploadKind } from "../middleware/upload";
 
@@ -83,6 +84,72 @@ export function uploadBufferToCloudinary(
   });
 }
 
+
+/**
+ * Streams a spooled upload to Cloudinary. All videos use chunked streaming
+ * so uploads remain reliable on mobile networks and files above Cloudinary's
+ * 100 MB single-request ceiling are handled without a separate failure path.
+ */
+export function uploadFileToCloudinary(
+  filePath: string,
+  kind: UploadKind,
+  mimetype: string,
+  opts: { authenticated?: boolean } = {},
+): Promise<UploadApiResponse> {
+  const resourceType = mimetype.startsWith("video/") ? "video" : "image";
+  const authenticated = opts.authenticated ?? true;
+  const useChunkedVideoUpload = resourceType === "video";
+
+  const uploadOptions = {
+    folder: FOLDER_BY_KIND[kind],
+    resource_type: resourceType,
+    ...(authenticated ? { type: "authenticated" } : {}),
+    use_filename: false,
+    unique_filename: true,
+    overwrite: false,
+    ...(useChunkedVideoUpload ? { chunk_size: 20 * 1024 * 1024 } : {}),
+  } as any;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: Error | null, result?: UploadApiResponse & { done?: boolean }) => {
+      if (error) {
+        if (!settled) {
+          settled = true;
+          reject(error);
+        }
+        return;
+      }
+      // chunked uploads emit interim results with done:false; only the final
+      // result has the complete public_id/secure_url metadata needed here.
+      if (!result || result.done === false) return;
+      if (!settled) {
+        settled = true;
+        resolve(result);
+      }
+    };
+
+    const uploadStream = useChunkedVideoUpload
+      ? cloudinary.uploader.upload_chunked_stream(uploadOptions, finish as any)
+      : cloudinary.uploader.upload_stream(uploadOptions, finish as any);
+    const source = fs.createReadStream(filePath);
+    source.on("error", (error) => {
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+      uploadStream.destroy(error);
+    });
+    uploadStream.on("error", (error: Error) => {
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    });
+    source.pipe(uploadStream);
+  });
+}
+
 /**
  * Mints a short-lived SIGNED delivery URL for an authenticated Cloudinary
  * asset. Signed URLs expire (~1h default) — regenerated per request by the
@@ -122,6 +189,19 @@ export function videoThumbnailFromCloudinary(publicId: string, authenticated = t
     secure: true,
     ...(authenticated ? { type: "authenticated", sign_url: true } : {}),
   });
+}
+
+
+/** Signed JPEG frame URL for an authenticated Cloudinary video. */
+export function signedCloudinaryVideoThumbnailUrl(publicId: string, ttlSeconds = 3600): string {
+  return cloudinary.url(publicId, {
+    resource_type: "video",
+    format: "jpg",
+    type: "authenticated",
+    sign_url: true,
+    secure: true,
+    expires_at: Math.floor(Date.now() / 1000) + ttlSeconds,
+  } as any);
 }
 
 /**

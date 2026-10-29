@@ -545,9 +545,12 @@ export async function applyPostDecision(
 ): Promise<void> {
   const status = decisionToStatus(result.decision);
   if (result.decision === "APPROVED") {
+    // Make every referenced asset deliverable BEFORE exposing the post to the
+    // feeds. Publishing first can race the browser's first image request and
+    // cause a permanent <img> error while the media is still quarantined.
+    await approveMediaForPost(postId);
     await publishPost(postId);
     await ModerationRecord.updateOne({ _id: record._id }, { $set: { contentId: new Types.ObjectId(postId) } });
-    await approveMediaForPost(postId);
     return;
   }
 
@@ -584,34 +587,53 @@ export async function applyPostDecision(
 
 /** Marks a post's media approved (publicly deliverable). */
 async function approveMediaForPost(postId: string) {
-  const post = await Post.findById(postId).select("mediaUrl media");
+  const post = await Post.findById(postId).select("mediaUrl media mediaKey");
   if (!post) return;
   const urls = new Set<string>();
   if (post.mediaUrl) {
-    for (const u of String(post.mediaUrl).split(",")) urls.add(u.trim());
+    for (const u of String(post.mediaUrl).split(",")) if (u.trim()) urls.add(u.trim());
   }
-  for (const item of post.media ?? []) urls.add(item.url);
-  if (urls.size === 0) return;
-  await Media.updateMany(
-    { $or: [{ cdnUrl: { $in: Array.from(urls) } }, { "variants.url": { $in: Array.from(urls) } }] },
-    { $set: { moderationStatus: "approved" } },
-  );
+  for (const item of post.media ?? []) if (item.url) urls.add(item.url);
+  const docs = await resolveMediaDocs(Array.from(urls), post.mediaKey ? [String(post.mediaKey)] : []);
+  if (docs.length > 0) {
+    await Media.updateMany(
+      { _id: { $in: docs.map((doc) => doc._id) } },
+      { $set: { moderationStatus: "approved" } },
+    );
+    return;
+  }
+  // Compatibility path for legacy public URLs that do not carry a media ID.
+  if (urls.size > 0) {
+    await Media.updateMany(
+      { $or: [{ cdnUrl: { $in: Array.from(urls) } }, { "variants.url": { $in: Array.from(urls) } }] },
+      { $set: { moderationStatus: "approved" } },
+    );
+  }
 }
 
 /** Quarantines a post's media (delivery refused / retention policy applies). */
 async function quarantineMediaForPost(postId: string, status: "rejected" | "review" | "failed") {
-  const post = await Post.findById(postId).select("mediaUrl media");
+  const post = await Post.findById(postId).select("mediaUrl media mediaKey");
   if (!post) return;
   const urls = new Set<string>();
   if (post.mediaUrl) {
-    for (const u of String(post.mediaUrl).split(",")) urls.add(u.trim());
+    for (const u of String(post.mediaUrl).split(",")) if (u.trim()) urls.add(u.trim());
   }
-  for (const item of post.media ?? []) urls.add(item.url);
-  if (urls.size === 0) return;
-  await Media.updateMany(
-    { $or: [{ cdnUrl: { $in: Array.from(urls) } }, { "variants.url": { $in: Array.from(urls) } }] },
-    { $set: { moderationStatus: status } },
-  );
+  for (const item of post.media ?? []) if (item.url) urls.add(item.url);
+  const docs = await resolveMediaDocs(Array.from(urls), post.mediaKey ? [String(post.mediaKey)] : []);
+  if (docs.length > 0) {
+    await Media.updateMany(
+      { _id: { $in: docs.map((doc) => doc._id) } },
+      { $set: { moderationStatus: status } },
+    );
+    return;
+  }
+  if (urls.size > 0) {
+    await Media.updateMany(
+      { $or: [{ cdnUrl: { $in: Array.from(urls) } }, { "variants.url": { $in: Array.from(urls) } }] },
+      { $set: { moderationStatus: status } },
+    );
+  }
 }
 
 export async function moderateMediaDoc(
@@ -624,10 +646,20 @@ export async function moderateMediaDoc(
     const url = signedCloudinaryUrl(media.storageKey, media.type === "video");
     if (url) return moderateImageByUrl(url, surface, ownerId);
   }
-  // Local quarantined file: read bytes.
+  // Local quarantined file: read bytes. New storage keys include the kind
+  // folder; try the legacy filename-only folder layout for older records.
   if (media.storageKey && !media.storageKey.startsWith("gihanga/")) {
-    const localPath = path.join(quarantineRoot(), media.storageKey);
-    if (fs.existsSync(localPath)) {
+    const legacyKind = media.context === "reel" ? "reels"
+      : media.context === "story" ? "stories"
+        : media.context === "avatar" ? "avatars"
+          : media.context === "cover" ? "covers"
+            : media.type === "video" ? "videos" : "photos";
+    const candidates = [
+      path.join(quarantineRoot(), media.storageKey),
+      path.join(quarantineRoot(), legacyKind, media.storageKey),
+    ];
+    const localPath = candidates.find((candidate) => fs.existsSync(candidate));
+    if (localPath) {
       const buffer = fs.readFileSync(localPath);
       return moderateImageByBuffer(buffer, surface, ownerId);
     }
@@ -661,15 +693,26 @@ function signedCloudinaryUrl(publicId: string, isVideo: boolean): string | undef
 }
 
 async function resolveMediaDocs(mediaUrls: string[], mediaKeys: string[]): Promise<IMedia[]> {
-  const keys = mediaKeys.filter(Boolean).map(String);
-  if (keys.length > 0) {
-    const docs = await Media.find({ _id: { $in: keys.filter((k) => Types.ObjectId.isValid(k)) } });
-    if (docs.length > 0) return docs;
+  const urls = mediaUrls.filter((url) => typeof url === "string" && url.trim()).map((url) => url.trim());
+  const ids = new Set(mediaKeys.filter(Boolean).map(String).filter((key) => Types.ObjectId.isValid(key)));
+
+  // Moderated uploads are referenced by the checked delivery URL, not the
+  // raw Cloudinary cdnUrl. Resolve IDs embedded in /media/file/:id URLs too;
+  // this is important for approving every image in a multi-photo post.
+  for (const url of urls) {
+    const match = url.match(/\/media\/file\/([a-f0-9]{24})(?:[/?#]|$)/i);
+    if (match?.[1]) ids.add(match[1]);
   }
-  if (mediaUrls.length > 0) {
-    return Media.find({ $or: [{ cdnUrl: { $in: mediaUrls } }, { "variants.url": { $in: mediaUrls } }] });
+
+  const conditions: any[] = [];
+  if (ids.size > 0) {
+    conditions.push({ _id: { $in: Array.from(ids).filter((id) => Types.ObjectId.isValid(id)) } });
   }
-  return [];
+  if (urls.length > 0) {
+    conditions.push({ cdnUrl: { $in: urls } }, { "variants.url": { $in: urls } });
+  }
+  if (conditions.length === 0) return [];
+  return Media.find({ $or: conditions });
 }
 
 export function combineResults(results: ModerationResult[]): ModerationResult {
