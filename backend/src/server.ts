@@ -13,7 +13,12 @@ import { startAchievementSweeper } from "./lib/achievementSweeper";
 import { startStorySweeper } from "./lib/storySweeper";
 import { verifyMailer } from "./lib/mailer";
 import { ensureDefaultAchievementDefinitions } from "./services/achievementService";
-import { registerModerationJobHandler, recoverPostsStuckWithoutVisualProvider, recoverPostsWithUnsupportedMediaInput } from "./services/moderation/contentModerationService";
+import {
+  registerModerationJobHandler,
+  recoverPostsStuckWithoutVisualProvider,
+  recoverPostsWithUnsupportedMediaInput,
+  recoverStuckPostModeration,
+} from "./services/moderation/contentModerationService";
 import { startModerationQueue, recoverStuckJobs } from "./services/moderation/moderationQueue";
 import { publicSummary } from "./lib/moderation/config";
 import { inspectVisionCredentials } from "./lib/moderation/visionCredentials";
@@ -126,7 +131,19 @@ async function startServer() {
         if (retriedPosts > 0) {
           console.warn(`[Moderation] Retried ${retriedPosts} post(s) held by the previous unsupported-media input path.`);
         }
+        const recoveredStuckPosts = await recoverStuckPostModeration();
+        if (recoveredStuckPosts > 0) {
+          console.warn(`[Moderation] Re-attempted ${recoveredStuckPosts} stale post moderation assessment(s).`);
+        }
         startModerationQueue();
+        const postRecoveryTimer = setInterval(() => {
+          void recoverStuckPostModeration().then((count) => {
+            if (count > 0) console.warn(`[Moderation] Re-attempted ${count} stale post moderation assessment(s).`);
+          }).catch((error) => {
+            console.error("[Moderation] Stuck-post recovery failed:", error instanceof Error ? error.message : "unknown error");
+          });
+        }, 60_000);
+        postRecoveryTimer.unref?.();
       })
       .catch((err) => console.error("[ModerationQueue] startup failed:", err));
 

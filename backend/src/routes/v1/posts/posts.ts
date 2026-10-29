@@ -58,22 +58,53 @@ function parsePagination(req: Request) {
  * uploaded through the platform (a resolvable Media doc). This closes the
  * "paste any external URL" bypass — unverifiable media is refused outright.
  */
-async function resolveUploadedMedia(mediaKey: unknown, mediaUrl: unknown): Promise<{ ok: boolean; docs: any[] }> {
-  const key = typeof mediaKey === "string" ? mediaKey : undefined;
-  const url = typeof mediaUrl === "string" ? mediaUrl : undefined;
+async function resolveUploadedMedia(
+  mediaKey: unknown,
+  mediaUrl: unknown,
+  ownerId: string,
+): Promise<{ ok: boolean; docs: any[] }> {
+  const key = typeof mediaKey === "string" ? mediaKey.trim() : "";
+  const urls = typeof mediaUrl === "string"
+    ? mediaUrl.split(",").map((value) => value.trim()).filter(Boolean)
+    : [];
+  const ids = new Set<string>();
 
-  if (key && Types.ObjectId.isValid(key)) {
-    const doc = await Media.findById(key);
-    if (doc) return { ok: true, docs: [doc] };
+  if (key && Types.ObjectId.isValid(key)) ids.add(key);
+  // The checked delivery URLs encode their Media document ID. Resolve every
+  // item in a carousel instead of validating only the first mediaKey.
+  for (const value of urls) {
+    const match = value.match(/\/media\/file\/([a-f0-9]{24})(?:[/?#]|$)/i);
+    if (match?.[1]) ids.add(match[1]);
   }
-  if (url) {
-    const urls = url.split(",").map((s) => s.trim()).filter(Boolean);
-    const docs = await Media.find({
-      $or: [{ cdnUrl: { $in: urls } }, { "variants.url": { $in: urls } }],
-    }).limit(10);
-    if (docs.length > 0) return { ok: true, docs };
+
+  const alternatives: any[] = [];
+  if (ids.size) alternatives.push({ _id: { $in: [...ids] } });
+  if (urls.length) alternatives.push({ cdnUrl: { $in: urls } }, { "variants.url": { $in: urls } });
+  if (!alternatives.length) return { ok: false, docs: [] };
+
+  const found = await Media.find({ $or: alternatives }).limit(10);
+  // Existing legacy Media rows may not have ownerId. New uploads must match
+  // the signed-in creator so a media ID cannot be reused by another account.
+  const docs = found.filter((doc) => !doc.ownerId || String(doc.ownerId) === ownerId);
+  if (!docs.length) return { ok: false, docs: [] };
+
+  const resolvedIds = new Set(docs.map((doc) => String(doc._id)));
+  const coveredUrls = new Set<string>();
+  for (const value of urls) {
+    const idMatch = value.match(/\/media\/file\/([a-f0-9]{24})(?:[/?#]|$)/i);
+    if (idMatch?.[1] && resolvedIds.has(idMatch[1])) {
+      coveredUrls.add(value);
+      continue;
+    }
+    if (docs.some((doc) => doc.cdnUrl === value || (doc.variants ?? []).some((variant: any) => variant.url === value))) {
+      coveredUrls.add(value);
+    }
   }
-  return { ok: false, docs: [] };
+  // If URLs were provided, each one must resolve to a platform Media record;
+  // never allow a mixed trusted/untrusted multi-media post.
+  const allUrlsResolved = urls.length === 0 || coveredUrls.size === urls.length;
+  const keyResolved = Boolean(key && resolvedIds.has(key));
+  return { ok: allUrlsResolved && (urls.length > 0 || keyResolved), docs };
 }
 
 // POST /api/v1/posts — create a post (photo, video, reel or text)
@@ -88,6 +119,7 @@ async function resolveUploadedMedia(mediaKey: unknown, mediaUrl: unknown): Promi
 // hashtags, socket broadcast and rewards firing at approval time, never
 // before. Duplicate submissions are collapsed via the Idempotency-Key header.
 router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+  let createdPostId: string | undefined;
   try {
     const { kind, body, mediaUrl, mediaKey, mediaMimeType, duration, thumbnailUrl, location, tags, audience } =
       req.body;
@@ -126,7 +158,7 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
 
     // ── Media provenance check (anti-bypass) ─────────────────────────────────
     if (moderationActive() && kind !== "text") {
-      const resolved = await resolveUploadedMedia(mediaKey, mediaUrl);
+      const resolved = await resolveUploadedMedia(mediaKey, mediaUrl, req.user!.userId);
       if (!resolved.ok) {
         return res.status(400).json({
           error: "Media must be uploaded through the platform's upload API before posting",
@@ -208,6 +240,7 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
         ? { status: "processing", updatedAt: new Date() }
         : { status: "approved", updatedAt: new Date() },
     });
+    createdPostId = String(post._id);
 
     // Remember the post for idempotent replays (del+setnx works on both the
     // in-memory shim and real ioredis — neither exposes plain SET).
@@ -265,12 +298,27 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
     });
 
     if (!result) {
-      // Pipeline itself errored (DB issue etc.) — fail-closed: the post
-      // simply stays "processing" (private). The retry endpoint can re-run.
-      const populated = await post.populate("author", AUTHOR_FIELDS);
+      // An assessment exception must not leave the row looking actively
+      // processing forever. Mark it retryable immediately; the recovery loop
+      // will rerun the checks, but will never publish without APPROVED.
+      await Post.updateOne(
+        { _id: post._id, status: "processing" },
+        {
+          $set: {
+            "moderation.status": "failed",
+            "moderation.userMessage": "Your post was saved, but its safety check could not finish. We will retry it automatically.",
+            "moderation.updatedAt": new Date(),
+          },
+        },
+      );
+      const populated = await Post.findById(post._id).populate("author", AUTHOR_FIELDS);
       return res.status(202).json({
-        post: { ...populated.toObject(), liked: false, bookmarked: false, followingAuthor: false },
-        moderation: { status: "processing", userMessage: "Your content is being checked and will appear once cleared." },
+        post: { ...(populated ?? post).toObject(), liked: false, bookmarked: false, followingAuthor: false },
+        moderation: {
+          status: "failed",
+          userMessage: "Your post was saved, but its safety check could not finish. We will retry it automatically.",
+        },
+        processing: true,
       });
     }
 
@@ -297,6 +345,33 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
       ...(result.decision === "PROCESSING" ? { processing: true } : {}),
     });
   } catch (error: any) {
+    console.error("[Posts] Create/publish pipeline failed:", error instanceof Error ? error.message : "unknown error");
+    if (createdPostId) {
+      // Post.create may already have committed before a later moderation or
+      // side-effect operation failed. Keep it recoverable rather than leaving
+      // a silent, endlessly-processing row with no retry signal.
+      await Post.updateOne(
+        { _id: createdPostId, status: "processing" },
+        {
+          $set: {
+            "moderation.status": "failed",
+            "moderation.userMessage": "Your post was saved, but its safety check could not finish. We will retry it automatically.",
+            "moderation.updatedAt": new Date(),
+          },
+        },
+      ).catch(() => undefined);
+      const saved = await Post.findById(createdPostId).populate("author", AUTHOR_FIELDS).catch(() => null);
+      if (saved) {
+        return res.status(202).json({
+          post: { ...saved.toObject(), liked: false, bookmarked: false, followingAuthor: false },
+          moderation: {
+            status: "failed",
+            userMessage: "Your post was saved, but its safety check could not finish. We will retry it automatically.",
+          },
+          processing: true,
+        });
+      }
+    }
     return res.status(500).json({ error: "Failed to create post", details: error.message });
   }
 });
@@ -323,7 +398,7 @@ router.patch("/:id", authenticateConsumer, async (req: AuthenticatedRequest, res
       (mediaKey !== undefined && mediaKey !== post.mediaKey);
 
     if (mediaChanged && moderationActive()) {
-      const resolved = await resolveUploadedMedia(mediaKey ?? post.mediaKey, mediaUrl);
+      const resolved = await resolveUploadedMedia(mediaKey ?? post.mediaKey, mediaUrl, req.user!.userId);
       if (!resolved.ok) {
         return res.status(400).json({ error: "Media must be uploaded through the platform's upload API before posting" });
       }

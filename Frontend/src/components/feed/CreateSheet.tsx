@@ -138,7 +138,7 @@ export function CreateHost() {
         return;
       }
 
-      await createPost.mutateAsync({
+      const result = await createPost.mutateAsync({
         kind: mode === "reel" ? "reel" : file ? (isVideo ? "video" : "photo") : "text",
         body: body.trim(),
         mediaUrl,
@@ -147,7 +147,13 @@ export function CreateHost() {
         tags,
         audience,
       });
-      toast.success(mode === "reel" ? "Reel published" : "Posted to your feed");
+      if (result?.moderation?.status === "failed") {
+        toast.info(result.moderation.userMessage || "Your post is saved and will be checked again automatically.");
+      } else if (result?.moderation?.status === "processing" || result?.processing) {
+        toast.info("Your post is saved and will appear in feeds once its safety check is complete.");
+      } else {
+        toast.success(mode === "reel" ? "Reel published" : "Posted to your feed");
+      }
       closeCreate();
       navigate({ to: mode === "reel" ? "/reels" : "/" });
     } catch (err: any) {

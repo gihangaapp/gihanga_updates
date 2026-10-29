@@ -109,7 +109,7 @@ export function ReelCreator({ onClose }: ReelCreatorProps) {
         .map((m) => m[1])
         .filter((t): t is string => t !== undefined);
 
-      await createPost.mutateAsync({
+      const result = await createPost.mutateAsync({
         kind: "reel",
         body: caption.trim(),
         mediaUrl: uploaded.url,
@@ -119,8 +119,15 @@ export function ReelCreator({ onClose }: ReelCreatorProps) {
         audience,
       });
 
+      if (result?.moderation?.status === "failed") {
+        setUploadStage("failed");
+        setUploadError(result.moderation.userMessage || "Your reel is saved, but its safety check needs another attempt. We'll retry it automatically.");
+        return;
+      }
       setUploadStage("completed");
-      toast.success("Reel published successfully!");
+      toast.success(result?.moderation?.status === "processing"
+        ? "Your reel is saved and will appear once its safety check is complete."
+        : "Reel published successfully!");
       setTimeout(() => {
         onClose();
         navigate({ to: "/reels" });

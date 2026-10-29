@@ -200,9 +200,16 @@ export function PostCreator({ onClose }: PostCreatorProps) {
         }, 1600);
         return;
       }
+      if (moderation?.status === "failed") {
+        setUploadStage("failed");
+        setUploadError(
+          moderation.userMessage || "Your post was saved, but its safety check could not finish. We'll retry it automatically.",
+        );
+        return;
+      }
       if (moderation?.status === "processing" || result?.processing) {
         setUploadStage("completed");
-        toast.info("Posted! We're finishing a safety check on the video — it will appear in your feed once cleared.");
+        toast.info("Your post is saved and will appear in feeds once its safety check is complete.");
         setTimeout(() => {
           onClose();
           navigate({ to: "/" });

@@ -305,11 +305,77 @@ export async function moderateImageByUrl(
     return { decision: "APPROVED", categories: [], severity: "low", criticalEscalation: false, providerOutcomes: [] };
   }
 
-  const outcomes: ProviderOutcome[] = [];
-  for (const provider of imageCapableProviders()) {
-    outcomes.push(await callProvider(provider, () => provider.moderateImage({ url, surface })));
+  const providers = imageCapableProviders();
+  if (providers.length === 0) {
+    return combineWithConfig([]);
   }
-  return combineWithConfig(outcomes);
+
+  // Cloudinary moderation URLs are signed/private. Do not ask each AI provider
+  // to fetch those URLs independently: fetch the image/frame from the backend,
+  // bound the download, then send the bytes through the same provider path used
+  // for locally stored uploads. This also avoids provider-side fetch failures
+  // silently stranding otherwise valid posts in the author-only processing grid.
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.timeoutMs);
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" || parsed.hostname !== "res.cloudinary.com") {
+      throw new Error("Moderation media host is not allowed");
+    }
+
+    const response = await fetch(parsed.toString(), { signal: controller.signal });
+    if (!response.ok) throw new Error(`Media fetch returned HTTP ${response.status}`);
+
+    const mimeType = (response.headers.get("content-type") || "image/jpeg").split(";")[0].trim().toLowerCase();
+    if (!mimeType.startsWith("image/")) throw new Error("Moderation URL did not return an image");
+
+    const declaredLength = Number(response.headers.get("content-length") || 0);
+    const maxBytes = 20 * 1024 * 1024;
+    if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+      throw new Error("Moderation image exceeds the verification size limit");
+    }
+
+    const chunks: Buffer[] = [];
+    let totalBytes = 0;
+    if (response.body) {
+      const reader = response.body.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value) continue;
+          totalBytes += value.byteLength;
+          if (totalBytes > maxBytes) {
+            await reader.cancel();
+            throw new Error("Moderation image exceeds the verification size limit");
+          }
+          chunks.push(Buffer.from(value));
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } else {
+      const bytes = Buffer.from(await response.arrayBuffer());
+      totalBytes = bytes.length;
+      if (totalBytes > maxBytes) throw new Error("Moderation image exceeds the verification size limit");
+      chunks.push(bytes);
+    }
+
+    if (totalBytes === 0) throw new Error("Moderation image was empty");
+    return await moderateImageByBuffer(Buffer.concat(chunks, totalBytes), surface, ownerId, mimeType);
+  } catch (error) {
+    // Never expose the signed URL or raw fetch exception. Return a sanitized
+    // provider error result so the existing fail-closed retry path can handle it.
+    const sanitized = new Error("Media could not be retrieved for verification");
+    const outcomes: ProviderOutcome[] = providers.map((provider) => ({
+      ...errorOutcome(provider.id, sanitized),
+      latencyMs: Date.now() - startedAt,
+    }));
+    return combineWithConfig(outcomes);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -373,16 +439,21 @@ export function decisionToStatus(decision: ModerationResult["decision"]): string
  * a post becomes publicly visible.
  */
 export async function publishPost(postId: string): Promise<void> {
-  const post = await Post.findById(postId);
-  if (!post || post.status === "published") return;
-
-  post.status = "published";
-  post.moderation = {
-    ...(post.moderation as any),
-    status: "approved",
-    updatedAt: new Date(),
-  };
-  await post.save();
+  // Atomically transition the post exactly once. Retried moderation jobs may
+  // race each other; a read-then-save check could increment postsCount twice
+  // or emit duplicate publication events for the same post.
+  const post = await Post.findOneAndUpdate(
+    { _id: postId, status: { $nin: ["published", "removed"] } },
+    {
+      $set: {
+        status: "published",
+        "moderation.status": "approved",
+        "moderation.updatedAt": new Date(),
+      },
+    },
+    { new: true },
+  );
+  if (!post) return;
 
   await User.findByIdAndUpdate(post.author, { $inc: { postsCount: 1 } });
 
@@ -661,6 +732,135 @@ export async function recoverPostsStuckWithoutVisualProvider(): Promise<number> 
   }
 
   return recovered;
+}
+
+let stuckPostRecoveryRunning = false;
+
+/**
+ * Re-attempts posts that remained in `processing` after an internal assessment
+ * error or an exhausted moderation job. This is intentionally limited to
+ * processing/failed states, ignores rejected and human-review posts, and skips
+ * any post that already has an active queue job. A provider failure is retried;
+ * it is never converted to approval. The explicit no-visual-provider fallback
+ * remains governed by CONTENT_MODERATION_ALLOW_UNSCANNED_MEDIA.
+ */
+async function isRetryableProviderErrorReview(postId: Types.ObjectId): Promise<boolean> {
+  const record = await ModerationRecord.findOne({ contentType: "post", contentId: postId })
+    .sort({ createdAt: -1 });
+  if (!record || record.decision !== "PENDING_REVIEW" || record.criticalEscalation) return false;
+
+  const outcomes = record.providerOutcomes ?? [];
+  // Only retry an uncertain decision caused by a technical provider error.
+  // Real flagged/review outcomes remain private for human review.
+  if (!outcomes.some((outcome: any) => outcome?.verdict === "error")) return false;
+  if (outcomes.some((outcome: any) => outcome?.verdict === "flagged" || outcome?.verdict === "review")) return false;
+
+  const config = getModerationConfig();
+  const suspicionBound = config.reviewThreshold * 0.6;
+  const hasPolicySignal = (record.categories ?? []).some((category: any) => {
+    const action = categoryAction(category, { review: config.reviewThreshold, block: config.blockThreshold });
+    if (action !== "pass") return true;
+    return AUTO_REJECT_CATEGORIES.has(category.category) && category.score >= suspicionBound;
+  });
+  return !hasPolicySignal;
+}
+
+export async function recoverStuckPostModeration(): Promise<number> {
+  if (stuckPostRecoveryRunning) return 0;
+  stuckPostRecoveryRunning = true;
+  let retried = 0;
+  try {
+    const staleBefore = new Date(Date.now() - 3 * 60_000);
+    const candidates = await Post.find({
+      status: "processing",
+      "moderation.status": { $in: ["processing", "failed", "pending_review"] },
+      $or: [
+        { "moderation.updatedAt": { $lte: staleBefore } },
+        { "moderation.updatedAt": { $exists: false }, createdAt: { $lte: staleBefore } },
+      ],
+    })
+      .sort({ createdAt: 1 })
+      .limit(30);
+
+    for (const post of candidates) {
+      // `applyPostDecision` intentionally keeps review decisions unpublished.
+      // A mixed provider success/error also maps to pending_review, though;
+      // retry that case only when no provider or category actually flagged the
+      // content. A real review decision is never auto-approved by this loop.
+      if (post.moderation?.status === "pending_review") {
+        const retryableProviderReview = await isRetryableProviderErrorReview(post._id);
+        if (!retryableProviderReview) continue;
+      }
+
+      const activeJob = await ModerationJob.exists({
+        contentType: "post",
+        contentId: post._id,
+        status: { $in: ["queued", "processing"] },
+      });
+      if (activeJob) continue;
+
+      // Atomic stale-version claim prevents multiple instances from repeatedly
+      // assessing the same row at once, using the moderation timestamp as a
+      // short lease rather than introducing a schema migration.
+      const claimFilter: any = {
+        _id: post._id,
+        status: "processing",
+        "moderation.status": post.moderation?.status,
+      };
+      if (post.moderation?.updatedAt) {
+        claimFilter["moderation.updatedAt"] = post.moderation.updatedAt;
+      } else {
+        claimFilter["moderation.updatedAt"] = { $exists: false };
+      }
+      const leaseAt = new Date();
+      const claimed = await Post.updateOne(claimFilter, { $set: { "moderation.updatedAt": leaseAt } });
+      if (claimed.modifiedCount !== 1) continue;
+
+      // A completed job can still be orphaned from the parent status if the
+      // process died between the job completion and post-state persistence.
+      // Mark only this stale post's completed media jobs retryable so enqueue
+      // can re-run them; live and human-review jobs are never touched.
+      await ModerationJob.updateMany(
+        {
+          contentType: "post",
+          contentId: post._id,
+          kind: { $in: ["video", "image"] },
+          status: "done",
+        },
+        { $set: { status: "failed", lastError: "Retrying stale post moderation state" } },
+      );
+
+      try {
+        await assessPost({
+          postId: String(post._id),
+          authorId: String(post.author),
+          body: String(post.body ?? ""),
+          kind: post.kind as "photo" | "video" | "reel" | "text",
+          mediaUrls: String(post.mediaUrl ?? "").split(",").map((url) => url.trim()).filter(Boolean),
+          mediaKeys: post.mediaKey ? [String(post.mediaKey)] : [],
+        });
+        retried += 1;
+      } catch (error: any) {
+        console.error(
+          `[Moderation][Recovery] Could not retry post ${String(post._id)}:`,
+          error instanceof Error ? error.message : "unknown error",
+        );
+        await Post.updateOne(
+          { _id: post._id, status: "processing" },
+          {
+            $set: {
+              "moderation.status": "failed",
+              "moderation.userMessage": "Your post is saved and will be checked again automatically.",
+              "moderation.updatedAt": new Date(),
+            },
+          },
+        ).catch(() => undefined);
+      }
+    }
+  } finally {
+    stuckPostRecoveryRunning = false;
+  }
+  return retried;
 }
 
 /**
@@ -1139,8 +1339,6 @@ export async function assessProfileText(userId: string, fields: { name?: string;
 // ────────────────────────────────────────────────────────────────────────────
 // Queue handler: videos, deferred images
 // ────────────────────────────────────────────────────────────────────────────
-
-import { ModerationJob } from "../../models/ModerationJob";
 
 /** Registers the queue's job processor. Called at server startup. */
 export function registerModerationJobHandler() {
