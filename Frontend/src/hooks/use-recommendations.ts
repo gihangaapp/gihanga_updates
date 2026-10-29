@@ -101,9 +101,11 @@ export function useForYouFeed(limit = 12) {
   const { user } = useAuth();
   return useInfiniteQuery({
     queryKey: ["recommendations", "for-you", user?.id],
-    queryFn: ({ pageParam }) =>
+    queryFn: ({ pageParam, signal }) =>
       api.get<RecommendationFeedResponse>(
         `/recommendations/for-you?limit=${limit}${pageParam ? `&cursor=${pageParam}` : ""}`,
+        false,
+        signal,
       ),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
@@ -115,9 +117,11 @@ export function useReelsRecFeed(limit = 10) {
   const { user } = useAuth();
   return useInfiniteQuery({
     queryKey: ["recommendations", "reels", user?.id],
-    queryFn: ({ pageParam }) =>
+    queryFn: ({ pageParam, signal }) =>
       api.get<RecommendationFeedResponse>(
         `/recommendations/reels?limit=${limit}${pageParam ? `&cursor=${pageParam}` : ""}`,
+        false,
+        signal,
       ),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
@@ -129,9 +133,11 @@ export function useExploreRecFeed(limit = 12) {
   const { user } = useAuth();
   return useInfiniteQuery({
     queryKey: ["recommendations", "explore", user?.id],
-    queryFn: ({ pageParam }) =>
+    queryFn: ({ pageParam, signal }) =>
       api.get<RecommendationFeedResponse>(
         `/recommendations/explore?limit=${limit}${pageParam ? `&cursor=${pageParam}` : ""}`,
+        false,
+        signal,
       ),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
@@ -143,9 +149,11 @@ export function useTrendingRecFeed(limit = 12) {
   const { user } = useAuth();
   return useInfiniteQuery({
     queryKey: ["recommendations", "trending", user?.id],
-    queryFn: ({ pageParam }) =>
+    queryFn: ({ pageParam, signal }) =>
       api.get<RecommendationFeedResponse>(
         `/recommendations/trending?limit=${limit}${pageParam ? `&cursor=${pageParam}` : ""}`,
+        false,
+        signal,
       ),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,

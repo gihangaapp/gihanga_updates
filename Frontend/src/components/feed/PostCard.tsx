@@ -1,5 +1,5 @@
-import { useCallback, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import { memo, useCallback, useState } from "react";
+import { motion } from "motion/react";
 import { useSubmitNotInterested, logRecommendationEvent } from "@/hooks/use-recommendations";
 import {
   Bookmark,
@@ -53,7 +53,10 @@ function toDisplayUser(author: FeedPost["author"]) {
   };
 }
 
-export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }) {
+export const PostCard = memo(function PostCard({ post, index = 0 }: {
+  post: FeedPost;
+  index?: number;
+}) {
   const [reportOpen, setReportOpen] = useState(false);
   const [appealOpen, setAppealOpen] = useState(false);
   const retryModeration = useRetryModeration();
@@ -80,6 +83,9 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
   const following = followingSet?.has(post.author.username) ?? post.followingAuthor;
 
   const handleLike = useCallback(() => {
+    // Make the UI mutation the first action in the click handler. Analytics is
+    // fire-and-forget and must not compete with the user's primary request.
+    toggleLike.mutate(post._id);
     logRecommendationEvent({
       event: post.liked ? "post_unlike" : "post_like",
       targetKind: post.kind === "reel" ? "reel" : "post",
@@ -87,7 +93,6 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
       creatorId: String(post.author._id ?? post.author),
       tags: post.tags,
     });
-    toggleLike.mutate(post._id);
   }, [toggleLike, post._id, post.liked, post.kind, post.author, post.tags]);
 
   const handleCommentClick = () => {
@@ -104,13 +109,7 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
     isLongCaption && !isExpanded ? `${post.body.slice(0, maxCharLimit)}…` : post.body;
 
   return (
-    <motion.article
-      initial={{ opacity: 0, y: 14 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-40px" }}
-      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1], delay: Math.min(index, 4) * 0.04 }}
-      className="surface-card mb-4 overflow-hidden border border-border bg-card shadow-soft"
-    >
+    <article className="feed-card surface-card mb-4 overflow-hidden border border-border bg-card shadow-soft">
       {/* Header */}
       <header className="flex items-center gap-2 p-3 pb-3 sm:gap-3 sm:p-4 sm:pb-3">
         <Link to="/profile/$username" params={{ username: post.author.username }} className="press shrink-0">
@@ -393,6 +392,6 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
           recordId={moderationState.record}
         />
       )}
-    </motion.article>
+    </article>
   );
-}
+});

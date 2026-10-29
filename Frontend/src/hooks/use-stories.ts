@@ -6,7 +6,7 @@ export function useStories() {
   const { user } = useAuth();
   return useQuery({
     queryKey: ["stories"],
-    queryFn: () => api.get<{ stories: StoryGroup[] }>("/stories"),
+    queryFn: ({ signal }) => api.get<{ stories: StoryGroup[] }>("/stories", false, signal),
     enabled: Boolean(user),
     refetchInterval: 60_000,
   });
@@ -31,7 +31,25 @@ export function useMarkStoryViewed() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (storyId: string) => api.post(`/stories/${storyId}/view`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["stories"] }),
+    // Viewing a story is a tiny write. Patch the local story rail immediately
+    // instead of refetching the entire rail after every viewed item.
+    onMutate: (storyId: string) => {
+      const previous = queryClient.getQueryData<{ stories: StoryGroup[] }>(["stories"]);
+      if (previous?.stories) {
+        queryClient.setQueryData<{ stories: StoryGroup[] }>(["stories"], {
+          stories: previous.stories.map((group) => {
+            const items = group.items.map((item) =>
+              item._id === storyId ? { ...item, viewedByMe: true } : item,
+            );
+            return { ...group, items, seen: items.every((item) => item.viewedByMe) };
+          }),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _storyId, context) => {
+      if (context?.previous) queryClient.setQueryData(["stories"], context.previous);
+    },
   });
 }
 
@@ -73,9 +91,9 @@ export function useDeleteStory() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (storyId: string) => api.delete(`/stories/${storyId}`),
-    onMutate: async (storyId: string) => {
-      await queryClient.cancelQueries({ queryKey: ["stories"] });
+    onMutate: (storyId: string) => {
       const previous = queryClient.getQueryData<{ stories: StoryGroup[] }>(["stories"]);
+      void queryClient.cancelQueries({ queryKey: ["stories"] }, { revert: false, silent: true });
       if (previous?.stories) {
         queryClient.setQueryData<{ stories: StoryGroup[] }>(["stories"], {
           stories: previous.stories

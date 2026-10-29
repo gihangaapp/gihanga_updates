@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { ArrowUpRight, Loader2, Radio, Sparkles, TrendingUp, UserPlus } from "lucide-react";
@@ -140,8 +140,14 @@ function HomeFeed() {
     !trending.isLoading && (trending.data?.pages.flatMap((p) => p.posts).length ?? 0) === 0;
   const trendingSource = trendingEmpty ? explore : trending;
   const active = tab === "foryou" ? forYou : trendingSource;
-  const posts = (active.data?.pages.flatMap((p) => p.posts) ?? []).slice();
-  if (tab === "trending" && trendingEmpty) posts.sort((a, b) => b.likesCount - a.likesCount);
+  const activePages = active.data?.pages;
+  const posts = useMemo(() => {
+    const next = (activePages?.flatMap((p) => p.posts) ?? []).slice();
+    if (tab === "trending" && trendingEmpty) {
+      next.sort((a, b) => b.likesCount - a.likesCount);
+    }
+    return next;
+  }, [activePages, tab, trendingEmpty]);
 
   const isFollowingAnyone = forYou.data?.pages[0]?.isFollowingAnyone ?? true;
 

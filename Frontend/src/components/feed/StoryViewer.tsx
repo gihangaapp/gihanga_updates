@@ -60,6 +60,8 @@ export function StoryViewer({
   const [index, setIndex] = useState(startIndex);
   const [step, setStep] = useState(0);
   const [progress, setProgress] = useState(0);
+  const progressRef = useRef(0);
+  const [readyItemId, setReadyItemId] = useState<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
   const [replyText, setReplyText] = useState("");
@@ -87,6 +89,12 @@ export function StoryViewer({
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
 
+  const updateProgress = useCallback((value: number) => {
+    const nextProgress = Math.max(0, Math.min(1, value));
+    progressRef.current = nextProgress;
+    setProgress(nextProgress);
+  }, []);
+
   const group = groups[index];
   const item = group?.items[step];
   const count = Math.max(1, group?.items.length ?? 1);
@@ -94,7 +102,8 @@ export function StoryViewer({
   const isOwnStory = user?.username === group?.author?.username;
 
   const next = useCallback(() => {
-    setProgress(0);
+    updateProgress(0);
+    setReadyItemId(null);
     setStep((s) => {
       if (s + 1 < count) return s + 1;
       setIndex((i) => {
@@ -104,10 +113,11 @@ export function StoryViewer({
       });
       return 0;
     });
-  }, [count, groups.length, onClose]);
+  }, [count, groups.length, onClose, updateProgress]);
 
   const prev = useCallback(() => {
-    setProgress(0);
+    updateProgress(0);
+    setReadyItemId(null);
     setStep((s) => {
       if (s > 0) return s - 1;
       setIndex((i) => {
@@ -116,23 +126,25 @@ export function StoryViewer({
       });
       return 0;
     });
-  }, []);
+  }, [updateProgress]);
 
   const nextGroup = useCallback(() => {
-    setProgress(0);
+    updateProgress(0);
+    setReadyItemId(null);
     setStep(0);
     setIndex((i) => {
       if (i + 1 < groups.length) return i + 1;
       onClose();
       return i;
     });
-  }, [groups.length, onClose]);
+  }, [groups.length, onClose, updateProgress]);
 
   const prevGroup = useCallback(() => {
-    setProgress(0);
+    updateProgress(0);
+    setReadyItemId(null);
     setStep(0);
     setIndex((i) => (i > 0 ? i - 1 : 0));
-  }, []);
+  }, [updateProgress]);
 
   // Touch swipe handlers for switching stories
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -173,19 +185,37 @@ export function StoryViewer({
   // back (or forward) must NEVER show the previous line re-filling from its
   // old position; the target story starts a fresh loading line at 0.
   useEffect(() => {
-    setProgress(0);
-  }, [index, step]);
+    updateProgress(0);
+  }, [index, step, item?._id, updateProgress]);
 
-  // Handle RAF progress timer for image slides. `cancelled` guards against a
-  // stale frame from an earlier slide firing next() after the user navigated.
+  // A story without a usable media URL cannot emit a load/error event. Allow it
+  // to progress rather than leaving the viewer permanently paused on black.
   useEffect(() => {
-    if (paused || item?.mediaType === "video") return;
+    if (item?._id && !item.mediaUrl?.trim()) setReadyItemId(item._id);
+  }, [item?._id, item?.mediaUrl]);
+
+  // Start the image timer only after its media is ready to display. This avoids
+  // consuming story time while an image is still loading on a slow connection.
+  // For playable videos, native media time drives the line; an errored video
+  // falls back to the regular duration so the viewer never gets stuck.
+  useEffect(() => {
+    if (paused || !item?._id || readyItemId !== item._id) return;
+    const video = videoRef.current;
+    if (
+      item?.mediaType === "video" &&
+      video &&
+      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
+      !video.error
+    ) {
+      return;
+    }
     let cancelled = false;
-    let start = performance.now();
+    const startProgress = progressRef.current;
+    const start = performance.now();
     const tick = (now: number) => {
       if (cancelled) return;
-      const p = Math.min(1, (now - start) / duration);
-      setProgress(p);
+      const p = Math.min(1, startProgress + (now - start) / duration);
+      updateProgress(p);
       if (p >= 1) {
         next();
         return;
@@ -197,7 +227,17 @@ export function StoryViewer({
       cancelled = true;
       if (raf.current) cancelAnimationFrame(raf.current);
     };
-  }, [index, step, paused, next, duration, item?.mediaType]);
+  }, [
+    index,
+    step,
+    paused,
+    next,
+    duration,
+    item?._id,
+    item?.mediaType,
+    readyItemId,
+    updateProgress,
+  ]);
 
   // Sync video playback with story pause/resume
   useEffect(() => {
@@ -208,7 +248,7 @@ export function StoryViewer({
         videoRef.current.play().catch(() => {});
       }
     }
-  }, [paused, item?.mediaType]);
+  }, [paused, index, step, item?.mediaType]);
 
   // Keyboard Navigation Support
   useEffect(() => {
@@ -273,10 +313,13 @@ export function StoryViewer({
             autoPlay
             muted={muted}
             playsInline
+            preload="auto"
+            onLoadedData={() => setReadyItemId(item._id)}
+            onError={() => setReadyItemId(item._id)}
             onEnded={next}
             onTimeUpdate={() => {
               if (videoRef.current && videoRef.current.duration) {
-                setProgress(videoRef.current.currentTime / videoRef.current.duration);
+                updateProgress(videoRef.current.currentTime / videoRef.current.duration);
               }
             }}
             className="absolute inset-0 size-full object-contain bg-black"
@@ -292,7 +335,10 @@ export function StoryViewer({
             <img
               src={image}
               alt={item.caption || "Story item"}
-              loading="lazy"
+              loading="eager"
+              decoding="async"
+              onLoad={() => setReadyItemId(item._id)}
+              onError={() => setReadyItemId(item._id)}
               className="relative z-10 size-full object-contain"
             />
           </div>
@@ -316,7 +362,7 @@ export function StoryViewer({
           {Array.from({ length: count }).map((_, i) => (
             <span key={i} className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/30">
               <span
-                className="block h-full rounded-full bg-white transition-all"
+                className="block h-full rounded-full bg-white transition-none"
                 style={{ width: `${i < step ? 100 : i === step ? progress * 100 : 0}%` }}
               />
             </span>

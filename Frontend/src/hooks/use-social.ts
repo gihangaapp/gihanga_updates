@@ -52,7 +52,7 @@ export function useFollowingSet() {
   const { user } = useAuth();
   return useQuery({
     queryKey: ["following-set"],
-    queryFn: () => api.get<{ usernames: string[] }>("/follow/mine"),
+    queryFn: ({ signal }) => api.get<{ usernames: string[] }>("/follow/mine", false, signal),
     enabled: Boolean(user),
     select: (data) => new Set(data.usernames),
     staleTime: 30_000,
@@ -66,12 +66,35 @@ export function useFollowUser() {
       follow
         ? api.post<{ following: boolean; followersCount: number }>(`/follow/${username}`)
         : api.delete<{ following: boolean; followersCount: number }>(`/follow/${username}`),
-    onMutate: async ({ username, follow }) => {
+    onMutate: ({ username, follow }) => {
+      const previousFollowing = queryClient.getQueryData<{ usernames: string[] }>([
+        "following-set",
+      ]);
+      const previousPosts = [
+        ...queryClient.getQueriesData({ queryKey: ["posts"] }),
+        ...queryClient.getQueriesData({ queryKey: ["recommendations"] }),
+      ];
+      const previousProfile = queryClient.getQueryData<{ user: PublicUser }>(["profile", username]);
+      void queryClient.cancelQueries(
+        { queryKey: ["following-set"] },
+        { revert: false, silent: true },
+      );
+      void queryClient.cancelQueries({ queryKey: ["posts"] }, { revert: false, silent: true });
+      void queryClient.cancelQueries(
+        { queryKey: ["recommendations"] },
+        { revert: false, silent: true },
+      );
+      void queryClient.cancelQueries(
+        { queryKey: ["profile", username] },
+        { revert: false, silent: true },
+      );
+
       // The cache holds the RAW { usernames: [...] } shape — `select` only transforms it
       // into a Set at read time, so patching a Set here would silently corrupt the cache
       // (and throw, since a plain object isn't iterable — killing the mutation before the
       // real request even fires). Patch the raw shape instead.
       queryClient.setQueryData<{ usernames: string[] }>(["following-set"], (prev) => {
+        if (!prev) return prev;
         const set = new Set(prev?.usernames ?? []);
         if (follow) set.add(username);
         else set.delete(username);
@@ -82,7 +105,10 @@ export function useFollowUser() {
       // Some "posts"-prefixed caches are paginated ({ pages: [...] }), others are flat
       // ({ posts: [...] }, e.g. bookmarks/liked) — handle both, or this throws and kills
       // the whole mutation the moment either of those pages has ever been visited.
-      const entries = queryClient.getQueriesData<any>({ queryKey: ["posts"] });
+      const entries = [
+        ...queryClient.getQueriesData<any>({ queryKey: ["posts"] }),
+        ...queryClient.getQueriesData<any>({ queryKey: ["recommendations"] }),
+      ];
       for (const [key, data] of entries) {
         if (!data) continue;
         if (Array.isArray(data.pages)) {
@@ -107,6 +133,7 @@ export function useFollowUser() {
       queryClient.setQueryData<{ user: PublicUser }>(["profile", username], (prev) =>
         prev ? { ...prev, user: { ...prev.user, isFollowing: follow } } : prev,
       );
+      return { previousFollowing, previousPosts, previousProfile, username };
     },
     onSuccess: (_data, { username }) => {
       queryClient.invalidateQueries({ queryKey: ["profile", username] });
@@ -115,8 +142,15 @@ export function useFollowUser() {
       queryClient.invalidateQueries({ queryKey: ["followers"] });
       queryClient.invalidateQueries({ queryKey: ["following"] });
     },
-    onError: () => {
-      // Canonical set may now disagree with the server — resync instead of guessing.
+    onError: (_err, _vars, context) => {
+      if (context?.previousFollowing) {
+        queryClient.setQueryData(["following-set"], context.previousFollowing);
+      }
+      context?.previousPosts.forEach(([key, data]) => queryClient.setQueryData(key, data));
+      if (context?.previousProfile) {
+        queryClient.setQueryData(["profile", context.username], context.previousProfile);
+      }
+      // Resync after rollback so any changes made elsewhere are reconciled.
       queryClient.invalidateQueries({ queryKey: ["following-set"] });
     },
   });

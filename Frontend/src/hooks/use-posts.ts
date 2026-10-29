@@ -11,9 +11,11 @@ interface PostsPage {
 function useCursoredPosts(key: string, endpoint: string, enabled = true) {
   return useInfiniteQuery({
     queryKey: ["posts", key],
-    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+    queryFn: ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
       api.get<PostsPage>(
         `${endpoint}${pageParam ? `?before=${encodeURIComponent(pageParam)}` : ""}`,
+        false,
+        signal,
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
@@ -25,9 +27,11 @@ export function useFeed() {
   const { user } = useAuth();
   return useInfiniteQuery({
     queryKey: ["posts", "feed", user?.id],
-    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+    queryFn: ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
       api.get<PostsPage>(
         `/recommendations/for-you?limit=12${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
+        false,
+        signal,
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
@@ -39,9 +43,11 @@ export function useExplore() {
   const { user } = useAuth();
   return useInfiniteQuery({
     queryKey: ["posts", "explore", user?.id],
-    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+    queryFn: ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
       api.get<PostsPage>(
         `/recommendations/explore?limit=12${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
+        false,
+        signal,
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
@@ -52,9 +58,11 @@ export function useTrending() {
   const { user } = useAuth();
   return useInfiniteQuery({
     queryKey: ["posts", "trending", user?.id],
-    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+    queryFn: ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
       api.get<PostsPage>(
         `/recommendations/trending?limit=12${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
+        false,
+        signal,
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
@@ -66,9 +74,11 @@ export function useReelsFeed() {
   const { user } = useAuth();
   return useInfiniteQuery({
     queryKey: ["posts", "reels", user?.id],
-    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+    queryFn: ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
       api.get<PostsPage>(
         `/recommendations/reels?limit=10${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
+        false,
+        signal,
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
@@ -101,8 +111,12 @@ export function useUserPosts(username: string) {
 export function useLikedPosts(username: string, enabled: boolean) {
   return useQuery({
     queryKey: ["posts", "liked", username],
-    queryFn: () =>
-      api.get<{ posts: FeedPost[] }>(`/posts/user/${encodeURIComponent(username)}/liked`),
+    queryFn: ({ signal }) =>
+      api.get<{ posts: FeedPost[] }>(
+        `/posts/user/${encodeURIComponent(username)}/liked`,
+        false,
+        signal,
+      ),
     enabled: enabled && Boolean(username),
   });
 }
@@ -110,7 +124,8 @@ export function useLikedPosts(username: string, enabled: boolean) {
 export function useSinglePost(postId: string) {
   return useQuery({
     queryKey: ["posts", "single", postId],
-    queryFn: () => api.get<{ post: FeedPost }>(`/posts/${encodeURIComponent(postId)}`),
+    queryFn: ({ signal }) =>
+      api.get<{ post: FeedPost }>(`/posts/${encodeURIComponent(postId)}`, false, signal),
     enabled: Boolean(postId),
   });
 }
@@ -166,10 +181,15 @@ export function useDeletePost() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/posts/${id}`),
-    onMutate: async (postId: string) => {
-      await queryClient.cancelQueries({ queryKey: ["posts"] });
-      await queryClient.cancelQueries({ queryKey: ["recommendations"] });
-      const previous = queryClient.getQueriesData({ queryKey: ["posts"] });
+    onMutate: (postId: string) => {
+      const previous = getPostCacheSnapshots(queryClient);
+      // Cancel stale reads without awaiting them: removing the card must be
+      // reflected in the next paint, not after a background request settles.
+      void queryClient.cancelQueries({ queryKey: ["posts"] }, { revert: false, silent: true });
+      void queryClient.cancelQueries(
+        { queryKey: ["recommendations"] },
+        { revert: false, silent: true },
+      );
       removePostEverywhere(queryClient, postId);
       return { previous };
     },
@@ -192,9 +212,15 @@ export function useToggleLike() {
   return useMutation({
     mutationFn: (postId: string) =>
       api.post<{ liked: boolean; likesCount: number }>(`/likes/post/${postId}`),
-    onMutate: async (postId: string) => {
-      await queryClient.cancelQueries({ queryKey: ["posts"] });
-      const previous = queryClient.getQueriesData({ queryKey: ["posts"] });
+    onMutate: (postId: string) => {
+      const previous = getPostCacheSnapshots(queryClient);
+      // Cancel before patching the cache, but do not await network-related
+      // cancellation bookkeeping. React Query ignores the cancelled result.
+      void queryClient.cancelQueries({ queryKey: ["posts"] }, { revert: false, silent: true });
+      void queryClient.cancelQueries(
+        { queryKey: ["recommendations"] },
+        { revert: false, silent: true },
+      );
       updatePostEverywhere(queryClient, postId, (post) => ({
         ...post,
         liked: !post.liked,
@@ -212,9 +238,13 @@ export function useToggleBookmark() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (postId: string) => api.post<{ bookmarked: boolean }>(`/bookmarks/${postId}`),
-    onMutate: async (postId: string) => {
-      await queryClient.cancelQueries({ queryKey: ["posts"] });
-      const previous = queryClient.getQueriesData({ queryKey: ["posts"] });
+    onMutate: (postId: string) => {
+      const previous = getPostCacheSnapshots(queryClient);
+      void queryClient.cancelQueries({ queryKey: ["posts"] }, { revert: false, silent: true });
+      void queryClient.cancelQueries(
+        { queryKey: ["recommendations"] },
+        { revert: false, silent: true },
+      );
       updatePostEverywhere(queryClient, postId, (post) => ({
         ...post,
         bookmarked: !post.bookmarked,
@@ -231,7 +261,7 @@ export function useToggleBookmark() {
 export function useBookmarkedPosts() {
   return useQuery({
     queryKey: ["posts", "bookmarks"],
-    queryFn: () => api.get<{ posts: FeedPost[] }>("/bookmarks"),
+    queryFn: ({ signal }) => api.get<{ posts: FeedPost[] }>("/bookmarks", false, signal),
   });
 }
 
@@ -269,6 +299,13 @@ function updatePostEverywhere(
       });
     }
   }
+}
+
+function getPostCacheSnapshots(queryClient: ReturnType<typeof useQueryClient>) {
+  return [
+    ...queryClient.getQueriesData({ queryKey: ["posts"] }),
+    ...queryClient.getQueriesData({ queryKey: ["recommendations"] }),
+  ];
 }
 
 function removePostEverywhere(queryClient: ReturnType<typeof useQueryClient>, postId: string) {

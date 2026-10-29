@@ -177,58 +177,82 @@ async function apiFetch<T>(
   return data as T;
 }
 
+let consumerRefreshPromise: Promise<boolean> | null = null;
+let staffRefreshPromise: Promise<boolean> | null = null;
+
 async function refreshConsumerToken(): Promise<boolean> {
-  const refreshToken = getConsumerRefreshToken();
-  if (!refreshToken) return false;
-
-  try {
-    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
-    });
-
-    if (!res.ok) {
+  if (consumerRefreshPromise) return consumerRefreshPromise;
+  consumerRefreshPromise = (async () => {
+    const refreshToken = getConsumerRefreshToken();
+    if (!refreshToken) {
       clearConsumerTokens();
       return false;
     }
 
-    const data = await res.json();
-    setConsumerTokens(data.tokens.accessToken, data.tokens.refreshToken);
-    return true;
-  } catch {
-    clearConsumerTokens();
-    return false;
-  }
+    try {
+      const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (!res.ok) {
+        clearConsumerTokens();
+        return false;
+      }
+
+      const data = await res.json();
+      setConsumerTokens(data.tokens.accessToken, data.tokens.refreshToken);
+      return true;
+    } catch {
+      // A temporary network failure is not proof that the session is invalid.
+      // Keep the token so cache-first UI can remain available and retry later.
+      return false;
+    }
+  })().finally(() => {
+    consumerRefreshPromise = null;
+  });
+  return consumerRefreshPromise;
 }
 
 async function refreshStaffToken(): Promise<boolean> {
-  const refreshToken = getStaffRefreshToken();
-  if (!refreshToken) return false;
-
-  try {
-    const res = await fetch(`${API_BASE_URL}/system/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
-    });
-
-    if (!res.ok) {
+  if (staffRefreshPromise) return staffRefreshPromise;
+  staffRefreshPromise = (async () => {
+    const refreshToken = getStaffRefreshToken();
+    if (!refreshToken) {
       clearStaffTokens();
       return false;
     }
 
-    const data = await res.json();
-    setStaffTokens(data.tokens.accessToken, data.tokens.refreshToken);
-    return true;
-  } catch {
-    clearStaffTokens();
-    return false;
-  }
+    try {
+      const res = await fetch(`${API_BASE_URL}/system/auth/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (!res.ok) {
+        clearStaffTokens();
+        return false;
+      }
+
+      const data = await res.json();
+      setStaffTokens(data.tokens.accessToken, data.tokens.refreshToken);
+      return true;
+    } catch {
+      // Preserve the session on a transport failure; only an explicit backend
+      // rejection should remove stored credentials.
+      return false;
+    }
+  })().finally(() => {
+    staffRefreshPromise = null;
+  });
+  return staffRefreshPromise;
 }
 
 export const api = {
-  get: <T>(endpoint: string, isStaff = false) => apiFetch<T>(endpoint, { method: "GET" }, isStaff),
+  get: <T>(endpoint: string, isStaff = false, signal?: AbortSignal) =>
+    apiFetch<T>(endpoint, { method: "GET", ...(signal ? { signal } : {}) }, isStaff),
   post: <T>(endpoint: string, body?: any, isStaff = false) =>
     apiFetch<T>(
       endpoint,
