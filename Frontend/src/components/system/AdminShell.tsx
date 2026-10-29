@@ -4,10 +4,13 @@ import { AnimatePresence, motion } from "motion/react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
+  ArrowRight,
   Award,
   Bell,
+  ChevronDown,
   ChevronRight,
   Circle,
+  Crown,
   History,
   LayoutDashboard,
   LogOut,
@@ -16,12 +19,14 @@ import {
   Radio,
   Search,
   Settings,
+  Shield,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
   Sun,
   Target,
   TrendingUp,
+  UserPlus,
   Users,
   Wallet,
   X,
@@ -186,7 +191,26 @@ function useNavBadges() {
   });
 }
 
-/* ── Sidebar ──────────────────────────────────────────────────────────────── */
+const ROLE_BADGE_CONFIG: Record<
+  string,
+  { label: string; badgeClass: string; icon: typeof ShieldCheck }
+> = {
+  superadmin: {
+    label: "Super Admin",
+    badgeClass: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    icon: Crown,
+  },
+  admin: {
+    label: "Admin",
+    badgeClass: "bg-indigo-500/15 text-indigo-400 border-indigo-500/30",
+    icon: Shield,
+  },
+  moderator: {
+    label: "Moderator",
+    badgeClass: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    icon: ShieldCheck,
+  },
+};
 
 export function AdminSidebar({
   onNavigate,
@@ -198,8 +222,15 @@ export function AdminSidebar({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { staffUser } = useAuth();
   const { data: stats } = useNavBadges();
-
   const role = staffUser?.role as "moderator" | "admin" | "superadmin";
+
+  const badgeConfig =
+    (role && ROLE_BADGE_CONFIG[role]) || {
+      label: "Staff",
+      badgeClass: "bg-primary/15 text-primary border-primary/30",
+      icon: ShieldCheck,
+    };
+
   const visibleSections = useMemo(
     () =>
       adminNavSections
@@ -211,112 +242,229 @@ export function AdminSidebar({
     [staffUser],
   );
 
-  return (
-    <div className="flex h-full flex-col">
-      {/* Brand */}
-      <div className="flex items-center gap-3 px-5 pt-6 pb-7">
-        <Logo compact className="scale-110" />
-        <div className="min-w-0">
-          <p className="font-display text-[15px] leading-tight font-extrabold tracking-tight text-foreground">
-            Gihanga Updates
-          </p>
-          <p className="text-[10px] font-bold tracking-[0.16em] text-primary uppercase">
-            Admin Console
-          </p>
-        </div>
-      </div>
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 
-      {/* Nav */}
-      <nav className="flex-1 space-y-5 overflow-y-auto px-3 pb-4">
-        {visibleSections.map((section) => (
-          <div key={section.label}>
-            <p className="mb-1.5 px-3 text-[10px] font-bold tracking-[0.14em] text-muted-foreground/80 uppercase">
-              {section.label}
-            </p>
-            <div className="space-y-0.5">
-              {section.items.map((item) => {
-                const active =
-                  item.to === "/system/dashboard"
-                    ? pathname === "/system/dashboard" || pathname === "/system/dashboard/"
-                    : pathname.startsWith(item.to);
-                const badge = item.badgeKey ? stats?.[item.badgeKey] : undefined;
-                return (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    onClick={onNavigate}
-                    className={cn(
-                      "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-semibold transition-colors",
-                      active
-                        ? "bg-primary-soft text-primary"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    {active && (
-                      <motion.span
-                        layoutId="admin-nav-active-bar"
-                        className="absolute top-1/2 left-0 h-5 w-1 -translate-y-1/2 rounded-r-full"
-                        style={{ background: "var(--gradient-brand)" }}
-                        transition={{ type: "spring", stiffness: 500, damping: 40 }}
-                      />
-                    )}
-                    <item.icon
-                      className={cn(
-                        "size-[17px] shrink-0 transition-colors",
-                        active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
-                      )}
-                    />
-                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                    {typeof badge === "number" && badge > 0 && (
-                      <span
-                        className={cn(
-                          "grid h-5 min-w-5 place-items-center rounded-full px-1.5 text-[10px] font-extrabold tabular-nums",
-                          active
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-danger/10 text-danger group-hover:bg-danger/15",
-                        )}
-                      >
-                        {badge > 99 ? "99+" : badge}
-                      </span>
-                    )}
-                    {active && <ChevronRight className="size-3.5 shrink-0" />}
-                  </Link>
-                );
-              })}
+  // Ensure current active section is never collapsed on page load or route transition
+  useEffect(() => {
+    visibleSections.forEach((section) => {
+      const hasActiveChild = section.items.some((item) =>
+        item.to === "/system/dashboard"
+          ? pathname === "/system/dashboard" || pathname === "/system/dashboard/"
+          : pathname.startsWith(item.to),
+      );
+      if (hasActiveChild) {
+        setCollapsedSections((prev) => (prev[section.label] ? { ...prev, [section.label]: false } : prev));
+      }
+    });
+  }, [pathname, visibleSections]);
+
+  const toggleSection = (label: string) => {
+    setCollapsedSections((prev) => ({
+      ...prev,
+      [label]: !prev[label],
+    }));
+  };
+
+  return (
+    <div className="flex h-full flex-col select-none bg-card">
+      {/* ── Brand & Status Header ────────────────────────────────────────── */}
+      <div className="border-b border-border/40 px-4 py-3.5">
+        <Link
+          to="/system/dashboard"
+          onClick={onNavigate}
+          className="group flex items-center justify-between"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="relative">
+              <Logo compact className="scale-105 transition-transform duration-200 group-hover:scale-110" />
+              <span className="absolute -bottom-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-card" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-display text-[14px] leading-tight font-extrabold tracking-tight text-foreground truncate">
+                Gihanga Updates
+              </p>
+              <p className="text-[10px] font-bold tracking-[0.14em] text-primary uppercase">
+                Console
+              </p>
             </div>
           </div>
-        ))}
+
+          <span
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase",
+              badgeConfig.badgeClass,
+            )}
+          >
+            <badgeConfig.icon className="size-2.5" />
+            {badgeConfig.label}
+          </span>
+        </Link>
+      </div>
+
+      {/* ── Nav Links Container (Zero Native Scrollbar) ──────────────────── */}
+      <nav
+        className="flex-1 space-y-3 overflow-y-auto px-2.5 py-3 no-scrollbar"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+      >
+        {visibleSections.map((section) => {
+          const isCollapsed = Boolean(collapsedSections[section.label]);
+          const sectionBadgeCount = section.items.reduce((acc, item) => {
+            const badge = item.badgeKey ? stats?.[item.badgeKey] : undefined;
+            return typeof badge === "number" && badge > 0 ? acc + badge : acc;
+          }, 0);
+
+          return (
+            <div key={section.label} className="space-y-0.5">
+              {/* Section Header Toggle */}
+              <button
+                type="button"
+                onClick={() => toggleSection(section.label)}
+                className="group flex w-full items-center justify-between rounded-lg px-2 py-1 text-left cursor-pointer transition-colors hover:bg-muted/40"
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span className="text-[10px] font-bold tracking-[0.14em] text-muted-foreground/75 uppercase transition-colors group-hover:text-foreground">
+                    {section.label}
+                  </span>
+                  {isCollapsed && sectionBadgeCount > 0 && (
+                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-danger/15 px-1 text-[9px] font-extrabold text-danger">
+                      {sectionBadgeCount > 99 ? "99+" : sectionBadgeCount}
+                    </span>
+                  )}
+                </div>
+                <ChevronDown
+                  className={cn(
+                    "size-3 text-muted-foreground/50 transition-transform duration-200 group-hover:text-muted-foreground",
+                    isCollapsed ? "-rotate-90" : "rotate-0",
+                  )}
+                />
+              </button>
+
+              {/* Collapsible item list */}
+              <AnimatePresence initial={false}>
+                {!isCollapsed && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.18, ease: "easeInOut" }}
+                    className="overflow-hidden space-y-0.5"
+                  >
+                    {section.items.map((item) => {
+                      const active =
+                        item.to === "/system/dashboard"
+                          ? pathname === "/system/dashboard" || pathname === "/system/dashboard/"
+                          : pathname.startsWith(item.to);
+                      const badge = item.badgeKey ? stats?.[item.badgeKey] : undefined;
+                      const isLiveItem = item.to === "/system/dashboard/live";
+
+                      return (
+                        <Link
+                          key={item.to}
+                          to={item.to}
+                          onClick={onNavigate}
+                          className={cn(
+                            "group relative flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-[12.5px] font-medium transition-all duration-150",
+                            active
+                              ? "bg-primary/12 text-primary font-bold shadow-sm"
+                              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground hover:translate-x-0.5",
+                          )}
+                        >
+                          {active && (
+                            <motion.span
+                              layoutId="admin-nav-active-pill"
+                              className="absolute top-1.5 bottom-1.5 left-0 w-1 rounded-r-full bg-primary"
+                              transition={{ type: "spring", stiffness: 500, damping: 38 }}
+                            />
+                          )}
+                          <item.icon
+                            className={cn(
+                              "size-[16px] shrink-0 transition-transform duration-150 group-hover:scale-110",
+                              active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+                            )}
+                          />
+                          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+
+                          {/* Live pulse indicator */}
+                          {isLiveItem && typeof badge === "number" && badge > 0 && (
+                            <span className="flex items-center gap-1 rounded-full bg-danger/15 px-1.5 py-0.5 text-[10px] font-bold text-danger">
+                              <span className="size-1.5 rounded-full bg-danger animate-ping" />
+                              {badge}
+                            </span>
+                          )}
+
+                          {/* Standard badge */}
+                          {!isLiveItem && typeof badge === "number" && badge > 0 && (
+                            <span
+                              className={cn(
+                                "grid h-4.5 min-w-4.5 place-items-center rounded-full px-1.5 text-[10px] font-extrabold tabular-nums",
+                                active
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-danger/12 text-danger group-hover:bg-danger/20",
+                              )}
+                            >
+                              {badge > 99 ? "99+" : badge}
+                            </span>
+                          )}
+
+                          {active && <ChevronRight className="size-3 shrink-0 text-primary opacity-60" />}
+                        </Link>
+                      );
+                    })}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          );
+        })}
       </nav>
 
-      {/* Register CTA — admins and superadmins */}
+      {/* ── Register Administrator Action ────────────────────────────────── */}
       {(staffUser?.role === "superadmin" || staffUser?.role === "admin") && (
-        <div className="px-3 pb-3">
+        <div className="px-2.5 pt-1 pb-2">
           <Link
             to="/system/register"
-            className="press gradient-brand flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-bold text-primary-foreground shadow-glow"
+            onClick={onNavigate}
+            className="group flex items-center justify-between rounded-xl border border-primary/25 bg-gradient-to-r from-primary/15 via-primary/10 to-transparent p-2 text-xs font-bold text-foreground transition-all hover:border-primary/50 hover:bg-primary-soft/50 shadow-sm"
           >
-            <ShieldCheck className="size-4" /> Register Administrator
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="grid size-6 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground shadow-sm">
+                <UserPlus className="size-3.5" />
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-[11.5px] font-bold leading-tight group-hover:text-primary transition-colors">
+                  Add Administrator
+                </p>
+                <p className="truncate text-[9.5px] font-medium text-muted-foreground">
+                  Provision team role
+                </p>
+              </div>
+            </div>
+            <ArrowRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
           </Link>
         </div>
       )}
 
-      {/* User */}
-      <div className="border-t border-border p-3">
-        <div className="flex items-center gap-2.5 rounded-xl p-2 transition-colors hover:bg-muted">
-          <AdminAvatar name={staffUser?.name ?? "Staff"} hue={staffUser?.avatarHue} />
+      {/* ── User Profile Footer ──────────────────────────────────────────── */}
+      <div className="border-t border-border/40 p-2.5 bg-card/60 backdrop-blur-sm">
+        <div className="flex items-center gap-2.5 rounded-xl p-1.5 transition-colors hover:bg-muted/60">
+          <div className="relative shrink-0">
+            <AdminAvatar name={staffUser?.name ?? "Staff"} hue={staffUser?.avatarHue} size="sm" />
+            <span className="absolute -bottom-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-card" />
+          </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[13px] font-bold text-foreground">{staffUser?.name}</p>
-            <p className="truncate text-[11px] font-semibold text-primary">
+            <p className="truncate text-xs font-bold text-foreground leading-tight">{staffUser?.name}</p>
+            <p className="truncate text-[10.5px] font-semibold text-primary">
               {role ? ROLE_LABEL[role] : "Staff"}
             </p>
           </div>
           <button
             type="button"
             aria-label="Sign out"
+            title="Sign out"
             onClick={onSignOut}
-            className="press grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-danger/10 hover:text-danger"
+            className="press grid size-7 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-danger/10 hover:text-danger cursor-pointer"
           >
-            <LogOut className="size-4" />
+            <LogOut className="size-3.5" />
           </button>
         </div>
       </div>
@@ -650,7 +798,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <aside className="sticky top-0 hidden h-screen w-[264px] shrink-0 border-r border-border bg-card lg:flex">
+      <aside className="sticky top-0 hidden h-screen w-[268px] shrink-0 border-r border-border bg-card lg:flex">
         {sidebar}
       </aside>
 
