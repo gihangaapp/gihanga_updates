@@ -3,11 +3,9 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDays,
-  Camera,
   Film,
   Grid3x3,
   Heart,
-  Loader2,
   MessageCircle,
   MoreVertical,
   Play,
@@ -29,7 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth-context";
-import { api, mediaUrlWithAuth, FeedPost, PublicUser, uploadFile } from "@/lib/api-client";
+import { mediaUrlWithAuth, FeedPost, PublicUser } from "@/lib/api-client";
 import { useUserProfile, useFollowers, useFollowing } from "@/hooks/use-social";
 import { useUserPosts, useLikedPosts, useDeletePost } from "@/hooks/use-posts";
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
@@ -231,8 +229,6 @@ function ProfilePage() {
   const { username } = Route.useParams();
   const { user: authUser } = useAuth();
   const queryClient = useQueryClient();
-  const coverInputRef = useRef<HTMLInputElement>(null);
-  const [uploadingCover, setUploadingCover] = useState(false);
   const { data, isLoading, isError } = useUserProfile(username);
   const [tab, setTab] = useState<(typeof tabs)[number]["id"]>("posts");
   const [followTab, setFollowTab] = useState<"followers" | "following" | null>(null);
@@ -283,36 +279,6 @@ function ProfilePage() {
   const postsQuery = useUserPosts(username);
   const likesQuery = useLikedPosts(username, isMe && tab === "likes");
 
-  const handleCoverSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.currentTarget.files?.[0];
-    e.currentTarget.value = "";
-    if (!file) return;
-    if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type)) {
-      toast.error("Choose a JPG, PNG, WEBP or GIF image for your cover photo");
-      return;
-    }
-    if (file.size > 15 * 1024 * 1024) {
-      toast.error("Cover photos must be 15 MB or smaller");
-      return;
-    }
-
-    setUploadingCover(true);
-    try {
-      const uploaded = await uploadFile("covers", file);
-      await api.patch<{ user: PublicUser }>("/users/profile", { coverUrl: uploaded.url });
-      queryClient.setQueryData<{ user: PublicUser }>(["profile", username], (previous) =>
-        previous
-          ? { ...previous, user: { ...previous.user, coverUrl: uploaded.url } }
-          : previous,
-      );
-      toast.success("Cover photo updated");
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to update cover photo");
-    } finally {
-      setUploadingCover(false);
-    }
-  };
-
   const handleDelete = async (postId: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     try {
@@ -360,40 +326,10 @@ function ProfilePage() {
   return (
     <AppShell>
       <div className="mx-auto w-full max-w-[900px] pb-10">
-        {/* Profile Header Banner & Info */}
+        {/* Profile Header & Info (theme-based background, no cover photo) */}
         <header className="surface-card relative mb-4 overflow-hidden rounded-3xl border border-border p-0 shadow-soft">
-          <div
-            className="relative h-32 w-full bg-cover bg-center sm:h-44"
-            style={{
-              backgroundImage: profile.coverUrl
-                ? `linear-gradient(120deg, rgb(15 23 42 / 18%), rgb(15 23 42 / 8%)), url("${mediaUrlWithAuth(profile.coverUrl)}")`
-                : `linear-gradient(120deg, oklch(0.42 0.11 ${displayUser.avatarHue}), oklch(0.72 0.12 ${displayUser.avatarHue + 30}))`,
-            }}
-          >
-            {isMe && (
-              <>
-                <input
-                  ref={coverInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  className="hidden"
-                  onChange={handleCoverSelect}
-                />
-                <button
-                  type="button"
-                  aria-label="Update cover photo"
-                  title="Update cover photo"
-                  disabled={uploadingCover}
-                  onClick={() => coverInputRef.current?.click()}
-                  className="press absolute bottom-2 right-2 grid size-9 place-items-center rounded-full border border-white/30 bg-black/55 text-white shadow-lg backdrop-blur-md transition-colors hover:bg-black/70 disabled:opacity-70 sm:bottom-3 sm:right-3 sm:size-10"
-                >
-                  {uploadingCover ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
-                </button>
-              </>
-            )}
-          </div>
           <div className="px-4 pb-5 sm:px-6">
-            <div className="-mt-12 flex items-end gap-4 sm:-mt-14">
+            <div className="flex items-end gap-4 pt-5 sm:pt-6">
               <span className="rounded-full ring-4 ring-card shadow-lg">
                 <GAvatar
                   user={displayUser}
