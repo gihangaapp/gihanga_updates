@@ -29,7 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth-context";
-import { api, mediaUrl, mediaUrlWithAuth, PublicUser, uploadFile } from "@/lib/api-client";
+import { api, mediaUrlWithAuth, FeedPost, PublicUser, uploadFile } from "@/lib/api-client";
 import { useUserProfile, useFollowers, useFollowing } from "@/hooks/use-social";
 import { useUserPosts, useLikedPosts, useDeletePost } from "@/hooks/use-posts";
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
@@ -72,6 +72,67 @@ function toDisplayUser(u: PublicUser) {
     following: 0,
     posts: 0,
   };
+}
+
+function ProfilePostPreview({ post }: { post: FeedPost }) {
+  const [failed, setFailed] = useState(false);
+  const [useThumbnailOnly, setUseThumbnailOnly] = useState(false);
+  const mediaItem = post.media?.[0];
+  const rawMediaUrl = mediaItem?.url ?? post.mediaUrl?.split(",").map((part) => part.trim()).find(Boolean);
+  const isVideo = post.kind === "video" || post.kind === "reel" || mediaItem?.kind === "video" ||
+    Boolean(rawMediaUrl?.match(/\.(mp4|webm|mov)(?:[?#]|$)/i));
+  const primaryPreviewPath = isVideo
+    ? (post.thumbnailUrl || rawMediaUrl)
+    : (rawMediaUrl || post.thumbnailUrl);
+  const previewPath = useThumbnailOnly && post.thumbnailUrl ? post.thumbnailUrl : primaryPreviewPath;
+  const mediaSrc = mediaUrlWithAuth(previewPath);
+  const thumbnailSrc = mediaUrlWithAuth(post.thumbnailUrl);
+  const videoSrc = mediaUrlWithAuth(rawMediaUrl);
+
+  if (!mediaSrc || failed) {
+    return (
+      <div className="flex size-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 p-4 text-center text-white">
+        {isVideo ? <Play className="size-7 opacity-80" /> : <Grid3x3 className="size-7 opacity-80" />}
+        <p className="line-clamp-4 text-xs font-semibold leading-relaxed">{post.body || (isVideo ? "Video post" : "Photo post")}</p>
+      </div>
+    );
+  }
+
+  if (isVideo && videoSrc && !useThumbnailOnly) {
+    return (
+      <div className="relative size-full bg-black">
+        <video
+          src={videoSrc}
+          poster={thumbnailSrc}
+          muted
+          playsInline
+          preload="metadata"
+          onError={() => {
+            if (thumbnailSrc && thumbnailSrc !== videoSrc) setUseThumbnailOnly(true);
+            else setFailed(true);
+          }}
+          className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
+        />
+        <div className="absolute top-2.5 right-2.5 grid size-6 place-items-center rounded-full bg-black/60 text-white backdrop-blur-md">
+          <Play className="size-3 fill-white ml-0.5" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={mediaSrc}
+      alt={post.body ? post.body.slice(0, 40) : "Post"}
+      loading="lazy"
+      decoding="async"
+      onError={() => {
+        if (thumbnailSrc && thumbnailSrc !== mediaSrc) setUseThumbnailOnly(true);
+        else setFailed(true);
+      }}
+      className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
+    />
+  );
 }
 
 function FollowListDialog({
@@ -467,7 +528,7 @@ function ProfilePage() {
             if (t.id === "likes" && !isMe) return null;
             const count =
               t.id === "posts"
-                ? allPosts.length
+                ? profile.postsCount
                 : t.id === "reels"
                   ? reelsList.length
                   : likesList.length;
@@ -517,11 +578,6 @@ function ProfilePage() {
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {grid.map((item) => {
-              const mediaSrc = mediaUrl(item.mediaUrl) || mediaUrl(item.thumbnailUrl);
-              const isVideo =
-                item.kind === "video" ||
-                item.kind === "reel" ||
-                Boolean(item.mediaUrl?.match(/\.(mp4|webm|mov)$/i));
               const isDeleting = deletingPostId === item._id;
 
               return (
@@ -534,47 +590,7 @@ function ProfilePage() {
                     params={{ postId: item._id }}
                     className="block size-full"
                   >
-                    {mediaSrc ? (
-                      isVideo ? (
-                        <div className="relative size-full bg-black">
-                          <video
-                            src={mediaSrc}
-                            poster={mediaUrl(item.thumbnailUrl)}
-                            muted
-                            playsInline
-                            preload="metadata"
-                            className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
-                          />
-                          <div className="absolute top-2.5 right-2.5 grid size-6 place-items-center rounded-full bg-black/60 text-white backdrop-blur-md">
-                            <Play className="size-3 fill-white ml-0.5" />
-                          </div>
-                        </div>
-                      ) : (
-                        <img
-                          src={mediaSrc}
-                          alt={item.body ? item.body.slice(0, 40) : "Post"}
-                          loading="lazy"
-                          onError={(e) => {
-                            const target = e.currentTarget;
-                            target.style.display = "none";
-                            const parent = target.parentElement;
-                            if (parent) {
-                              parent.classList.add(
-                                "bg-gradient-to-tr",
-                                "from-slate-900",
-                                "to-slate-800",
-                                "flex",
-                                "items-center",
-                                "justify-center",
-                                "p-4",
-                                "text-center",
-                              );
-                            }
-                          }}
-                          className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        />
-                      )
-                    ) : (
+                    {item.kind === "text" ? (
                       <div className="flex size-full flex-col justify-between bg-gradient-to-tr from-slate-900 via-slate-800 to-indigo-950 p-4 text-white">
                         <p className="line-clamp-4 text-xs font-semibold leading-relaxed">
                           {item.body || "Text post"}
@@ -583,6 +599,8 @@ function ProfilePage() {
                           Note
                         </span>
                       </div>
+                    ) : (
+                      <ProfilePostPreview post={item} />
                     )}
 
                     {/* Bottom Likes & Comments Hover Overlay */}

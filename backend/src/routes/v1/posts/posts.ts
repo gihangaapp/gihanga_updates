@@ -10,7 +10,7 @@ import { Comment } from "../../../models/Comment";
 import { Media } from "../../../models/Media";
 import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/rbac";
 import { optionalAuth } from "../../../middleware/optionalAuth";
-import { getIO } from "../../../lib/socket";
+import { getIO, emitToUser } from "../../../lib/socket";
 import { awardPoints } from "../../../lib/rewards";
 import { ContentView } from "../../../models/ContentView";
 import { rateLimitHits, redis } from "../../../lib/redis";
@@ -238,6 +238,12 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
       const responsePost = { ...populated.toObject(), liked: false, bookmarked: false, followingAuthor: false };
       if (responsePost.audience === "public") {
         getIO()?.emit("post:created", responsePost);
+      } else if (responsePost.audience === "followers") {
+        const followers = await Follow.find({ following: post.author }).select("follower").lean();
+        for (const follower of followers) emitToUser(String(follower.follower), "post:created", responsePost);
+        emitToUser(String(post.author), "post:created", responsePost);
+      } else {
+        emitToUser(String(post.author), "post:created", responsePost);
       }
       return res.status(201).json({ post: responsePost });
     }
@@ -546,7 +552,12 @@ router.get("/user/:username", optionalAuth, async (req: AuthenticatedRequest, re
       author: user._id,
       status: isOwner ? { $in: ["published", "processing", "rejected"] } : "published",
     };
-    if (!isOwner) query.audience = "public";
+    if (!isOwner) {
+      const isFollowingAuthor = req.user
+        ? await Follow.exists({ follower: req.user.userId, following: user._id })
+        : false;
+      query.audience = isFollowingAuthor ? { $in: ["public", "followers"] } : "public";
+    }
     if (before) query.createdAt = { $lt: before };
 
     const posts = await Post.find(query).sort({ createdAt: -1 }).limit(limit).populate("author", AUTHOR_FIELDS);

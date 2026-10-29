@@ -1,4 +1,7 @@
 import { UserInterestProfile } from "../../models/UserInterestProfile";
+import { Post } from "../../models/Post";
+import { Block } from "../../models/Block";
+import { NegativeFeedback } from "../../models/NegativeFeedback";
 import { Follow } from "../../models/Follow";
 import { Like } from "../../models/Like";
 import { Bookmark } from "../../models/Bookmark";
@@ -19,6 +22,7 @@ export interface FeedResponse {
   nextCursor: string | null;
   hasMore: boolean;
   algorithmVersion: string;
+  isFollowingAnyone?: boolean;
 }
 
 async function withViewerFlags(posts: any[], viewerId?: string) {
@@ -57,56 +61,81 @@ export async function getForYouFeed(
   limit = 12,
   cursor?: string
 ): Promise<FeedResponse> {
-  const profile = userId ? await UserInterestProfile.findOne({ user: userId }) : null;
+  // The home feed must not depend on a small, capped recommendation pool:
+  // every published public post is eligible even when its author is not followed.
+  // Followers-only posts remain visible to followers, while private posts are
+  // visible only to their author. Reels keep their dedicated feed.
+  const safeLimit = Math.min(Math.max(Number(limit) || 12, 1), 50);
+  const visibleTo: any[] = [{ audience: "public" }];
+  let followingIds: string[] = [];
+  const excludedAuthors = new Set<string>();
+  const excludedPostIds = new Set<string>();
 
-  // Gather candidate pools
-  const [followingCands, interestCands, trendingCands, freshCands, exploreCands] =
-    await Promise.all([
-      userId ? getFollowingCandidates(userId, "post") : [],
-      getInterestCandidates(profile, "post"),
-      getTrendingCandidates("post"),
-      getFreshCandidates("post"),
-      getExplorationCandidates(userId, "post"),
+  if (userId) {
+    const [follows, blocks, feedback] = await Promise.all([
+      Follow.find({ follower: userId }).select("following").lean(),
+      Block.find({ $or: [{ blocker: userId }, { blocked: userId }] })
+        .select("blocker blocked")
+        .lean(),
+      NegativeFeedback.find({ user: userId }).select("content creator").lean(),
     ]);
 
-  const allCandidates: CandidateSource[] = [
-    ...followingCands,
-    ...interestCands,
-    ...trendingCands,
-    ...freshCands,
-    ...exploreCands,
-  ];
+    followingIds = follows.map((entry) => String(entry.following));
+    if (followingIds.length) {
+      visibleTo.push({ audience: "followers", author: { $in: followingIds } });
+    }
+    // Include the current user's own published posts regardless of audience.
+    visibleTo.push({ author: userId });
 
-  // Apply Eligibility & Seen Filtering
-  const { eligible, seenMap } = await filterEligibleCandidates(allCandidates, userId);
-
-  // Rank Candidates
-  const ranked = rankCandidates(eligible, profile, seenMap);
-
-  // Apply Diversity Rules
-  const diversified = applyDiversity(ranked);
-
-  // Cursor Pagination
-  let finalSlice = diversified;
-  if (cursor) {
-    const cursorIdx = finalSlice.findIndex((c) => String(c.post._id) === cursor);
-    if (cursorIdx >= 0) {
-      finalSlice = finalSlice.slice(cursorIdx + 1);
+    for (const block of blocks) {
+      const blocker = String(block.blocker);
+      const blocked = String(block.blocked);
+      // Exclude the other participant, but do not accidentally hide the viewer's
+      // own posts merely because the viewer has blocked someone.
+      if (blocker === userId) excludedAuthors.add(blocked);
+      else if (blocked === userId) excludedAuthors.add(blocker);
+    }
+    for (const item of feedback) {
+      if (item.creator) excludedAuthors.add(String(item.creator));
+      if (item.content) excludedPostIds.add(String(item.content));
     }
   }
 
-  const paged = finalSlice.slice(0, limit);
-  const rawPosts = paged.map((c) => c.post);
-  const postsWithFlags = await withViewerFlags(rawPosts, userId);
+  const conditions: Record<string, any>[] = [
+    { status: "published" },
+    { kind: { $ne: "reel" } },
+    { $or: visibleTo },
+  ];
+  if (excludedAuthors.size) conditions.push({ author: { $nin: [...excludedAuthors] } });
+  if (excludedPostIds.size) conditions.push({ _id: { $nin: [...excludedPostIds] } });
 
-  const nextCursor =
-    paged.length === limit ? String(paged[paged.length - 1].post._id) : null;
+  // Cursors are post IDs. Use both createdAt and _id for deterministic paging
+  // when multiple posts were created in the same millisecond.
+  if (cursor && /^[a-f0-9]{24}$/i.test(cursor)) {
+    const cursorPost = await Post.findById(cursor).select("_id createdAt").lean();
+    if (cursorPost) {
+      conditions.push({
+        $or: [
+          { createdAt: { $lt: cursorPost.createdAt } },
+          { createdAt: cursorPost.createdAt, _id: { $lt: cursorPost._id } },
+        ],
+      });
+    }
+  }
 
+  const fetched = await Post.find({ $and: conditions })
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(safeLimit + 1)
+    .populate("author", "name username avatarHue avatarUrl isCreator verified isLive");
+
+  const hasMore = fetched.length > safeLimit;
+  const page = fetched.slice(0, safeLimit);
   return {
-    posts: postsWithFlags,
-    nextCursor,
-    hasMore: Boolean(nextCursor),
+    posts: await withViewerFlags(page, userId),
+    nextCursor: hasMore && page.length ? String(page[page.length - 1]._id) : null,
+    hasMore,
     algorithmVersion: "v1",
+    isFollowingAnyone: followingIds.length > 0,
   };
 }
 

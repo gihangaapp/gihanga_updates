@@ -37,6 +37,9 @@ export function useFeed() {
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
+    // Existing IndexedDB data remains available for instant rendering, but is
+    // quietly reconciled against the full public feed after every mount.
+    staleTime: 0,
     enabled: Boolean(user),
   });
 }
@@ -174,9 +177,27 @@ export function useCreatePost() {
     onSuccess: (result) => {
       const newPost = result?.post;
       if (newPost && user?.id && !result.duplicate) {
-        // Keep a newly published post at the top immediately. Processing media
-        // is remembered too, but it is only injected once it is approved.
+        // Keep the author's newly created content visible in their own profile
+        // grid immediately. In-flight moderation posts stay profile-only until
+        // approved and are never injected into anyone else's public feed.
         rememberRecentPublishedPost(user.id, newPost);
+        const profilePostsKey = ["posts", `user:${user.username}`] as const;
+        queryClient.setQueryData<InfiniteData<PostsPage, string | undefined>>(
+          profilePostsKey,
+          (old) => {
+            if (!old?.pages.length) return old;
+            if (old.pages.some((page) => page.posts.some((post) => post._id === newPost._id))) return old;
+            const [first, ...rest] = old.pages;
+            if (!first) return old;
+            return {
+              ...old,
+              pages: [
+                { ...first, posts: [newPost, ...first.posts] },
+                ...rest.map((page) => ({ ...page, posts: page.posts.filter((post) => post._id !== newPost._id) })),
+              ],
+            };
+          },
+        );
         if (isRecentPostReady(newPost)) {
           queryClient.setQueriesData<InfiniteData<PostsPage, string | undefined>>(
             { queryKey: ["posts", "feed"] },

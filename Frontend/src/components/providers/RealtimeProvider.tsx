@@ -48,18 +48,39 @@ export function RealtimeProvider({ children }: { children: React.ReactNode }) {
     };
 
     const onPostCreated = (post: FeedPost) => {
-      // Only the live-viewed feeds get the new post prepended — explore/reels/tag pages
-      // the user isn't currently looking at will simply pick it up fresh on next visit.
-      for (const key of [
-        ["posts", "explore"],
-        ["posts", "feed"],
-      ] as const) {
-        queryClient.setQueryData<any>(key, (data: any) => {
-          if (!data || !Array.isArray(data.pages) || data.pages.length === 0) return data;
-          if (data.pages[0].posts.some((p: FeedPost) => p._id === post._id)) return data;
-          const [first, ...rest] = data.pages;
-          return { ...data, pages: [{ ...first, posts: [post, ...first.posts] }, ...rest] };
-        });
+      // Public posts are broadcast platform-wide; followers/private posts are
+      // sent only to the relevant user rooms. Insert into every matching cached
+      // user-scoped feed (setQueryData with a partial key would miss these keys).
+      if (post.status && post.status !== "published") return;
+      if (post.moderation && post.moderation.status !== "approved") return;
+
+      const insertIntoFeeds = (keyPrefix: readonly unknown[]) => {
+        for (const [key, cached] of queryClient.getQueriesData<any>({ queryKey: keyPrefix })) {
+          if (!cached || !Array.isArray(cached.pages) || cached.pages.length === 0) continue;
+          if (cached.pages.some((page: any) => page.posts?.some((p: FeedPost) => p._id === post._id))) continue;
+          queryClient.setQueryData<any>(key, (data: any) => {
+            if (!data || !Array.isArray(data.pages) || data.pages.length === 0) return data;
+            if (data.pages.some((page: any) => page.posts?.some((p: FeedPost) => p._id === post._id))) return data;
+            const [first, ...rest] = data.pages;
+            return {
+              ...data,
+              pages: [
+                { ...first, posts: [post, ...(first.posts ?? [])] },
+                ...rest.map((page: any) => ({
+                  ...page,
+                  posts: (page.posts ?? []).filter((p: FeedPost) => p._id !== post._id),
+                })),
+              ],
+            };
+          });
+        }
+      };
+
+      insertIntoFeeds(["posts", "feed"]);
+      if (post.audience === "public") insertIntoFeeds(["posts", "explore"]);
+      if (post.author?.username) {
+        queryClient.invalidateQueries({ queryKey: ["profile", post.author.username] });
+        queryClient.invalidateQueries({ queryKey: ["posts", `user:${post.author.username}`] });
       }
     };
 

@@ -1,5 +1,6 @@
 import { Router, Response } from "express";
 import { User } from "../../../models/User";
+import { Post } from "../../../models/Post";
 import { Follow } from "../../../models/Follow";
 import { optionalAuth } from "../../../middleware/optionalAuth";
 import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/rbac";
@@ -67,17 +68,34 @@ router.get("/:username", optionalAuth, async (req: AuthenticatedRequest, res: Re
 
     let isFollowing = false;
     let isFollowedBy = false;
-    if (req.user && req.user.userId !== String(user._id)) {
-      const [a, b] = await Promise.all([
-        Follow.exists({ follower: req.user.userId, following: user._id }),
-        Follow.exists({ follower: user._id, following: req.user.userId }),
-      ]);
-      isFollowing = Boolean(a);
-      isFollowedBy = Boolean(b);
-    }
+    const isSelf = req.user?.userId === String(user._id);
+    const [publishedPostsCount, followState] = await Promise.all([
+      // Use the indexed post collection as the source of truth so older or
+      // previously stale denormalized counters cannot leave a profile at zero.
+      // The author also sees an in-flight post in their count while moderation
+      // runs; visitors only count content that has actually been published.
+      Post.countDocuments({
+        author: user._id,
+        status: isSelf ? { $in: ["published", "processing"] } : "published",
+      }).exec(),
+      req.user && req.user.userId !== String(user._id)
+        ? Promise.all([
+            Follow.exists({ follower: req.user.userId, following: user._id }),
+            Follow.exists({ follower: user._id, following: req.user.userId }),
+          ])
+        : Promise.resolve([null, null] as const),
+    ]);
+    isFollowing = Boolean(followState[0]);
+    isFollowedBy = Boolean(followState[1]);
 
     return res.json({
-      user: { ...user.toObject(), isFollowing, isFollowedBy, isSelf: req.user?.userId === String(user._id) },
+      user: {
+        ...user.toObject(),
+        postsCount: publishedPostsCount,
+        isFollowing,
+        isFollowedBy,
+        isSelf,
+      },
     });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to load profile", details: error.message });

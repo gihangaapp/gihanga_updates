@@ -19,8 +19,9 @@ import { Comment } from "../../models/Comment";
 import { Media, IMedia } from "../../models/Media";
 import { ModerationRecord, IModerationRecord } from "../../models/ModerationRecord";
 import { User } from "../../models/User";
+import { Follow } from "../../models/Follow";
 import { Hashtag } from "../../models/Hashtag";
-import { getIO } from "../../lib/socket";
+import { getIO, emitToUser } from "../../lib/socket";
 import { notify } from "../../lib/notify";
 import { notifyStaff } from "../../lib/staffNotify";
 import { logAudit } from "../../utils/auditLogger";
@@ -370,6 +371,12 @@ export async function publishPost(postId: string): Promise<void> {
   const responsePost = { ...populated.toObject(), liked: false, bookmarked: false, followingAuthor: false };
   if (responsePost.audience === "public") {
     getIO()?.emit("post:created", responsePost);
+  } else if (responsePost.audience === "followers") {
+    const followers = await Follow.find({ following: post.author }).select("follower").lean();
+    for (const follower of followers) emitToUser(String(follower.follower), "post:created", responsePost);
+    emitToUser(String(post.author), "post:created", responsePost);
+  } else {
+    emitToUser(String(post.author), "post:created", responsePost);
   }
 }
 

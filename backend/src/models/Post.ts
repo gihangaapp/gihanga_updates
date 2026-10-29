@@ -119,6 +119,9 @@ const PostSchema = new Schema<IPost>(
 );
 
 PostSchema.index({ author: 1, status: 1, createdAt: -1 });
+// Supports the public home timeline's audience filter + newest-first cursor.
+// This is additive only and does not alter or migrate existing post records.
+PostSchema.index({ status: 1, audience: 1, createdAt: -1, _id: -1 });
 PostSchema.index({ tags: 1 });
 PostSchema.index({ status: 1, scheduledFor: 1 });
 PostSchema.index({ "moderation.status": 1, createdAt: -1 });
