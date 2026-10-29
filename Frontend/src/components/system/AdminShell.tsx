@@ -288,8 +288,8 @@ export function AdminSidebar({
         ))}
       </nav>
 
-      {/* Register CTA — superadmins only */}
-      {staffUser?.role === "superadmin" && (
+      {/* Register CTA — admins and superadmins */}
+      {(staffUser?.role === "superadmin" || staffUser?.role === "admin") && (
         <div className="px-3 pb-3">
           <Link
             to="/system/register"

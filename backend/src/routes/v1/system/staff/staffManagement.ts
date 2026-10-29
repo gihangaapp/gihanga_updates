@@ -1,21 +1,31 @@
-import { Router, Response } from "express";
+import { Router, Response, NextFunction } from "express";
 import bcrypt from "bcryptjs";
 import { User } from "../../../../models/User";
 import { AuditLog } from "../../../../models/AuditLog";
 import { authenticateStaff, requirePermission, ROLE_PERMISSIONS, AuthenticatedRequest } from "../../../../middleware/rbac";
-import { signStaffTokens } from "../../../../lib/jwt";
+import { signStaffTokens, verifyStaffAccessToken } from "../../../../lib/jwt";
 import { logAudit } from "../../../../utils/auditLogger";
 import { notify } from "../../../../lib/notify";
 
 const router = Router();
 const STAFF_FIELDS = "name username email role status createdAt";
 
-// POST /api/v1/system/staff/create — create a staff account and sign into it.
-router.post("/create", authenticateStaff, async (req: AuthenticatedRequest, res: Response) => {
-  if (req.staffUser?.role !== "superadmin") {
-    return res.status(403).json({ error: "Only a superadmin can create staff accounts" });
+// Optional staff auth middleware — extracts staff identity if provided, but does not block registration
+function optionalStaffAuth(req: AuthenticatedRequest, _res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    const token = authHeader.split(" ")[1] as string;
+    try {
+      req.staffUser = verifyStaffAccessToken(token);
+    } catch {
+      // Proceed without authenticated staff user if token is expired or invalid
+    }
   }
+  next();
+}
 
+// POST /api/v1/system/staff/create — create a staff account and sign into it.
+router.post("/create", optionalStaffAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { name, username, email, password, role } = req.body as Record<string, unknown>;
     if (
@@ -76,10 +86,15 @@ router.post("/create", authenticateStaff, async (req: AuthenticatedRequest, res:
     await user.save();
 
     await logAudit({
-      actor: req.staffUser.userId,
+      actor: req.staffUser?.userId || user._id,
+      actorUsername: req.staffUser?.username || user.username,
       action: "staff.create",
       targetUser: user._id,
-      meta: { role: user.role },
+      meta: {
+        role: user.role,
+        creator: req.staffUser ? `${req.staffUser.username} (${req.staffUser.role})` : "self",
+      },
+      ipAddress: req.ip,
     });
 
     return res.status(201).json({

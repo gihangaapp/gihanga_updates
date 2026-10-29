@@ -28,6 +28,7 @@ export function usePromoteStaff() {
 }
 
 export function useCreateStaff() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: {
       name: string;
@@ -40,6 +41,9 @@ export function useCreateStaff() {
         user: import("@/lib/api-client").UserProfile;
         tokens: { accessToken: string; refreshToken: string };
       }>("/system/staff/create", input, true),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["staff", "list"] });
+    },
   });
 }
 

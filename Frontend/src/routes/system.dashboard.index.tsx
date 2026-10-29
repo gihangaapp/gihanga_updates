@@ -258,7 +258,7 @@ function DashboardIndex() {
             what's happening on Gihanga Updates.
           </p>
         </div>
-        {staffUser?.role === "superadmin" && (
+        {(staffUser?.role === "superadmin" || staffUser?.role === "admin") && (
           <Link
             to="/system/register"
             className="press gradient-brand flex h-10 items-center gap-2 rounded-xl px-4 text-xs font-bold text-primary-foreground shadow-glow"

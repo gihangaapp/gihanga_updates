@@ -12,15 +12,16 @@ import {
   Lock,
   Mail,
   Moon,
+  Shield,
   ShieldCheck,
   Sun,
   User,
   UserPlus,
   AtSign,
+  Crown,
 } from "lucide-react";
 import { toast } from "sonner";
 import logoImg from "@/assets/logo.png";
-import { api } from "@/lib/api-client";
 import { useAuth, passwordScore, strengthLabels } from "@/lib/auth-context";
 import { useTheme } from "@/hooks/use-theme";
 import { useCreateStaff } from "@/hooks/use-staff-management";
@@ -29,36 +30,49 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/system/register")({
   head: () => ({
-    meta: [{ title: "Register Administrator — Gihanga Updates" }, { name: "robots", content: "noindex" }],
+    meta: [
+      { title: "Register Administrator — Gihanga Updates" },
+      { name: "robots", content: "noindex" },
+    ],
   }),
   component: StaffRegisterPage,
 });
 
 type Role = "moderator" | "admin" | "superadmin";
 
-const ROLE_CARDS: {
+interface RoleCardConfig {
   id: Role;
   title: string;
+  badge: string;
   blurb: string;
   perks: string[];
-}[] = [
+  icon: typeof ShieldCheck;
+}
+
+const ROLE_CARDS: RoleCardConfig[] = [
   {
     id: "moderator",
     title: "Moderator",
+    badge: "Safety",
     blurb: "First line of defense for community safety.",
-    perks: ["Review reports & AI flags", "Watch live streams", "View accounts"],
+    perks: ["Review reports & AI flags", "Watch live streams", "View user accounts"],
+    icon: ShieldCheck,
   },
   {
     id: "admin",
     title: "Admin",
+    badge: "Operations",
     blurb: "Full operational control of the platform.",
     perks: ["Everything a Moderator can", "Suspend / ban accounts", "Approve payments & ads"],
+    icon: Shield,
   },
   {
     id: "superadmin",
     title: "Super Admin",
+    badge: "Full Access",
     blurb: "Complete command including staff and settings.",
     perks: ["Everything an Admin can", "Register & manage staff", "Platform settings & flags"],
+    icon: Crown,
   },
 ];
 
@@ -78,8 +92,7 @@ function StaffRegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-
-  const isSuperadmin = staffUser?.role === "superadmin";
+  const [switchAccount, setSwitchAccount] = useState(!staffUser);
 
   const strength = passwordScore(form.password);
   const usernameValid = /^[a-zA-Z0-9_]{3,20}$/.test(form.username);
@@ -104,11 +117,19 @@ function StaffRegisterPage() {
         password: form.password,
         role: form.role,
       });
-      signInStaff(result.tokens, result.user);
-      toast.success(`Administrator registered — signed in as ${ROLE_LABEL[result.user.role]}.`, {
-        description: `${result.user.name} (@${result.user.username}) now has ${ROLE_LABEL[result.user.role]} access.`,
-      });
-      navigate({ to: "/system/dashboard" });
+
+      if (switchAccount || !staffUser) {
+        signInStaff(result.tokens, result.user);
+        toast.success(`Administrator registered — signed in as ${ROLE_LABEL[result.user.role]}.`, {
+          description: `${result.user.name} (@${result.user.username}) is now active.`,
+        });
+        navigate({ to: "/system/dashboard" });
+      } else {
+        toast.success(`Administrator account created successfully!`, {
+          description: `${result.user.name} (@${result.user.username}) registered as ${ROLE_LABEL[result.user.role]}.`,
+        });
+        navigate({ to: "/system/dashboard/staff" });
+      }
     } catch (err: any) {
       setError(err?.message || "Couldn't register this administrator.");
     }
@@ -121,7 +142,7 @@ function StaffRegisterPage() {
 
   return (
     <div className="relative flex min-h-screen bg-background">
-      {/* ── Side panel ──────────────────────────────────────────────────── */}
+      {/* ── Side panel (Desktop) ─────────────────────────────────────────── */}
       <div className="relative hidden w-[38%] max-w-[540px] flex-col justify-between overflow-hidden p-10 lg:flex xl:p-14">
         <div
           className="absolute inset-0"
@@ -178,45 +199,51 @@ function StaffRegisterPage() {
               </span>
             </h1>
             <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-white/75">
-              Register Moderators, Admins and Super Admins — each with a scoped set of
-              permissions that matches their responsibility.
+              Select a role and register Moderators, Admins, or Super Admins with scoped permissions matching their platform responsibilities.
             </p>
           </motion.div>
 
-          <div className="space-y-3.5">
-            {ROLE_CARDS.map((r, i) => (
-              <motion.div
-                key={r.id}
-                initial={{ opacity: 0, x: -14 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.22 + i * 0.09 }}
-                className={cn(
-                  "flex items-center gap-3.5 rounded-2xl border p-4 backdrop-blur-md transition-colors",
-                  form.role === r.id
-                    ? "border-white/45 bg-white/15"
-                    : "border-white/15 bg-white/[0.06] hover:bg-white/10",
-                )}
-              >
-                <span
+          <div className="space-y-3">
+            {ROLE_CARDS.map((r, i) => {
+              const Icon = r.icon;
+              const isSelected = form.role === r.id;
+              return (
+                <motion.button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setForm((prev) => ({ ...prev, role: r.id }))}
+                  initial={{ opacity: 0, x: -14 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: 0.22 + i * 0.09 }}
                   className={cn(
-                    "grid size-9 shrink-0 place-items-center rounded-xl border",
-                    form.role === r.id
-                      ? "border-white/50 bg-white text-[oklch(0.42_0.083_244)]"
-                      : "border-white/25 bg-white/10 text-white",
+                    "group flex w-full items-center gap-3.5 rounded-2xl border p-4 text-left backdrop-blur-md transition-all cursor-pointer",
+                    isSelected
+                      ? "border-white/50 bg-white/20 shadow-lg scale-[1.02]"
+                      : "border-white/15 bg-white/[0.06] hover:bg-white/12 hover:border-white/30",
                   )}
                 >
-                  {form.role === r.id ? (
-                    <Check className="size-4" />
-                  ) : (
-                    <ShieldCheck className="size-4" />
-                  )}
-                </span>
-                <div>
-                  <p className="text-sm font-bold text-white">{r.title}</p>
-                  <p className="text-xs text-white/65">{r.blurb}</p>
-                </div>
-              </motion.div>
-            ))}
+                  <span
+                    className={cn(
+                      "grid size-10 shrink-0 place-items-center rounded-xl border transition-colors",
+                      isSelected
+                        ? "border-white/60 bg-white text-[oklch(0.42_0.083_244)] shadow-sm"
+                        : "border-white/25 bg-white/10 text-white group-hover:bg-white/20",
+                    )}
+                  >
+                    {isSelected ? <Check className="size-5 stroke-[2.5]" /> : <Icon className="size-5" />}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-bold text-white">{r.title}</p>
+                      <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-bold text-white/90">
+                        {r.badge}
+                      </span>
+                    </div>
+                    <p className="text-xs text-white/70 line-clamp-1">{r.blurb}</p>
+                  </div>
+                </motion.button>
+              );
+            })}
           </div>
         </div>
 
@@ -248,7 +275,7 @@ function StaffRegisterPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-          className="relative w-full max-w-[480px]"
+          className="relative w-full max-w-[520px]"
         >
           <div className="mb-7 flex items-center gap-2 lg:hidden">
             <img src={logoImg} alt="" className="size-9 rounded-xl object-contain" />
@@ -269,9 +296,9 @@ function StaffRegisterPage() {
                   Create a staff account
                 </h2>
                 <p className="mt-1 text-[13px] text-muted-foreground">
-                  {isSuperadmin
-                    ? "You're registering as a Super Admin — all roles are available."
-                    : "Only a signed-in Super Admin can register new administrators."}
+                  {staffUser
+                    ? `Provision a new staff member with scoped operational privileges.`
+                    : "Create an administrator account with access to the management portal."}
                 </p>
               </div>
               <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-primary-soft text-primary">
@@ -279,39 +306,96 @@ function StaffRegisterPage() {
               </span>
             </div>
 
-            {!isSuperadmin && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                className="mb-5 flex items-start gap-2.5 rounded-xl border border-warning/30 bg-warning/10 px-3.5 py-3 text-xs font-semibold leading-relaxed text-warning"
-              >
-                <AlertCircle className="mt-0.5 size-3.5 shrink-0" />
-                The backend will reject this request unless a Super Admin session is active. Sign
-                in as a Super Admin first, or share this page with one.
-              </motion.div>
+            {/* Active Session & Switch toggle (when already signed in) */}
+            {staffUser && (
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/20 bg-primary-soft/20 px-3.5 py-2.5 text-xs">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="size-4 shrink-0 text-primary" />
+                  <span className="text-foreground">
+                    Active session: <strong>{staffUser.name}</strong> ({ROLE_LABEL[staffUser.role]})
+                  </span>
+                </div>
+                <label className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={switchAccount}
+                    onChange={(e) => setSwitchAccount(e.target.checked)}
+                    className="size-3.5 rounded border-border accent-primary"
+                  />
+                  Switch to new account
+                </label>
+              </div>
             )}
 
-            {/* Role selector (mobile / compact) */}
-            <div className="mb-5 lg:hidden">
-              <p className="mb-2 text-xs font-bold tracking-wide text-muted-foreground uppercase">
-                Role
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                {ROLE_CARDS.map((r) => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => setForm({ ...form, role: r.id })}
-                    className={cn(
-                      "rounded-xl border px-2 py-2.5 text-xs font-bold transition-colors",
-                      form.role === r.id
-                        ? "border-primary bg-primary-soft text-primary"
-                        : "border-border bg-elevated text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {r.title}
-                  </button>
-                ))}
+            {/* Interactive Role Selector for ALL screen sizes */}
+            <div className="mb-6 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold tracking-wide text-muted-foreground uppercase">
+                  Select Role
+                </label>
+                <span className="text-[11px] font-semibold text-primary">
+                  {ROLE_LABEL[form.role]} Selected
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2.5">
+                {ROLE_CARDS.map((r) => {
+                  const Icon = r.icon;
+                  const isSelected = form.role === r.id;
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => setForm((prev) => ({ ...prev, role: r.id }))}
+                      className={cn(
+                        "group relative flex flex-col items-center justify-center rounded-2xl border p-3 text-center transition-all cursor-pointer",
+                        isSelected
+                          ? "border-primary bg-primary/10 ring-2 ring-primary/25 shadow-sm text-foreground"
+                          : "border-border bg-elevated/70 text-muted-foreground hover:border-primary/40 hover:bg-card hover:text-foreground",
+                      )}
+                    >
+                      {isSelected && (
+                        <span className="absolute top-2 right-2 flex size-4 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                          <Check className="size-2.5 stroke-[3]" />
+                        </span>
+                      )}
+                      <span
+                        className={cn(
+                          "mb-1.5 grid size-9 place-items-center rounded-xl transition-colors",
+                          isSelected
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "bg-muted text-muted-foreground group-hover:bg-primary-soft group-hover:text-primary",
+                        )}
+                      >
+                        <Icon className="size-4.5" />
+                      </span>
+                      <p className="text-xs font-bold leading-tight">{r.title}</p>
+                      <span className="mt-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold opacity-75">
+                        {r.badge}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Dynamic perks list */}
+              <div className="rounded-2xl border border-primary/20 bg-primary-soft/30 p-3.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-primary">
+                    {ROLE_LABEL[form.role]} Scope:
+                  </p>
+                  <span className="text-[11px] font-medium text-muted-foreground">
+                    {ROLE_CARDS.find((r) => r.id === form.role)?.blurb}
+                  </span>
+                </div>
+                <ul className="mt-2 space-y-1">
+                  {ROLE_CARDS.find((r) => r.id === form.role)?.perks.map((perk) => (
+                    <li key={perk} className="flex items-center gap-2 text-xs text-foreground/85">
+                      <Check className="size-3.5 shrink-0 text-primary" />
+                      <span>{perk}</span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>
 
@@ -439,20 +523,6 @@ function StaffRegisterPage() {
                 )}
               </div>
 
-              {/* Role perks hint (desktop) */}
-              <div className="hidden rounded-xl border border-primary/20 bg-primary-soft/40 p-3.5 lg:block">
-                <p className="text-xs font-bold text-primary">
-                  {ROLE_LABEL[form.role]} will be able to:
-                </p>
-                <ul className="mt-1.5 space-y-1">
-                  {ROLE_CARDS.find((r) => r.id === form.role)?.perks.map((perk) => (
-                    <li key={perk} className="flex items-center gap-2 text-xs text-foreground/80">
-                      <Check className="size-3 text-primary" /> {perk}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
               {error && (
                 <motion.div
                   initial={{ opacity: 0, height: 0, y: -4 }}
@@ -468,7 +538,7 @@ function StaffRegisterPage() {
               <button
                 type="submit"
                 disabled={!canSubmit}
-                className="press gradient-brand flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-bold text-primary-foreground shadow-glow disabled:opacity-60"
+                className="press gradient-brand flex h-12 w-full items-center justify-center gap-2 rounded-xl text-sm font-bold text-primary-foreground shadow-glow disabled:opacity-60 cursor-pointer"
               >
                 {createStaff.isPending ? (
                   <Loader2 className="size-4 animate-spin" />
@@ -491,7 +561,10 @@ function StaffRegisterPage() {
               Back to staff sign-in
             </Link>
             <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
-              <ShieldCheck className="size-3" /> Creating an account signs you into it immediately
+              <ShieldCheck className="size-3" />
+              {staffUser && !switchAccount
+                ? "New account will be created while maintaining your current active session"
+                : "Creating an account signs you into it immediately"}
             </p>
           </div>
         </motion.div>

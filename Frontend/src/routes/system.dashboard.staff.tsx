@@ -87,7 +87,7 @@ function StaffManagementPage() {
         description="Promote existing accounts to Moderator or Admin, register new staff, or remove access."
         accent="warning"
         action={
-          staffUser?.role === "superadmin" ? (
+          staffUser?.role === "superadmin" || staffUser?.role === "admin" ? (
             <Link
               to="/system/register"
               className="press gradient-brand flex h-10 items-center gap-2 rounded-xl px-4 text-xs font-bold text-primary-foreground shadow-glow"
@@ -256,8 +256,8 @@ function StaffManagementPage() {
             </div>
           </AdminCard>
 
-          {/* Create staff (superadmin) */}
-          {staffUser?.role === "superadmin" && (
+          {/* Create staff (admin / superadmin) */}
+          {(staffUser?.role === "superadmin" || staffUser?.role === "admin") && (
             <AdminCard className="p-5">
               <AdminCardHeader
                 title="Quick create"
