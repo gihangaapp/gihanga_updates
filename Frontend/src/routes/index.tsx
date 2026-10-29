@@ -336,14 +336,17 @@ function HomeFeed() {
             {active.hasNextPage && (
               <div
                 ref={loadMoreRef}
-                className="flex min-h-14 items-center justify-center gap-2 py-4 text-xs text-muted-foreground"
+                className={active.isFetchingNextPage ? "space-y-2" : "flex min-h-14 items-center justify-center gap-2 py-4 text-xs text-muted-foreground"}
                 aria-live="polite"
                 aria-busy={active.isFetchingNextPage}
               >
                 {active.isFetchingNextPage ? (
                   <>
-                    <Loader2 className="size-4 animate-spin text-primary" />
-                    <span>Loading more posts…</span>
+                    <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground">
+                      <Loader2 className="size-4 animate-spin text-primary" />
+                      <span>Loading more posts…</span>
+                    </div>
+                    <PostSkeleton />
                   </>
                 ) : active.isFetchNextPageError ? (
                   <button

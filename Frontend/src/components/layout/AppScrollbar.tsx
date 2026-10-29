@@ -178,6 +178,7 @@ export function AppScrollbar() {
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={stopDragging}
+      onLostPointerCapture={stopDragging}
       onPointerCancel={stopDragging}
     >
       <div

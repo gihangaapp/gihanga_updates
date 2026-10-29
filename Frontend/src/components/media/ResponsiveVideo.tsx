@@ -190,7 +190,7 @@ export function ResponsiveVideo({
       {/* Blurred Backdrop for letterboxed/clamped videos */}
       {(posterUrl || blurDataUrl) && (
         <div
-          className="absolute inset-0 size-full bg-cover bg-center filter blur-2xl opacity-40 scale-125"
+          className="absolute inset-0 size-full bg-cover bg-center filter blur-3xl opacity-85 scale-125"
           style={{ backgroundImage: `url(${posterUrl || blurDataUrl})` }}
           aria-hidden="true"
         />

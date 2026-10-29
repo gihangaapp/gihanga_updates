@@ -99,8 +99,11 @@ export function PostMediaCarousel({
     activeItem?.aspectRatio ??
     (activeItem?.width && activeItem?.height ? activeItem.width / activeItem.height : undefined);
   const stageRatio =
-    clampRatio(activeMeasured ?? activeItemRatio ?? (activeIdx === 0 ? aspectRatio : undefined) ?? measuredRatio) ??
-    DEFAULT_RATIO;
+    clampRatio(
+      activeMeasured ??
+        activeItemRatio ??
+        (activeIdx === 0 ? aspectRatio ?? measuredRatio : undefined),
+    ) ?? DEFAULT_RATIO;
   const intrinsicRatio: number = activeMeasured ?? activeItemRatio ?? stageRatio;
   // Portrait media and extreme ratios always use contain so the real image or
   // video remains undistorted when the viewport height limits the stage.
@@ -168,12 +171,14 @@ export function PostMediaCarousel({
       }}
       aria-roledescription="carousel"
       aria-label="Post media. Swipe horizontally or use arrow keys to change media. Double tap to like."
-      className="relative mx-4 mb-3 w-[calc(100%-2rem)] overflow-hidden rounded-2xl bg-black select-none group flex items-center justify-center"
+      className="relative mb-3 w-full overflow-hidden rounded-xl bg-black select-none group flex items-center justify-center sm:rounded-2xl"
       style={{
         // Preserve the current item's natural shape, but cap its height so the
         // post and its controls remain usable within short desktop/mobile screens.
         aspectRatio: `${stageRatio ?? DEFAULT_RATIO}`,
-        maxHeight: "min(56dvh, 680px)",
+        // Leave room for the post header/caption/actions while allowing common
+        // portrait ratios to keep their full width without artificial side bars.
+        maxHeight: "min(68dvh, 860px)",
         touchAction: "pan-y",
       }}
     >

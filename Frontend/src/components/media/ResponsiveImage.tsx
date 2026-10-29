@@ -64,7 +64,7 @@ export function ResponsiveImage({
           EVERYTHING (no crop). */}
       {fit === "contain" && !hasError && (
         <div
-          className="absolute inset-0 size-full bg-cover bg-center blur-2xl scale-110 opacity-60"
+          className="absolute inset-0 size-full bg-cover bg-center blur-3xl scale-125 opacity-90"
           style={{ backgroundImage: `url(${isLoaded ? src : placeholder})` }}
           aria-hidden="true"
         />
