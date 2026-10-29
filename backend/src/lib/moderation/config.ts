@@ -50,6 +50,14 @@ export interface ModerationConfig {
   failClosed: boolean;
   /** Allow publishing verified uploads after caption checks only when no visual provider exists. */
   allowUnscannedMedia: boolean;
+  /**
+   * Public-publish guarantee: when the ONLY reason a post is held is a
+   * technical moderation failure (provider outage / bad key / quota / timeout,
+   * frames not extractable) — with NO policy signal at all — publish it instead
+   * of stranding it as author-only. Real violations, review-worthy scores and
+   * critical escalations are NEVER affected. Set to false for strict fail-closed.
+   */
+  publishOnProviderFailure: boolean;
   /** Normalized score >= reviewThreshold on a non-critical category -> PENDING_REVIEW. */
   reviewThreshold: number;
   /** Normalized score >= blockThreshold -> REJECTED. */
@@ -196,6 +204,7 @@ export function getModerationConfig(): ModerationConfig {
     enabled: envBool("CONTENT_MODERATION_ENABLED", true),
     failClosed: envBool("CONTENT_MODERATION_FAIL_CLOSED", true),
     allowUnscannedMedia: envBool("CONTENT_MODERATION_ALLOW_UNSCANNED_MEDIA", true),
+    publishOnProviderFailure: envBool("CONTENT_MODERATION_PUBLISH_ON_PROVIDER_FAILURE", true),
     reviewThreshold,
     blockThreshold,
     timeoutMs: envNumber("CONTENT_MODERATION_TIMEOUT_MS", 15000, { min: 2000, max: 60000 }, warnings),
@@ -275,6 +284,7 @@ export function publicSummary() {
     enabled: c.enabled,
     failClosed: c.failClosed,
     allowUnscannedMedia: c.allowUnscannedMedia,
+    publishOnProviderFailure: c.publishOnProviderFailure,
     reviewThreshold: c.reviewThreshold,
     blockThreshold: c.blockThreshold,
     providers: {

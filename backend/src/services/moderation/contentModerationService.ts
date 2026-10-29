@@ -921,12 +921,78 @@ export async function recoverPostsWithUnsupportedMediaInput(): Promise<number> {
   return retried;
 }
 
+const FRAMES_UNAVAILABLE_ERROR = "Video frames could not be extracted for verification";
+
+/**
+ * True when a post is being HELD (FAILED / PENDING_REVIEW) purely because of a
+ * technical moderation failure — a provider outage, bad/exhausted API key,
+ * timeout, or frames that could not be extracted — and there is NO policy
+ * signal of any kind. Anything with a flagged/review verdict, a category at or
+ * near the review/block thresholds, a critical escalation, or media that cannot
+ * be located is deliberately NOT covered, so real safety holds stay held.
+ */
+function isTechnicalOnlyHold(result: ModerationResult): boolean {
+  if (result.criticalEscalation) return false;
+  if (result.decision !== "FAILED" && result.decision !== "PENDING_REVIEW") return false;
+
+  const outcomes = result.providerOutcomes ?? [];
+  if (outcomes.some((o) => o.verdict === "flagged" || o.verdict === "review")) return false;
+
+  const config = getModerationConfig();
+  const suspicionBound = config.reviewThreshold * 0.6;
+  const hasPolicySignal = (result.categories ?? []).some((category) => {
+    const action = categoryAction(category, { review: config.reviewThreshold, block: config.blockThreshold });
+    if (action !== "pass") return true;
+    return AUTO_REJECT_CATEGORIES.has(category.category) && category.score >= suspicionBound;
+  });
+  if (hasPolicySignal) return false;
+
+  if (result.decision === "FAILED") return true;
+  return outcomes.some((o) => o.verdict === "error") || result.error === FRAMES_UNAVAILABLE_ERROR;
+}
+
 /** Applies a decision to the Post document (visibility + messaging). */
 export async function applyPostDecision(
   postId: string,
   result: ModerationResult,
   record: IModerationRecord,
 ): Promise<void> {
+  // PUBLIC-PUBLISH GUARANTEE: a technical moderation failure must never leave a
+  // post visible only to its author. Caption/local-policy checks have already
+  // run; only when there is no policy signal and the post's media resolves to
+  // platform-owned uploads do we publish. Real violations are untouched.
+  if (getModerationConfig().publishOnProviderFailure && isTechnicalOnlyHold(result)) {
+    const heldPost = await Post.findById(postId).select("kind mediaUrl media mediaKey status");
+    if (heldPost && !["removed", "rejected", "published"].includes(String(heldPost.status))) {
+      let mediaOk = heldPost.kind === "text";
+      if (!mediaOk) {
+        const urls = new Set<string>();
+        for (const u of String(heldPost.mediaUrl ?? "").split(",")) if (u.trim()) urls.add(u.trim());
+        for (const item of heldPost.media ?? []) if (item.url) urls.add(item.url);
+        const docs = await resolveMediaDocs(Array.from(urls), heldPost.mediaKey ? [String(heldPost.mediaKey)] : []);
+        mediaOk = docs.length > 0;
+      }
+      if (mediaOk) {
+        console.warn(
+          `[Moderation][WARN] Post ${postId} published after a technical moderation failure (no policy signal): ${
+            (result.error || "provider error").slice(0, 120)
+          }`,
+        );
+        // Mutate IN PLACE: assessPost() returns this same object to the route
+        // (create / edit / retry), so the API response reports the real outcome.
+        Object.assign(result, {
+          decision: "APPROVED",
+          error: "Published after a technical moderation failure; no policy signal was detected.",
+        });
+        delete result.userMessage;
+        await ModerationRecord.updateOne(
+          { _id: record._id },
+          { $set: { decision: "APPROVED", status: "approved", error: result.error } },
+        ).catch(() => undefined);
+      }
+    }
+  }
+
   const status = decisionToStatus(result.decision);
   if (result.decision === "APPROVED") {
     // Make every referenced asset deliverable BEFORE exposing the post to the
@@ -1452,6 +1518,9 @@ async function processVideoJob(job: any) {
 
     const frameResults = await moderateVideoFrames(mediaDocs[0], String(post.author));
     const combined = combineResults([captionResult, ...frameResults]);
+    if (!combined.error && frameResults.some((r) => r.error === FRAMES_UNAVAILABLE_ERROR)) {
+      combined.error = FRAMES_UNAVAILABLE_ERROR;
+    }
     const record = await persistAssessment(
       {
         contentType: "post",
