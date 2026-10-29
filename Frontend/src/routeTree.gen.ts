@@ -34,6 +34,7 @@ import { Route as PostPostIdRouteImport } from './routes/post.$postId'
 import { Route as ProfileUsernameRouteImport } from './routes/profile.$username'
 import { Route as SystemIndexRouteImport } from './routes/system.index'
 import { Route as SystemDashboardRouteImport } from './routes/system.dashboard'
+import { Route as SystemRegisterRouteImport } from './routes/system.register'
 import { Route as TagTagRouteImport } from './routes/tag.$tag'
 import { Route as SystemDashboardIndexRouteImport } from './routes/system.dashboard.index'
 import { Route as SystemDashboardAccountsRouteImport } from './routes/system.dashboard.accounts'
@@ -175,6 +176,11 @@ const SystemDashboardRoute = SystemDashboardRouteImport.update({
   path: '/system/dashboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SystemRegisterRoute = SystemRegisterRouteImport.update({
+  id: '/system/register',
+  path: '/system/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TagTagRoute = TagTagRouteImport.update({
   id: '/tag/$tag',
   path: '/tag/$tag',
@@ -280,6 +286,7 @@ export interface FileRoutesByFullPath {
   '/post/$postId': typeof PostPostIdRoute
   '/profile/$username': typeof ProfileUsernameRoute
   '/system/dashboard': typeof SystemDashboardRouteWithChildren
+  '/system/register': typeof SystemRegisterRoute
   '/tag/$tag': typeof TagTagRoute
   '/system/': typeof SystemIndexRoute
   '/system/dashboard/accounts': typeof SystemDashboardAccountsRoute
@@ -321,6 +328,7 @@ export interface FileRoutesByTo {
   '/live/$streamId': typeof LiveStreamIdRoute
   '/post/$postId': typeof PostPostIdRoute
   '/profile/$username': typeof ProfileUsernameRoute
+  '/system/register': typeof SystemRegisterRoute
   '/tag/$tag': typeof TagTagRoute
   '/system': typeof SystemIndexRoute
   '/system/dashboard/accounts': typeof SystemDashboardAccountsRoute
@@ -364,6 +372,7 @@ export interface FileRoutesById {
   '/post/$postId': typeof PostPostIdRoute
   '/profile/$username': typeof ProfileUsernameRoute
   '/system/dashboard': typeof SystemDashboardRouteWithChildren
+  '/system/register': typeof SystemRegisterRoute
   '/tag/$tag': typeof TagTagRoute
   '/system/': typeof SystemIndexRoute
   '/system/dashboard/accounts': typeof SystemDashboardAccountsRoute
@@ -408,6 +417,7 @@ export interface FileRouteTypes {
     | '/post/$postId'
     | '/profile/$username'
     | '/system/dashboard'
+    | '/system/register'
     | '/tag/$tag'
     | '/system/'
     | '/system/dashboard/accounts'
@@ -449,6 +459,7 @@ export interface FileRouteTypes {
     | '/live/$streamId'
     | '/post/$postId'
     | '/profile/$username'
+    | '/system/register'
     | '/tag/$tag'
     | '/system'
     | '/system/dashboard/accounts'
@@ -491,6 +502,7 @@ export interface FileRouteTypes {
     | '/post/$postId'
     | '/profile/$username'
     | '/system/dashboard'
+    | '/system/register'
     | '/tag/$tag'
     | '/system/'
     | '/system/dashboard/accounts'
@@ -533,6 +545,7 @@ export interface RootRouteChildren {
   PostPostIdRoute: typeof PostPostIdRoute
   ProfileUsernameRoute: typeof ProfileUsernameRoute
   SystemDashboardRoute: typeof SystemDashboardRouteWithChildren
+  SystemRegisterRoute: typeof SystemRegisterRoute
   TagTagRoute: typeof TagTagRoute
   SystemIndexRoute: typeof SystemIndexRoute
 }
@@ -712,6 +725,13 @@ declare module '@tanstack/react-router' {
       path: '/system/dashboard'
       fullPath: '/system/dashboard'
       preLoaderRoute: typeof SystemDashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/system/register': {
+      id: '/system/register'
+      path: '/system/register'
+      fullPath: '/system/register'
+      preLoaderRoute: typeof SystemRegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tag/$tag': {
@@ -894,6 +914,7 @@ const rootRouteChildren: RootRouteChildren = {
   PostPostIdRoute: PostPostIdRoute,
   ProfileUsernameRoute: ProfileUsernameRoute,
   SystemDashboardRoute: SystemDashboardRouteWithChildren,
+  SystemRegisterRoute: SystemRegisterRoute,
   TagTagRoute: TagTagRoute,
   SystemIndexRoute: SystemIndexRoute,
 }

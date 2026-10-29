@@ -1,6 +1,18 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { BadgeCheck, Gift, RotateCcw, Search, Sparkles, UserCog } from "lucide-react";
+import { motion } from "motion/react";
+import {
+  BadgeCheck,
+  Gift,
+  RotateCcw,
+  Search,
+  ShieldCheck,
+  Sparkles,
+  UserCog,
+  UserX,
+  Users,
+  UserPlus,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -17,18 +29,30 @@ import {
   useGrantPoints,
   type StaffAccount,
 } from "@/hooks/use-staff-users";
+import {
+  AdminPageHeader,
+  AdminCard,
+  AdminBadge,
+  AdminSearchInput,
+  AdminEmptyState,
+  AdminAvatar,
+  AdminTableWrap,
+  AdminTable,
+  AdminTh,
+  AdminTd,
+} from "@/components/system/AdminUI";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/system/dashboard/accounts")({
   component: AccountsPage,
 });
 
-const statusTone: Record<string, string> = {
-  active: "bg-success/10 text-success",
-  limited: "bg-warning/10 text-warning",
-  suspended: "bg-warning/15 text-warning",
-  banned: "bg-rose-500/15 text-danger",
-  review: "bg-muted text-muted-foreground",
+const statusTone: Record<string, "success" | "warning" | "danger" | "muted"> = {
+  active: "success",
+  limited: "warning",
+  suspended: "warning",
+  banned: "danger",
+  review: "muted",
 };
 
 function ReasonPrompt({
@@ -62,7 +86,7 @@ function ReasonPrompt({
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         placeholder="Reason…"
-        className="h-8 w-36 rounded-lg border border-border bg-card px-2 text-xs text-foreground outline-none"
+        className="h-8 w-36 rounded-lg border border-border bg-card px-2 text-xs text-foreground outline-none focus:border-primary/60"
       />
       <Button
         size="sm"
@@ -104,26 +128,42 @@ function GrantPointsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[380px]">
+      <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
-          <DialogTitle>Grant bonus points {user ? `to @${user.username}` : ""}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <span className="grid size-8 place-items-center rounded-lg bg-success/10 text-success">
+              <Gift className="size-4" />
+            </span>
+            Grant bonus points {user ? `to @${user.username}` : ""}
+          </DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3 px-1">
-          <input
-            type="number"
-            min={1}
-            value={points}
-            onChange={(e) => setPoints(e.target.value)}
-            className="h-10 rounded-xl border border-border bg-elevated px-3.5 text-sm outline-none focus:border-ring"
-          />
-          <input
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Reason (optional)"
-            className="h-10 rounded-xl border border-border bg-elevated px-3.5 text-sm outline-none focus:border-ring"
-          />
+          <div>
+            <label className="mb-1.5 block text-xs font-bold tracking-wide text-muted-foreground uppercase">
+              Points
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={points}
+              onChange={(e) => setPoints(e.target.value)}
+              className="h-11 w-full rounded-xl border border-border bg-elevated px-3.5 text-sm outline-none focus:border-ring focus:ring-4 focus:ring-primary/10"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-bold tracking-wide text-muted-foreground uppercase">
+              Reason (optional)
+            </label>
+            <input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. community contest prize"
+              className="h-11 w-full rounded-xl border border-border bg-elevated px-3.5 text-sm outline-none focus:border-ring focus:ring-4 focus:ring-primary/10"
+            />
+          </div>
           <Button
             variant="brand"
+            className="mt-1 h-11"
             disabled={!user || !Number(points) || grantPoints.isPending}
             onClick={() =>
               user &&
@@ -133,6 +173,7 @@ function GrantPointsDialog({
                   onSuccess: () => {
                     toast.success(`Granted ${points} points to @${user.username}`);
                     onOpenChange(false);
+                    setReason("");
                   },
                   onError: (err: any) => toast.error(err.message || "Failed to grant points"),
                 },
@@ -165,87 +206,121 @@ function AccountsPage() {
   const ban = useBanAccount();
   const makeCreator = useMakeCreator();
 
+  const users = data?.users ?? [];
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 font-display text-2xl font-bold tracking-tight text-foreground">
-          <UserCog className="size-6 text-info" /> User Accounts
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Search accounts and manage verification, status and creator access.
-        </p>
-      </div>
+      <AdminPageHeader
+        icon={UserCog}
+        title="User Accounts"
+        description="Search accounts and manage verification, status and creator access."
+        accent="primary"
+      />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex h-10 min-w-[220px] flex-1 items-center gap-2 rounded-xl border border-border bg-card px-3">
-          <Search className="size-4 text-muted-foreground" />
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search name, username, email…"
-            className="h-full flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-          />
+      <div className="flex flex-wrap items-center gap-2.5">
+        <AdminSearchInput
+          value={q}
+          onChange={setQ}
+          placeholder="Search name, username, email…"
+          className="min-w-[240px] flex-1"
+        />
+        <div className="relative">
+          <select
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+            className="h-10 appearance-none rounded-xl border border-border bg-muted/50 pr-9 pl-4 text-sm font-medium text-foreground outline-none transition-colors focus:border-ring"
+          >
+            <option value="">All statuses</option>
+            {["active", "limited", "suspended", "banned", "review"].map((s) => (
+              <option key={s} value={s}>
+                {s.charAt(0).toUpperCase() + s.slice(1)}
+              </option>
+            ))}
+          </select>
+          <svg
+            className="pointer-events-none absolute top-1/2 right-3.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+            viewBox="0 0 12 12"
+            fill="none"
+          >
+            <path d="M2.5 4.5L6 8l3.5-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </div>
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          className="h-10 rounded-xl border border-border bg-card px-3 text-sm text-foreground outline-none"
-        >
-          <option value="">All statuses</option>
-          {["active", "limited", "suspended", "banned", "review"].map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        <span className="rounded-xl bg-primary-soft px-3.5 py-2.5 text-xs font-bold text-primary tabular-nums">
+          {isLoading ? "…" : `${users.length} account${users.length === 1 ? "" : "s"}`}
+        </span>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-border">
-        <table className="w-full text-sm">
+      <AdminTableWrap>
+        <AdminTable>
           <thead>
-            <tr className="border-b border-border bg-muted/40 text-left text-xs text-muted-foreground">
-              <th className="p-3 font-semibold">User</th>
-              <th className="p-3 font-semibold">Status</th>
-              <th className="p-3 font-semibold">Role</th>
-              <th className="p-3 font-semibold">Followers</th>
-              <th className="p-3 font-semibold">Actions</th>
+            <tr>
+              <AdminTh className="min-w-[220px]">User</AdminTh>
+              <AdminTh>Status</AdminTh>
+              <AdminTh>Role</AdminTh>
+              <AdminTh>Followers</AdminTh>
+              <AdminTh className="text-right">Actions</AdminTh>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={5} className="p-8 text-center text-muted-foreground">
-                  Loading…
+                <td colSpan={5} className="p-10 text-center text-sm text-muted-foreground">
+                  <span className="inline-flex items-center gap-2">
+                    <span className="size-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    Loading accounts…
+                  </span>
                 </td>
               </tr>
             )}
-            {(data?.users ?? []).map((u) => (
-              <tr key={u._id} className="border-b border-white/5 last:border-0">
-                <td className="p-3">
-                  <p className="font-semibold text-foreground">{u.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    @{u.username} · {u.email}
-                  </p>
-                </td>
-                <td className="p-3">
-                  <span
-                    className={cn(
-                      "rounded-md px-1.5 py-0.5 text-[11px] font-bold capitalize",
-                      statusTone[u.status],
-                    )}
-                  >
+            {users.map((u, i) => (
+              <motion.tr
+                key={u._id}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: Math.min(i * 0.03, 0.3) }}
+                className="transition-colors hover:bg-muted/30"
+              >
+                <AdminTd>
+                  <div className="flex items-center gap-3">
+                    <AdminAvatar name={u.name} hue={(u.username.charCodeAt(0) * 7) % 360} size="sm" />
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-1.5 font-semibold text-foreground">
+                        <span className="truncate">{u.name}</span>
+                        {u.status === "active" && (
+                          <BadgeCheck className="size-3.5 shrink-0 text-primary" />
+                        )}
+                      </p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        @{u.username} · {u.email}
+                      </p>
+                    </div>
+                  </div>
+                </AdminTd>
+                <AdminTd>
+                  <AdminBadge tone={statusTone[u.status] ?? "muted"} dot>
                     {u.status}
-                  </span>
-                </td>
-                <td className="p-3 text-foreground/80">{u.isCreator ? "Creator" : "User"}</td>
-                <td className="p-3 text-foreground/80">{formatCount(u.followersCount)}</td>
-                <td className="p-3">
-                  <div className="flex flex-wrap gap-1.5">
+                  </AdminBadge>
+                </AdminTd>
+                <AdminTd>
+                  {u.role !== "user" ? (
+                    <AdminBadge tone="accent">{u.role}</AdminBadge>
+                  ) : (
+                    <span className="text-[13px] text-foreground/80">
+                      {u.isCreator ? "Creator" : "User"}
+                    </span>
+                  )}
+                </AdminTd>
+                <AdminTd className="font-semibold text-foreground/80 tabular-nums">
+                  {formatCount(u.followersCount)}
+                </AdminTd>
+                <AdminTd>
+                  <div className="flex flex-wrap justify-end gap-1.5">
                     {canVerify && (
                       <Button
                         size="sm"
                         variant="outline"
-                        className="border-border text-foreground/90 hover:bg-muted"
+                        className="border-border text-foreground/90 hover:bg-primary-soft hover:text-primary"
+                        title="Verify account"
                         onClick={() =>
                           verify.mutate(
                             { id: u._id },
@@ -260,11 +335,15 @@ function AccountsPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="border-border text-foreground/90 hover:bg-muted"
+                        className="border-border text-foreground/90 hover:bg-primary-soft hover:text-primary"
+                        title="Make creator"
                         onClick={() =>
                           makeCreator.mutate(
                             { id: u._id },
-                            { onSuccess: () => toast.success(`@${u.username} is now a creator`) },
+                            {
+                              onSuccess: () =>
+                                toast.success(`@${u.username} is now a creator`),
+                            },
                           )
                         }
                       >
@@ -275,7 +354,8 @@ function AccountsPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="border-border text-foreground/90 hover:bg-muted"
+                        className="border-border text-foreground/90 hover:bg-success/10 hover:text-success"
+                        title="Grant points"
                         onClick={() => setGrantTarget(u)}
                       >
                         <Gift className="size-3.5" />
@@ -296,7 +376,8 @@ function AccountsPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="border-border text-foreground/90 hover:bg-muted"
+                        className="border-border text-foreground/90 hover:bg-success/10 hover:text-success"
+                        title="Reinstate"
                         onClick={() =>
                           reinstate.mutate(
                             { id: u._id },
@@ -320,19 +401,23 @@ function AccountsPage() {
                       />
                     )}
                   </div>
-                </td>
-              </tr>
+                </AdminTd>
+              </motion.tr>
             ))}
-            {!isLoading && !data?.users.length && (
+            {!isLoading && !users.length && (
               <tr>
-                <td colSpan={5} className="p-8 text-center text-muted-foreground">
-                  No accounts match.
+                <td colSpan={5} className="p-6">
+                  <AdminEmptyState
+                    icon={Users}
+                    title="No accounts match"
+                    description="Try a different search term or clear the status filter."
+                  />
                 </td>
               </tr>
             )}
           </tbody>
-        </table>
-      </div>
+        </AdminTable>
+      </AdminTableWrap>
 
       <GrantPointsDialog
         user={grantTarget}

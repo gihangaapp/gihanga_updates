@@ -1,0 +1,1 @@
+import{a as e,u as t}from"./utils-C2iKZ1M-.js";import{r as n}from"./link-DKD2USHS.js";var r=t(e(),1);function i(e){let t=n();return r.useCallback(n=>t.navigate({...n,from:n.from??e?.from}),[e?.from,t])}export{i as t};

@@ -302,6 +302,64 @@ var Cake = createLucideIcon("cake", [
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var Calculator = createLucideIcon("calculator", [
+	["rect", {
+		width: "16",
+		height: "20",
+		x: "4",
+		y: "2",
+		rx: "2",
+		key: "1nb95v"
+	}],
+	["line", {
+		x1: "8",
+		x2: "16",
+		y1: "6",
+		y2: "6",
+		key: "x4nwl0"
+	}],
+	["line", {
+		x1: "16",
+		x2: "16",
+		y1: "14",
+		y2: "18",
+		key: "wjye3r"
+	}],
+	["path", {
+		d: "M16 10h.01",
+		key: "1m94wz"
+	}],
+	["path", {
+		d: "M12 10h.01",
+		key: "1nrarc"
+	}],
+	["path", {
+		d: "M8 10h.01",
+		key: "19clt8"
+	}],
+	["path", {
+		d: "M12 14h.01",
+		key: "1etili"
+	}],
+	["path", {
+		d: "M8 14h.01",
+		key: "6423bh"
+	}],
+	["path", {
+		d: "M12 18h.01",
+		key: "mhygvu"
+	}],
+	["path", {
+		d: "M8 18h.01",
+		key: "lrp35t"
+	}]
+]);
+/**
+* @license lucide-react v0.575.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var CalendarClock = createLucideIcon("calendar-clock", [
 	["path", {
 		d: "M16 14v2.2l1.6 1",
@@ -1027,6 +1085,50 @@ var Film = createLucideIcon("film", [
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var FingerprintPattern = createLucideIcon("fingerprint-pattern", [
+	["path", {
+		d: "M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4",
+		key: "1nerag"
+	}],
+	["path", {
+		d: "M14 13.12c0 2.38 0 6.38-1 8.88",
+		key: "o46ks0"
+	}],
+	["path", {
+		d: "M17.29 21.02c.12-.6.43-2.3.5-3.02",
+		key: "ptglia"
+	}],
+	["path", {
+		d: "M2 12a10 10 0 0 1 18-6",
+		key: "ydlgp0"
+	}],
+	["path", {
+		d: "M2 16h.01",
+		key: "1gqxmh"
+	}],
+	["path", {
+		d: "M21.8 16c.2-2 .131-5.354 0-6",
+		key: "drycrb"
+	}],
+	["path", {
+		d: "M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2",
+		key: "1tidbn"
+	}],
+	["path", {
+		d: "M8.65 22c.21-.66.45-1.32.57-2",
+		key: "13wd9y"
+	}],
+	["path", {
+		d: "M9 6.8a6 6 0 0 1 9 5.2v2",
+		key: "1fr1j5"
+	}]
+]);
+/**
+* @license lucide-react v0.575.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Flag = createLucideIcon("flag", [["path", {
 	d: "M4 22V4a1 1 0 0 1 .4-.8A6 6 0 0 1 8 2c3 0 5 2 7.333 2q2 0 3.067-.8A1 1 0 0 1 20 4v10a1 1 0 0 1-.4.8A6 6 0 0 1 16 16c-3 0-5-2-8-2a6 6 0 0 0-4 1.528",
 	key: "1jaruq"
@@ -1423,6 +1525,26 @@ var LayoutDashboard = createLucideIcon("layout-dashboard", [
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var Lightbulb = createLucideIcon("lightbulb", [
+	["path", {
+		d: "M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5",
+		key: "1gvzjb"
+	}],
+	["path", {
+		d: "M9 18h6",
+		key: "x1upvd"
+	}],
+	["path", {
+		d: "M10 22h4",
+		key: "ceow96"
+	}]
+]);
+/**
+* @license lucide-react v0.575.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Link = createLucideIcon("link", [["path", {
 	d: "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71",
 	key: "1cjeqo"
@@ -1530,6 +1652,26 @@ var MapPin = createLucideIcon("map-pin", [["path", {
 	r: "3",
 	key: "ilqhr7"
 }]]);
+/**
+* @license lucide-react v0.575.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
+var Megaphone = createLucideIcon("megaphone", [
+	["path", {
+		d: "M11 6a13 13 0 0 0 8.4-2.8A1 1 0 0 1 21 4v12a1 1 0 0 1-1.6.8A13 13 0 0 0 11 14H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z",
+		key: "q8bfy3"
+	}],
+	["path", {
+		d: "M6 14a12 12 0 0 0 2.4 7.2 2 2 0 0 0 3.2-2.4A8 8 0 0 1 10 14",
+		key: "1853fq"
+	}],
+	["path", {
+		d: "M8 6v8",
+		key: "15ugcq"
+	}]
+]);
 /**
 * @license lucide-react v0.575.0 - ISC
 *
@@ -2678,6 +2820,25 @@ var Timer = createLucideIcon("timer", [
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var ToggleLeft = createLucideIcon("toggle-left", [["circle", {
+	cx: "9",
+	cy: "12",
+	r: "3",
+	key: "u3jwor"
+}], ["rect", {
+	width: "20",
+	height: "14",
+	x: "2",
+	y: "5",
+	rx: "7",
+	key: "g7kal2"
+}]]);
+/**
+* @license lucide-react v0.575.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Trash2 = createLucideIcon("trash-2", [
 	["path", {
 		d: "M10 11v6",
@@ -2700,6 +2861,19 @@ var Trash2 = createLucideIcon("trash-2", [
 		key: "e791ji"
 	}]
 ]);
+/**
+* @license lucide-react v0.575.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
+var TrendingDown = createLucideIcon("trending-down", [["path", {
+	d: "M16 17h6v-6",
+	key: "t6n2it"
+}], ["path", {
+	d: "m22 17-8.5-8.5-5 5L2 7",
+	key: "x473p"
+}]]);
 /**
 * @license lucide-react v0.575.0 - ISC
 *
@@ -2731,6 +2905,38 @@ var TriangleAlert = createLucideIcon("triangle-alert", [
 	["path", {
 		d: "M12 17h.01",
 		key: "p32p05"
+	}]
+]);
+/**
+* @license lucide-react v0.575.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
+var Trophy = createLucideIcon("trophy", [
+	["path", {
+		d: "M10 14.66v1.626a2 2 0 0 1-.976 1.696A5 5 0 0 0 7 21.978",
+		key: "1n3hpd"
+	}],
+	["path", {
+		d: "M14 14.66v1.626a2 2 0 0 0 .976 1.696A5 5 0 0 1 17 21.978",
+		key: "rfe1zi"
+	}],
+	["path", {
+		d: "M18 9h1.5a1 1 0 0 0 0-5H18",
+		key: "7xy6bh"
+	}],
+	["path", {
+		d: "M4 22h16",
+		key: "57wxv0"
+	}],
+	["path", {
+		d: "M6 9a6 6 0 0 0 12 0V3a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1z",
+		key: "1mhfuq"
+	}],
+	["path", {
+		d: "M6 9H4.5a1 1 0 0 1 0-5H6",
+		key: "tex48p"
 	}]
 ]);
 /**
@@ -2936,38 +3142,6 @@ var UserRound = createLucideIcon("user-round", [["circle", {
 	d: "M20 21a8 8 0 0 0-16 0",
 	key: "rfgkzh"
 }]]);
-/**
-* @license lucide-react v0.575.0 - ISC
-*
-* This source code is licensed under the ISC license.
-* See the LICENSE file in the root directory of this source tree.
-*/
-var UserX = createLucideIcon("user-x", [
-	["path", {
-		d: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2",
-		key: "1yyitq"
-	}],
-	["circle", {
-		cx: "9",
-		cy: "7",
-		r: "4",
-		key: "nufk8"
-	}],
-	["line", {
-		x1: "17",
-		x2: "22",
-		y1: "8",
-		y2: "13",
-		key: "3nzzx3"
-	}],
-	["line", {
-		x1: "22",
-		x2: "17",
-		y1: "8",
-		y2: "13",
-		key: "1swrse"
-	}]
-]);
 /**
 * @license lucide-react v0.575.0 - ISC
 *
@@ -3276,4 +3450,4 @@ var ZoomOut = createLucideIcon("zoom-out", [
 	}]
 ]);
 //#endregion
-export { Scissors as $, FileText as $t, TextAlignCenter as A, ChartColumn as An, LogIn as At, SlidersHorizontal as B, AtSign as Bn, ImageOff as Bt, Type as C, CircleAlert as Cn, MessageSquareWarning as Ct, Timer as D, ChevronDown as Dn, MapPin as Dt, Trash2 as E, ChevronLeft as En, Menu as Et, Square as F, Bookmark as Fn, Layers as Ft, ShieldCheck as G, Activity as Gn, Hash as Gt, Shield as H, ArrowRight as Hn, History as Ht, Sparkles as I, Bell as In, Laptop as It, Share2 as J, Gift as Jt, ShieldBan as K, Grid3x3 as Kt, Smile as L, Ban as Ln, Key as Lt, SwitchCamera as M, CalendarDays as Mn, LoaderCircle as Mt, Sun as N, CalendarClock as Nn, Link as Nt, TextAlignStart as O, Check as On, Mail as Ot, Star as P, Cake as Pn, LayoutDashboard as Pt, Search as Q, Film as Qt, Smartphone as R, BadgeCheck as Rn, Info as Rt, Undo2 as S, CircleCheckBig as Sn, MessageSquare as St, TrendingUp as T, ChevronRight as Tn, MessageCircle as Tt, ShieldOff as U, ArrowLeft as Un, Heart as Ut, Signal as V, ArrowUpRight as Vn, House as Vt, ShieldMinus as W, ArrowDownLeft as Wn, HeartHandshake as Wt, Settings2 as X, Flame as Xt, Settings as Y, Gem as Yt, Send as Z, Flag as Zt, UserPlus as _, Clock as _n, Moon as _t, X as a, EllipsisVertical as an, Radio as at, UserCheck as b, CircleQuestionMark as bn, Mic as bt, Wallet as c, DollarSign as cn, Pin as ct, Video as d, CreditCard as dn, Pause as dt, Eye as en, Save as et, VideoOff as f, CornerDownRight as fn, Palette as ft, UserRound as g, CloudUpload as gn, MousePointerClick as gt, UserX as h, Coins as hn, MoveLeft as ht, ZapOff as i, Ellipsis as in, RefreshCw as it, Target as j, Camera as jn, Lock as jt, TextAlignEnd as k, ChartNoAxesColumn as kn, LogOut as kt, VolumeX as l, Database as ln, PhoneOff as lt, User as m, Compass as mn, MoveRight as mt, ZoomIn as n, ExternalLink as nn, RotateCcw as nt, Wifi as o, Earth as on, Plus as ot, Users as p, Copy as pn, Music2 as pt, ShieldAlert as q, Globe as qt, Zap as r, Eraser as rn, Reply as rt, WifiOff as s, Download as sn, Play as st, ZoomOut as t, EyeOff as tn, RotateCw as tt, Volume2 as u, Crop as un, PenTool as ut, UserMinus as v, Circle as vn, Monitor as vt, TriangleAlert as w, ChevronUp as wn, MessageSquareHeart as wt, Upload as x, CircleCheck as xn, MicOff as xt, UserCog as y, CircleStop as yn, Minus as yt, SlidersVertical as z, Award as zn, Image as zt };
+export { Send as $, Gem as $t, TextAlignStart as A, ChevronRight as An, MapPin as At, Smartphone as B, Cake as Bn, Laptop as Bt, Trophy as C, Circle as Cn, MicOff as Ct, Trash2 as D, CircleCheckBig as Dn, MessageCircle as Dt, TrendingDown as E, CircleCheck as En, MessageSquareHeart as Et, Sun as F, ChartColumn as Fn, LoaderCircle as Ft, ShieldOff as G, Award as Gn, House as Gt, SlidersHorizontal as H, Bell as Hn, Info as Ht, Star as I, Camera as In, Link as It, ShieldBan as J, ArrowRight as Jn, HeartHandshake as Jt, ShieldMinus as K, AtSign as Kn, History as Kt, Square as L, CalendarDays as Ln, Lightbulb as Lt, TextAlignCenter as M, ChevronDown as Mn, LogOut as Mt, Target as N, Check as Nn, LogIn as Nt, ToggleLeft as O, CircleAlert as On, Menu as Ot, SwitchCamera as P, ChartNoAxesColumn as Pn, Lock as Pt, Settings2 as Q, Gift as Qt, Sparkles as R, CalendarClock as Rn, LayoutDashboard as Rt, Type as S, Clock as Sn, Mic as St, TrendingUp as T, CircleQuestionMark as Tn, MessageSquareWarning as Tt, Signal as U, Ban as Un, Image as Ut, SlidersVertical as V, Bookmark as Vn, Key as Vt, Shield as W, BadgeCheck as Wn, ImageOff as Wt, Share2 as X, ArrowDownLeft as Xn, Grid3x3 as Xt, ShieldAlert as Y, ArrowLeft as Yn, Hash as Yt, Settings as Z, Activity as Zn, Globe as Zt, UserMinus as _, CornerDownRight as _n, MoveLeft as _t, X as a, Eye as an, Reply as at, Upload as b, Coins as bn, Monitor as bt, Wallet as c, Eraser as cn, Plus as ct, Video as d, Earth as dn, PhoneOff as dt, Flame as en, Search as et, VideoOff as f, Download as fn, PenTool as ft, UserPlus as g, CreditCard as gn, MoveRight as gt, UserRound as h, Crop as hn, Music2 as ht, ZapOff as i, FileText as in, RotateCcw as it, TextAlignEnd as j, ChevronLeft as jn, Mail as jt, Timer as k, ChevronUp as kn, Megaphone as kt, VolumeX as l, Ellipsis as ln, Play as lt, User as m, Database as mn, Palette as mt, ZoomIn as n, FingerprintPattern as nn, Save as nt, Wifi as o, EyeOff as on, RefreshCw as ot, Users as p, DollarSign as pn, Pause as pt, ShieldCheck as q, ArrowUpRight as qn, Heart as qt, Zap as r, Film as rn, RotateCw as rt, WifiOff as s, ExternalLink as sn, Radio as st, ZoomOut as t, Flag as tn, Scissors as tt, Volume2 as u, EllipsisVertical as un, Pin as ut, UserCog as v, Copy as vn, MousePointerClick as vt, TriangleAlert as w, CircleStop as wn, MessageSquare as wt, Undo2 as x, CloudUpload as xn, Minus as xt, UserCheck as y, Compass as yn, Moon as yt, Smile as z, Calculator as zn, Layers as zt };

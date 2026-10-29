@@ -1,0 +1,1 @@
+var e=`/assets/logo-DsDyB9Dx.png`;export{e as t};

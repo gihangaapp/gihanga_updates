@@ -1,17 +1,18 @@
+import { useMemo } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import {
-  AreaChart,
-  Area,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import { Sparkles, TrendingUp, Users } from "lucide-react";
+import { motion } from "motion/react";
+import { Coins, Sparkles, TrendingUp, Users, FileText, Activity } from "lucide-react";
 import { api } from "@/lib/api-client";
 import { formatCount } from "@/lib/format";
+import {
+  AdminPageHeader,
+  AdminCard,
+  AdminCardHeader,
+  AdminStatCard,
+  AdminStatSkeleton,
+} from "@/components/system/AdminUI";
+import { AdminAreaChart, AdminLineChart } from "@/components/system/AdminCharts";
 
 export const Route = createFileRoute("/system/dashboard/growth")({
   component: GrowthPage,
@@ -28,103 +29,144 @@ interface GrowthData {
   };
 }
 
-const tooltipStyle = {
-  background: "#0D111C",
-  border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 12,
-  fontSize: 12,
-  color: "#fff",
-};
-
 function GrowthPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["staff", "growth"],
     queryFn: () => api.get<GrowthData>("/system/growth", true),
   });
 
-  const chartData = (data?.series ?? []).map((d) => ({
-    day: new Date(d.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-    newUsers: d.newUsers,
-    revenue: d.revenue,
-  }));
+  const usersData = useMemo(
+    () =>
+      (data?.series ?? []).map((d) => ({
+        label: new Date(d.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+        "New users": d.newUsers,
+      })),
+    [data],
+  );
+
+  const combinedData = useMemo(
+    () =>
+      (data?.series ?? []).map((d) => ({
+        label: new Date(d.date).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+        "New users": d.newUsers,
+        "New posts": d.newPosts,
+      })),
+    [data],
+  );
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-2 font-display text-2xl font-bold tracking-tight text-foreground">
-          <TrendingUp className="size-6 text-success" /> Platform Growth
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Real signups, posts, and revenue over the last 30 days.
-        </p>
-      </div>
+      <AdminPageHeader
+        icon={TrendingUp}
+        title="Platform Growth"
+        description="Real signups, posts, and revenue over the last 30 days."
+        accent="success"
+      />
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+        <AdminStatSkeleton count={4} />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[
-              { label: "Total users", value: data?.totals.totalUsers ?? 0, icon: Users },
-              { label: "Total creators", value: data?.totals.totalCreators ?? 0, icon: Sparkles },
-              { label: "New users (30d)", value: data?.totals.newUsers30d ?? 0, icon: TrendingUp },
-              { label: "New posts (30d)", value: data?.totals.newPosts30d ?? 0, icon: TrendingUp },
-            ].map((s) => (
-              <div key={s.label} className="rounded-2xl border border-border bg-card p-4">
-                <s.icon className="mb-2 size-4 text-primary" />
-                <p className="font-display text-2xl font-extrabold text-foreground">
-                  {formatCount(s.value)}
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">{s.label}</p>
-              </div>
-            ))}
+          <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+            <AdminStatCard
+              icon={Users}
+              label="Total users"
+              value={formatCount(data?.totals.totalUsers ?? 0)}
+              tone="primary"
+              delay={0}
+            />
+            <AdminStatCard
+              icon={Sparkles}
+              label="Total creators"
+              value={formatCount(data?.totals.totalCreators ?? 0)}
+              tone="accent"
+              delay={0.06}
+            />
+            <AdminStatCard
+              icon={Users}
+              label="New users (30d)"
+              value={formatCount(data?.totals.newUsers30d ?? 0)}
+              tone="aqua"
+              delay={0.12}
+            />
+            <AdminStatCard
+              icon={FileText}
+              label="New posts (30d)"
+              value={formatCount(data?.totals.newPosts30d ?? 0)}
+              tone="info"
+              delay={0.18}
+            />
           </div>
 
-          <div className="rounded-2xl border border-border bg-card p-5">
-            <h2 className="mb-4 text-sm font-bold text-foreground">New users, last 30 days</h2>
-            <div className="h-56 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ left: -18, right: 6, top: 6 }}>
-                  <defs>
-                    <linearGradient id="growthFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#818CF8" stopOpacity={0.5} />
-                      <stop offset="100%" stopColor="#818CF8" stopOpacity={0.02} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
-                  <XAxis
-                    dataKey="day"
-                    tickLine={false}
-                    axisLine={false}
-                    fontSize={11}
-                    stroke="#64748b"
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    fontSize={11}
-                    width={40}
-                    stroke="#64748b"
-                  />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Area
-                    type="monotone"
-                    dataKey="newUsers"
-                    stroke="#818CF8"
-                    strokeWidth={2.5}
-                    fill="url(#growthFill)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+          <AdminCard className="p-5">
+            <AdminCardHeader
+              title="Signups & content creation"
+              subtitle="Daily new users and posts over the last 30 days"
+              action={
+                <div className="flex items-center gap-3 text-[11px] font-semibold text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <span className="size-2 rounded-full bg-chart-1" /> Users
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="size-2 rounded-full bg-chart-4" /> Posts
+                  </span>
+                </div>
+              }
+            />
+            <div className="mt-4">
+              <AdminLineChart
+                data={combinedData}
+                series={[
+                  { key: "New users", name: "New users", colorIndex: 1 },
+                  { key: "New posts", name: "New posts", colorIndex: 4 },
+                ]}
+                height={300}
+              />
             </div>
-          </div>
+          </AdminCard>
 
-          <div className="rounded-2xl border border-border bg-card p-5">
-            <h2 className="mb-1 text-sm font-bold text-foreground">Platform revenue (30d)</h2>
-            <p className="text-3xl font-extrabold text-success">
-              {formatCount(data?.totals.revenue30d ?? 0)} pts
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">From gifts and ad spend combined.</p>
+          <div className="grid gap-5 lg:grid-cols-[1.6fr_1fr]">
+            <AdminCard className="p-5">
+              <AdminCardHeader title="Member growth" subtitle="New users per day" />
+              <div className="mt-4">
+                <AdminAreaChart data={usersData} dataKey="New users" height={240} />
+              </div>
+            </AdminCard>
+
+            <AdminCard className="flex flex-col justify-between p-5">
+              <AdminCardHeader
+                title={
+                  <span className="flex items-center gap-2">
+                    <Coins className="size-4 text-success" /> Platform revenue (30d)
+                  </span>
+                }
+                subtitle="From gifts and ad spend combined"
+              />
+              <div className="mt-6">
+                <p className="font-display text-4xl font-extrabold tracking-tight text-success tabular-nums">
+                  {formatCount(data?.totals.revenue30d ?? 0)}
+                  <span className="ml-1.5 text-base font-bold text-muted-foreground">pts</span>
+                </p>
+                <div className="mt-4 flex items-center gap-2 rounded-xl bg-success/10 px-3.5 py-2.5 text-xs font-semibold text-success">
+                  <Activity className="size-4" />
+                  Kingdom Points economy across gifting and ads
+                </div>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-3 border-t border-border pt-5">
+                <div>
+                  <p className="text-[11px] font-semibold text-muted-foreground">Avg / day</p>
+                  <p className="mt-0.5 font-display text-lg font-extrabold text-foreground tabular-nums">
+                    {formatCount(Math.round((data?.totals.newUsers30d ?? 0) / 30))}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] font-semibold text-muted-foreground">Posts / day</p>
+                  <p className="mt-0.5 font-display text-lg font-extrabold text-foreground tabular-nums">
+                    {formatCount(Math.round((data?.totals.newPosts30d ?? 0) / 30))}
+                  </p>
+                </div>
+              </div>
+            </AdminCard>
           </div>
         </>
       )}

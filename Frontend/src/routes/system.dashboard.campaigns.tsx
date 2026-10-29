@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import {
   Check,
   X,
@@ -11,6 +12,7 @@ import {
   RotateCcw,
   AlertTriangle,
   Sparkles,
+  Target,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -27,6 +29,14 @@ import {
   Advertisement,
 } from "@/hooks/use-ads";
 import { AdPreview } from "@/components/ads/AdPreview";
+import {
+  AdminPageHeader,
+  AdminCard,
+  AdminBadge,
+  AdminSegmented,
+  AdminStatCard,
+  AdminEmptyState,
+} from "@/components/system/AdminUI";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/system/dashboard/campaigns")({
@@ -37,8 +47,18 @@ function rwf(n: number) {
   return `${n.toLocaleString()} RWF`;
 }
 
+const statusTone: Record<string, "warning" | "success" | "muted" | "danger" | "info"> = {
+  pending_review: "warning",
+  active: "success",
+  paused: "info",
+  rejected: "danger",
+  expired: "muted",
+};
+
+type FilterTab = string | undefined;
+
 function StaffCampaignsPage() {
-  const [tab, setTab] = useState<string | undefined>(undefined);
+  const [tab, setTab] = useState<FilterTab>(undefined);
   const { data: campaigns = [], isLoading } = useStaffAds({ status: tab });
   const { data: summary } = useStaffAdSummary();
 
@@ -89,211 +109,219 @@ function StaffCampaignsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-          <Sparkles className="size-6 text-amber-500" /> Advertising Campaigns Oversight
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Review submitted sponsored ads, inspect media and links, approve/reject with audit logs,
-          manage pauses, and process refunds.
-        </p>
+      <AdminPageHeader
+        icon={Target}
+        title="Advertising Campaigns"
+        description="Review submitted sponsored ads, inspect media and links, approve or reject with audit logs, manage pauses and refunds."
+        accent="accent"
+      />
+
+      {/* Summary stats */}
+      <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+        <AdminStatCard
+          icon={Target}
+          label="Total campaigns"
+          value={formatCount(summary?.totalCampaigns ?? 0)}
+          tone="primary"
+          delay={0}
+        />
+        <AdminStatCard
+          icon={AlertTriangle}
+          label="Pending review"
+          value={formatCount(summary?.pendingReview ?? 0)}
+          tone="warning"
+          delay={0.06}
+        />
+        <AdminStatCard
+          icon={Coins}
+          label="Points spent"
+          value={`${formatCount(summary?.totalPointsSpent ?? 0)} GP`}
+          tone="aqua"
+          delay={0.12}
+        />
+        <AdminStatCard
+          icon={Wallet}
+          label="Real money revenue"
+          value={rwf(summary?.totalRwfRevenue ?? 0)}
+          tone="success"
+          delay={0.18}
+        />
       </div>
 
-      {/* Aggregate Overview Bar */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-5">
-        <div className="rounded-2xl border border-border bg-card p-4 text-center">
-          <span className="text-xs text-muted-foreground font-semibold block">Total Campaigns</span>
-          <span className="font-display text-xl font-extrabold text-foreground">
-            {summary?.totalCampaigns ?? 0}
-          </span>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-4 text-center">
-          <span className="text-xs text-muted-foreground font-semibold block">Pending Review</span>
-          <span className="font-display text-xl font-extrabold text-amber-500">
-            {summary?.pendingReview ?? 0}
-          </span>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-4 text-center">
-          <span className="text-xs text-muted-foreground font-semibold block">Active Live</span>
-          <span className="font-display text-xl font-extrabold text-success">
-            {summary?.activeCampaigns ?? 0}
-          </span>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-4 text-center">
-          <span className="text-xs text-muted-foreground font-semibold block">
-            Total Points Spent
-          </span>
-          <span className="font-display text-xl font-extrabold text-amber-500">
-            {formatCount(summary?.totalPointsSpent ?? 0)} GP
-          </span>
-        </div>
-        <div className="rounded-2xl border border-border bg-card p-4 text-center col-span-2 sm:col-span-1">
-          <span className="text-xs text-muted-foreground font-semibold block">
-            Real Money Revenue
-          </span>
-          <span className="font-display text-xl font-extrabold text-primary">
-            {rwf(summary?.totalRwfRevenue ?? 0)}
-          </span>
-        </div>
-      </div>
-
-      {/* Filter Tabs */}
-      <div className="flex flex-wrap gap-1 rounded-2xl border border-border bg-card p-1">
-        {[
-          { id: undefined, label: "All" },
-          { id: "pending_review", label: "Pending Review" },
+      {/* Filter tabs */}
+      <AdminSegmented
+        options={[
+          { id: "", label: "All" },
+          { id: "pending_review", label: "Pending" },
           { id: "active", label: "Active" },
           { id: "paused", label: "Paused" },
           { id: "rejected", label: "Rejected" },
           { id: "expired", label: "Expired" },
-        ].map((s) => (
-          <button
-            key={s.id ?? "all"}
-            type="button"
-            onClick={() => setTab(s.id)}
-            className={cn(
-              "flex-1 rounded-xl px-3 py-2 text-xs font-bold capitalize transition-all",
-              tab === s.id
-                ? "bg-indigo-600 text-white shadow-sm"
-                : "text-muted-foreground hover:bg-muted",
-            )}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
+        ]}
+        value={tab ?? ""}
+        onChange={(id) => setTab(id || undefined)}
+      />
 
       {isLoading && (
-        <p className="py-12 text-center text-sm text-muted-foreground">Loading campaigns…</p>
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-32 animate-pulse rounded-2xl bg-muted/50" />
+          ))}
+        </div>
       )}
 
-      {/* Campaigns Table / List */}
-      <div className="overflow-hidden rounded-3xl border border-border bg-card shadow-sm">
-        <ul className="divide-y divide-border/60">
-          {campaigns.map((c) => {
-            const creator = typeof c.creator === "object" ? c.creator : null;
-            return (
-              <li key={c._id} className="p-5 space-y-4 hover:bg-muted/20 transition-colors">
+      {/* Campaign list */}
+      <div className="space-y-4">
+        {campaigns.map((c, i) => {
+          const creator = typeof c.creator === "object" ? c.creator : null;
+          return (
+            <motion.div
+              key={c._id}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.4) }}
+            >
+              <AdminCard className="p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-base text-foreground truncate">{c.title}</h3>
-                      <span className="rounded-full bg-muted px-2.5 py-0.5 text-[10px] font-bold uppercase text-foreground/90">
+                    <div className="flex items-center gap-2.5">
+                      <h3 className="truncate font-display text-base font-bold text-foreground">
+                        {c.title}
+                      </h3>
+                      <AdminBadge tone={statusTone[c.status] ?? "muted"} dot>
                         {c.status.replace("_", " ")}
-                      </span>
+                      </AdminBadge>
                     </div>
 
-                    <p className="mt-0.5 text-xs text-muted-foreground">
+                    <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
                       By <strong className="text-foreground">@{creator?.username || "user"}</strong>{" "}
                       ({creator?.email}) ·{" "}
-                      <span className="capitalize font-semibold">{c.adType.replace("_", " ")}</span>{" "}
-                      · <span className="capitalize font-semibold">{c.placement} placement</span> ·{" "}
+                      <span className="font-semibold capitalize">{c.adType.replace("_", " ")}</span>{" "}
+                      · <span className="font-semibold capitalize">{c.placement} placement</span> ·{" "}
                       {c.advertisingMinutes} min quota · {c.campaignDurationDays} days
                     </p>
                   </div>
 
-                  {/* Payment Details Badge */}
-                  <div className="flex items-center gap-2 rounded-2xl bg-elevated px-3 py-1.5 text-xs font-semibold">
+                  {/* Payment chip */}
+                  <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-muted/40 px-3 py-2 text-xs font-bold">
                     {c.paymentMethod === "gihanga_points" ? (
                       <>
-                        <Coins className="size-4 text-amber-500" />
-                        <span>{formatCount(c.totalGpCost)} GP</span>
+                        <Coins className="size-4 text-warning" />
+                        <span className="text-foreground tabular-nums">
+                          {formatCount(c.totalGpCost)} GP
+                        </span>
                       </>
                     ) : (
                       <>
                         <Wallet className="size-4 text-primary" />
-                        <span>{rwf(c.totalRwfCost)}</span>
+                        <span className="text-foreground tabular-nums">{rwf(c.totalRwfCost)}</span>
                       </>
                     )}
-                    <span className="ml-1 rounded-md bg-success/15 px-1.5 py-0.5 text-[10px] uppercase font-bold text-success">
+                    <AdminBadge tone={c.paymentStatus === "paid" ? "success" : "warning"}>
                       {c.paymentStatus}
-                    </span>
+                    </AdminBadge>
                   </div>
                 </div>
 
                 {c.rejectionReason && (
-                  <p className="rounded-xl bg-danger/10 p-2.5 text-xs text-danger border border-danger/20">
-                    <strong>Rejection Reason:</strong> {c.rejectionReason}
+                  <p className="mt-3.5 rounded-xl border border-danger/20 bg-danger/5 p-3 text-xs leading-relaxed text-danger">
+                    <strong>Rejection reason:</strong> {c.rejectionReason}
                   </p>
                 )}
 
-                {/* Metrics & Preview Buttons */}
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-3 text-xs">
-                  <div className="flex gap-4 text-muted-foreground">
-                    <span>
-                      Impressions:{" "}
-                      <strong className="text-foreground">
+                {/* Metrics & actions */}
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4 text-xs">
+                  <div className="flex flex-wrap gap-5 text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <Eye className="size-3.5" />{" "}
+                      <strong className="text-foreground tabular-nums">
                         {formatCount(c.analytics?.impressions ?? 0)}
-                      </strong>
+                      </strong>{" "}
+                      impressions
                     </span>
-                    <span>
-                      Clicks:{" "}
-                      <strong className="text-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="size-3.5" />{" "}
+                      <strong className="text-foreground tabular-nums">
                         {formatCount(c.analytics?.clicks ?? 0)}
-                      </strong>
+                      </strong>{" "}
+                      clicks
                     </span>
                     <span>
-                      CTR: <strong className="text-foreground">{c.analytics?.ctr ?? 0}%</strong>
+                      CTR: <strong className="text-foreground tabular-nums">{c.analytics?.ctr ?? 0}%</strong>
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    {/* Preview Ad Button */}
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button size="sm" variant="outline" onClick={() => setPreviewAd(c)}>
-                      <Eye className="mr-1 size-3.5" /> Preview Ad
+                      <Eye className="size-3.5" /> Preview ad
                     </Button>
 
-                    {/* Pending Review Actions */}
                     {c.status === "pending_review" && (
                       <>
                         <Button
                           size="sm"
-                          className="bg-emerald-600 text-white hover:bg-emerald-500"
+                          className="bg-success text-success-foreground hover:bg-success/90"
                           disabled={approveAd.isPending}
                           onClick={() => handleApprove(c._id)}
                         >
-                          <Check className="mr-1 size-3.5" /> Approve
+                          <Check className="size-3.5" /> Approve
                         </Button>
                         <Button size="sm" variant="destructive" onClick={() => setRejectingAd(c)}>
-                          <X className="mr-1 size-3.5" /> Reject
+                          <X className="size-3.5" /> Reject
                         </Button>
                       </>
                     )}
 
-                    {/* Pause / Resume for Active/Paused */}
                     {c.status === "active" && (
-                      <Button size="sm" variant="outline" onClick={() => pauseAd.mutate(c._id)}>
-                        <Pause className="mr-1 size-3.5" /> Pause
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          pauseAd.mutate(c._id, {
+                            onSuccess: () => toast.success("Campaign paused"),
+                          })
+                        }
+                      >
+                        <Pause className="size-3.5" /> Pause
                       </Button>
                     )}
                     {c.status === "paused" && (
-                      <Button size="sm" variant="outline" onClick={() => resumeAd.mutate(c._id)}>
-                        <Play className="mr-1 size-3.5" /> Resume
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          resumeAd.mutate(c._id, {
+                            onSuccess: () => toast.success("Campaign resumed"),
+                          })
+                        }
+                      >
+                        <Play className="size-3.5" /> Resume
                       </Button>
                     )}
 
-                    {/* Refund Button for paid campaigns */}
                     {c.paymentStatus === "paid" && c.status !== "refunded" && (
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="text-amber-500 hover:bg-amber-500/10"
+                        className="text-warning hover:bg-warning/10"
                         onClick={() => handleRefund(c._id)}
                       >
-                        <RotateCcw className="mr-1 size-3.5" /> Refund
+                        <RotateCcw className="size-3.5" /> Refund
                       </Button>
                     )}
                   </div>
                 </div>
-              </li>
-            );
-          })}
-        </ul>
+              </AdminCard>
+            </motion.div>
+          );
+        })}
 
         {!isLoading && !campaigns.length && (
-          <p className="py-16 text-center text-sm text-muted-foreground">
-            No campaigns match this filter.
-          </p>
+          <AdminEmptyState
+            icon={Target}
+            title="No campaigns match this filter"
+            description="Submitted ad campaigns will show up here for review."
+          />
         )}
       </div>
 
@@ -325,12 +353,12 @@ function StaffCampaignsPage() {
         <Dialog open={Boolean(rejectingAd)} onOpenChange={(v) => !v && setRejectingAd(null)}>
           <DialogContent className="sm:max-w-[420px]">
             <DialogHeader>
-              <DialogTitle className="text-danger flex items-center gap-2">
+              <DialogTitle className="flex items-center gap-2 text-danger">
                 <AlertTriangle className="size-5" /> Reject Advertisement
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 pt-2">
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs leading-relaxed text-muted-foreground">
                 Enter a clear explanation for rejecting <strong>"{rejectingAd.title}"</strong>. The
                 advertiser will see this message.
               </p>
@@ -340,15 +368,15 @@ function StaffCampaignsPage() {
                 onChange={(e) => setRejectReason(e.target.value)}
                 rows={3}
                 placeholder="Reason for rejection (e.g. Violates advertising guidelines, misleading link...)"
-                className="w-full rounded-xl border border-border bg-card p-3 text-xs text-foreground outline-none focus:border-danger"
+                className="w-full rounded-xl border border-border bg-card p-3 text-xs text-foreground outline-none focus:border-danger focus:ring-4 focus:ring-danger/10"
               />
 
-              <label className="flex items-center gap-2 text-xs font-semibold text-foreground cursor-pointer">
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-foreground">
                 <input
                   type="checkbox"
                   checked={autoRefundOnReject}
                   onChange={(e) => setAutoRefundOnReject(e.target.checked)}
-                  className="rounded border-border"
+                  className="size-4 rounded border-border accent-[oklch(0.42_0.083_244)]"
                 />
                 Automatically refund payment (
                 {rejectingAd.paymentMethod === "gihanga_points"
@@ -367,7 +395,7 @@ function StaffCampaignsPage() {
                   disabled={rejectAd.isPending}
                   onClick={handleRejectSubmit}
                 >
-                  Confirm Rejection
+                  Confirm rejection
                 </Button>
               </div>
             </div>
