@@ -315,6 +315,7 @@
      public/auth pages retain the browser's native scrollbar. */
   html.app-scrollbar-active {
     scrollbar-width: none;
+    overscroll-behavior-y: contain;
   }
 
   html.app-scrollbar-active::-webkit-scrollbar {
@@ -362,8 +363,11 @@
    remembered intrinsic size keeps long feeds scrollable without collapsing
    off-screen cards before the browser has measured them once. */
 .feed-card {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 620px;
+  /* content-visibility:auto made off-screen cards report a 620px guess and then
+     snap to their real height while scrolling, which made the page (and the
+     custom scrollbar) jump when scrolling back up. Cards keep a stable height
+     now; layout/style containment keeps reflow cheap. */
+  contain: layout style;
 }
 
 @utility glass {
@@ -450,8 +454,7 @@
    On mobile it appears during scrolling then fades away when input stops. */
 .app-scrollbar-track {
   position: fixed;
-  /* Keep the indicator below the bottom nav and other app controls. */
-  z-index: 30;
+  z-index: 60;
   top: calc(4rem + env(safe-area-inset-top));
   right: 1px;
   bottom: 8px;
@@ -493,16 +496,15 @@
   .app-scrollbar-track {
     top: calc(4rem + env(safe-area-inset-top));
     right: 1px;
-    /* BottomNav is 68px high; keep a small gap above it even with safe areas. */
-    bottom: calc(68px + env(safe-area-inset-bottom) + 8px);
+    bottom: calc(4.25rem + env(safe-area-inset-bottom));
     width: 5px;
     opacity: 0;
-    /* Visual-only on touch devices: never steal a vertical swipe and jump the page. */
-    pointer-events: none !important;
+    pointer-events: none;
   }
 
   .app-scrollbar-track.is-scrolling {
     opacity: 0.86;
+    pointer-events: auto;
   }
 }
 

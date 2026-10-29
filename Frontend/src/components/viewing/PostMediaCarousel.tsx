@@ -43,6 +43,10 @@ const RATIO_MIN = 0.4; // extreme-portrait safety clamp only
 const RATIO_MAX = 4; // extreme-panorama safety clamp only
 const DEFAULT_RATIO = 4 / 3; // legacy posts with no metadata at all
 
+// Remember measured ratios across mounts/scrolls so a card never re-flows (and
+// never makes the page jump) when it is re-rendered after scrolling away.
+const ratioCache = new Map<string, number>();
+
 function clampRatio(r: number | undefined): number | undefined {
   if (!r || !Number.isFinite(r) || r <= 0) return undefined;
   return Math.min(RATIO_MAX, Math.max(RATIO_MIN, r));
@@ -83,11 +87,12 @@ export function PostMediaCarousel({
 
   const activeRawUrl = rawUrls[activeIdx] ?? rawUrls[0];
   const activeFullUrl = mediaUrlWithAuth(activeRawUrl);
-  const measuredRatio = measured[rawUrls[0] ?? ""];
-  const activeMeasured = measured[activeRawUrl ?? ""];
+  const measuredRatio = measured[rawUrls[0] ?? ""] ?? ratioCache.get(rawUrls[0] ?? "");
+  const activeMeasured = measured[activeRawUrl ?? ""] ?? ratioCache.get(activeRawUrl ?? "");
   const handleMeasured = (w: number, h: number) => {
     const key = activeRawUrl ?? "";
     if (w > 0 && h > 0 && measured[key] === undefined) {
+      ratioCache.set(key, w / h);
       setMeasured((m) => ({ ...m, [key]: w / h }));
     }
   };
@@ -99,15 +104,12 @@ export function PostMediaCarousel({
     activeItem?.aspectRatio ??
     (activeItem?.width && activeItem?.height ? activeItem.width / activeItem.height : undefined);
   const stageRatio =
-    clampRatio(
-      activeMeasured ??
-        activeItemRatio ??
-        (activeIdx === 0 ? aspectRatio ?? measuredRatio : undefined),
-    ) ?? DEFAULT_RATIO;
-  const intrinsicRatio: number = activeMeasured ?? activeItemRatio ?? stageRatio;
-  // Portrait media and extreme ratios always use contain so the real image or
-  // video remains undistorted when the viewport height limits the stage.
-  const needsContain = Math.abs(intrinsicRatio / stageRatio - 1) > 0.02 || intrinsicRatio < 3.5;
+    clampRatio(activeMeasured ?? activeItemRatio ?? (activeIdx === 0 ? aspectRatio : undefined) ?? measuredRatio) ??
+    DEFAULT_RATIO;
+  // The stage itself takes the media's exact ratio (height is capped by
+  // narrowing the stage, never by letterboxing), so the media always fills it
+  // edge to edge — no blurred side bars.
+  const needsContain = false;
 
   const handleMediaTap = () => {
     const now = Date.now();
@@ -171,14 +173,14 @@ export function PostMediaCarousel({
       }}
       aria-roledescription="carousel"
       aria-label="Post media. Swipe horizontally or use arrow keys to change media. Double tap to like."
-      className="relative mb-3 w-full overflow-hidden rounded-xl bg-black select-none group flex items-center justify-center sm:rounded-2xl"
+      className="relative mx-auto mb-3 overflow-hidden rounded-2xl bg-black select-none group flex items-center justify-center"
       style={{
-        // Preserve the current item's natural shape, but cap its height so the
-        // post and its controls remain usable within short desktop/mobile screens.
+        // Natural shape, full card width (minus the 1rem side margins). Tall
+        // media on large screens narrows the stage proportionally instead of
+        // adding bars, so the picture/video always fits 100%.
         aspectRatio: `${stageRatio ?? DEFAULT_RATIO}`,
-        // Leave room for the post header/caption/actions while allowing common
-        // portrait ratios to keep their full width without artificial side bars.
-        maxHeight: "min(68dvh, 860px)",
+        width: `min(calc(100% - 2rem), calc(min(78dvh, 760px) * ${stageRatio ?? DEFAULT_RATIO}))`,
+        contain: "layout paint",
         touchAction: "pan-y",
       }}
     >
@@ -199,6 +201,7 @@ export function PostMediaCarousel({
               blurDataUrl={blurDataUrl}
               onDoubleTap={onDoubleTapLike}
               onMeasured={handleMeasured}
+              showBackdrop={false}
               className="h-full w-full"
               videoClassName={cn(needsContain ? "object-contain" : "object-cover")}
             />

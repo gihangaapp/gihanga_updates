@@ -20,6 +20,8 @@ export interface ResponsiveVideoProps {
   preloadRootMargin?: string | undefined;
   /** B2 — measured natural size report (lazy aspect-ratio fallback). */
   onMeasured?: ((width: number, height: number) => void) | undefined;
+  /** Blurred letterbox backdrop; feed cards fit exactly so they turn it off. */
+  showBackdrop?: boolean | undefined;
 }
 
 // ── B2 single-play policy ───────────────────────────────────────────────────
@@ -54,6 +56,7 @@ export function ResponsiveVideo({
   playThreshold = 0.6,
   preloadRootMargin = "200% 0px",
   onMeasured,
+  showBackdrop = true,
 }: ResponsiveVideoProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -188,9 +191,9 @@ export function ResponsiveVideo({
       style={aspectRatio ? { aspectRatio: `${aspectRatio}` } : undefined}
     >
       {/* Blurred Backdrop for letterboxed/clamped videos */}
-      {(posterUrl || blurDataUrl) && (
+      {showBackdrop && (posterUrl || blurDataUrl) && (
         <div
-          className="absolute inset-0 size-full bg-cover bg-center filter blur-3xl opacity-85 scale-125"
+          className="absolute inset-0 size-full bg-cover bg-center filter blur-2xl opacity-40 scale-125"
           style={{ backgroundImage: `url(${posterUrl || blurDataUrl})` }}
           aria-hidden="true"
         />

@@ -252,7 +252,7 @@ function HomeFeed() {
           void feed.fetchNextPage().catch(() => undefined);
         }
       },
-      { root: null, rootMargin: "700px 0px", threshold: 0 },
+      { root: null, rootMargin: "1400px 0px", threshold: 0 },
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
@@ -333,20 +333,18 @@ function HomeFeed() {
                 </React.Fragment>
               );
             })}
+            {active.isFetchingNextPage && <PostSkeleton />}
             {active.hasNextPage && (
               <div
                 ref={loadMoreRef}
-                className={active.isFetchingNextPage ? "space-y-2" : "flex min-h-14 items-center justify-center gap-2 py-4 text-xs text-muted-foreground"}
+                className="flex min-h-14 items-center justify-center gap-2 py-4 text-xs text-muted-foreground"
                 aria-live="polite"
                 aria-busy={active.isFetchingNextPage}
               >
                 {active.isFetchingNextPage ? (
                   <>
-                    <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground">
-                      <Loader2 className="size-4 animate-spin text-primary" />
-                      <span>Loading more posts…</span>
-                    </div>
-                    <PostSkeleton />
+                    <Loader2 className="size-4 animate-spin text-primary" />
+                    <span>Loading more posts…</span>
                   </>
                 ) : active.isFetchNextPageError ? (
                   <button

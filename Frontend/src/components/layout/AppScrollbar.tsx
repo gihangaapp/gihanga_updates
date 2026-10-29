@@ -9,6 +9,12 @@ type ScrollMetrics = {
   percent: number;
 };
 
+// clientHeight (not innerHeight) so the mobile URL bar showing/hiding while
+// scrolling doesn't resize the thumb or shift the scroll range.
+const viewportHeight = () => document.documentElement.clientHeight || window.innerHeight;
+const pageHeight = () => Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0);
+const maxScrollTop = () => Math.max(0, pageHeight() - viewportHeight());
+
 const initialMetrics: ScrollMetrics = {
   scrollable: false,
   trackHeight: 0,
@@ -20,6 +26,7 @@ const initialMetrics: ScrollMetrics = {
 export function AppScrollbar() {
   const pathname = useRouterState({ select: (state) => state.location.pathname });
   const trackRef = useRef<HTMLDivElement>(null);
+  const thumbRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startY: number; startScrollY: number } | null>(null);
   const [metrics, setMetrics] = useState(initialMetrics);
   const [isScrolling, setIsScrolling] = useState(false);
@@ -31,16 +38,16 @@ export function AppScrollbar() {
     let idleTimer: number | undefined;
 
     const measure = () => {
-      cancelAnimationFrame(frame);
+      if (frame) return; // coalesce: at most one measurement per frame
       frame = requestAnimationFrame(() => {
-        const doc = document.documentElement;
-        const scrollHeight = Math.max(doc.scrollHeight, document.body?.scrollHeight ?? 0);
-        const viewportHeight = window.innerHeight;
-        const maxScroll = Math.max(0, scrollHeight - viewportHeight);
-        const trackHeight = trackRef.current?.clientHeight ?? Math.max(0, viewportHeight - 72);
+        frame = 0;
+        const scrollHeight = pageHeight();
+        const vh = viewportHeight();
+        const maxScroll = Math.max(0, scrollHeight - vh);
+        const trackHeight = trackRef.current?.clientHeight ?? Math.max(0, vh - 72);
         const scrollable = maxScroll > 8 && trackHeight > 0;
         const thumbHeight = scrollable
-          ? Math.min(trackHeight, Math.max(34, (trackHeight * viewportHeight) / scrollHeight))
+          ? Math.min(trackHeight, Math.max(34, (trackHeight * vh) / scrollHeight))
           : trackHeight;
         const travel = Math.max(0, trackHeight - thumbHeight);
         const percent = maxScroll > 0 ? Math.min(1, Math.max(0, window.scrollY / maxScroll)) : 0;
@@ -51,12 +58,16 @@ export function AppScrollbar() {
           thumbOffset: travel * percent,
           percent: Math.round(percent * 100),
         };
+        // Thumb position goes straight to the DOM (no React render per scroll
+        // frame); React state only changes when the geometry itself changes.
+        if (thumbRef.current) {
+          thumbRef.current.style.transform = `translate3d(0, ${next.thumbOffset}px, 0)`;
+        }
+        trackRef.current?.setAttribute("aria-valuenow", String(next.percent));
         setMetrics((previous) =>
           previous.scrollable === next.scrollable &&
           previous.trackHeight === next.trackHeight &&
-          Math.abs(previous.thumbHeight - next.thumbHeight) < 1 &&
-          Math.abs(previous.thumbOffset - next.thumbOffset) < 1 &&
-          previous.percent === next.percent
+          Math.abs(previous.thumbHeight - next.thumbHeight) < 1
             ? previous
             : next,
         );
@@ -65,7 +76,7 @@ export function AppScrollbar() {
 
     const onScroll = () => {
       if (window.matchMedia("(max-width: 1023px)").matches) {
-        setIsScrolling(true);
+        setIsScrolling(true); // no-op re-render when already true
         if (idleTimer !== undefined) window.clearTimeout(idleTimer);
         idleTimer = window.setTimeout(() => setIsScrolling(false), 850);
       }
@@ -79,10 +90,10 @@ export function AppScrollbar() {
     const resizeObserver = typeof ResizeObserver !== "undefined"
       ? new ResizeObserver(measure)
       : null;
-    resizeObserver?.observe(document.documentElement);
     resizeObserver?.observe(document.body);
     return () => {
       cancelAnimationFrame(frame);
+      frame = 0;
       if (idleTimer !== undefined) window.clearTimeout(idleTimer);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", measure);
@@ -95,11 +106,7 @@ export function AppScrollbar() {
   const scrollFromPointer = (clientY: number, startY: number, startScrollY: number) => {
     const track = trackRef.current;
     if (!track) return;
-    const maxScroll = Math.max(
-      0,
-      Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0) -
-        window.innerHeight,
-    );
+    const maxScroll = maxScrollTop();
     const travel = Math.max(1, track.clientHeight - metrics.thumbHeight);
     const nextScroll = startScrollY + ((clientY - startY) / travel) * maxScroll;
     window.scrollTo({ top: Math.max(0, Math.min(maxScroll, nextScroll)), behavior: "auto" });
@@ -117,11 +124,7 @@ export function AppScrollbar() {
       const relativeY = Math.max(0, Math.min(track.clientHeight, startY - bounds.top));
       const travel = Math.max(1, track.clientHeight - metrics.thumbHeight);
       const destinationOffset = Math.max(0, Math.min(travel, relativeY - metrics.thumbHeight / 2));
-      const maxScroll = Math.max(
-        0,
-        Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0) -
-          window.innerHeight,
-      );
+      const maxScroll = maxScrollTop();
       window.scrollTo({ top: (destinationOffset / travel) * maxScroll, behavior: "auto" });
       dragRef.current = { startY, startScrollY: window.scrollY };
     } else {
@@ -141,17 +144,13 @@ export function AppScrollbar() {
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const maxScroll = Math.max(
-      0,
-      Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0) -
-        window.innerHeight,
-    );
+    const maxScroll = maxScrollTop();
     let top: number | undefined;
     switch (event.key) {
       case "ArrowDown": top = window.scrollY + 48; break;
       case "ArrowUp": top = window.scrollY - 48; break;
-      case "PageDown": top = window.scrollY + window.innerHeight * 0.9; break;
-      case "PageUp": top = window.scrollY - window.innerHeight * 0.9; break;
+      case "PageDown": top = window.scrollY + viewportHeight() * 0.9; break;
+      case "PageUp": top = window.scrollY - viewportHeight() * 0.9; break;
       case "Home": top = 0; break;
       case "End": top = maxScroll; break;
       default: return;
@@ -178,12 +177,12 @@ export function AppScrollbar() {
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={stopDragging}
-      onLostPointerCapture={stopDragging}
       onPointerCancel={stopDragging}
     >
       <div
+        ref={thumbRef}
         className="app-scrollbar-thumb"
-        style={{ height: `${metrics.thumbHeight}px`, transform: `translateY(${metrics.thumbOffset}px)` }}
+        style={{ height: `${metrics.thumbHeight}px` }}
       />
     </div>
   );
