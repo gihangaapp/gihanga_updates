@@ -6,9 +6,10 @@
  *   authenticate -> validate -> quarantine media -> run checks ->
  *   combine -> decide -> apply -> audit -> notify
  *
- * FAIL-CLOSED: no code path in this module can flip content to public
- * visibility unless the decision engine returned APPROVED (or a human
- * reviewer with moderation.assessments.action approved it).
+ * Publication requires an APPROVED result. Configured provider failures stay
+ * fail-closed; when no visual provider is configured at all, the explicit
+ * allowUnscannedMedia fallback can publish verified uploads after caption checks,
+ * with the absence of visual screening recorded for operators.
  */
 
 import crypto from "crypto";
@@ -18,6 +19,7 @@ import { Story } from "../../models/Story";
 import { Comment } from "../../models/Comment";
 import { Media, IMedia } from "../../models/Media";
 import { ModerationRecord, IModerationRecord } from "../../models/ModerationRecord";
+import { ModerationJob } from "../../models/ModerationJob";
 import { User } from "../../models/User";
 import { Follow } from "../../models/Follow";
 import { Hashtag } from "../../models/Hashtag";
@@ -59,6 +61,30 @@ import fs from "fs";
 import path from "path";
 
 const AUTHOR_FIELDS = "name username avatarHue avatarUrl isCreator verified isLive";
+let loggedUnscannedMediaFallback = false;
+
+/**
+ * If no visual provider is configured at all, keep the social publishing flow
+ * usable: captions still pass through the local text policy (and any configured
+ * text provider), uploaded media must resolve to a platform Media record, and
+ * provider failures are NOT treated this way. The moderation audit records the
+ * missing visual check so an operator can add OpenAI/Vision later.
+ */
+function approvedWithoutVisualProvider(textResult: ModerationResult): ModerationResult {
+  return {
+    ...textResult,
+    decision: "APPROVED",
+    error: "No visual moderation provider is configured; caption checks were applied and media was published without visual AI scanning.",
+  };
+}
+
+function logUnscannedMediaFallback() {
+  if (loggedUnscannedMediaFallback) return;
+  loggedUnscannedMediaFallback = true;
+  console.warn(
+    "[Moderation][WARN] No image-capable provider is configured. Verified uploaded media can publish after caption checks, without visual AI scanning. Configure OpenAI Moderation or Google Cloud Vision to enable visual checks.",
+  );
+}
 
 // ────────────────────────────────────────────────────────────────────────────
 // Hash helpers (safe caching / duplicate-scan avoidance)
@@ -222,7 +248,12 @@ export async function moderateText(input: ModerateTextInput): Promise<Moderation
 // Core: image moderation (synchronous when bytes/URL available)
 // ────────────────────────────────────────────────────────────────────────────
 
-export async function moderateImageByBuffer(buffer: Buffer, surface: ContentSurface, ownerId?: string): Promise<ModerationResult> {
+export async function moderateImageByBuffer(
+  buffer: Buffer,
+  surface: ContentSurface,
+  ownerId?: string,
+  mimeType = "image/jpeg",
+): Promise<ModerationResult> {
   const config = getModerationConfig();
   if (!config.enabled) {
     return { decision: "APPROVED", categories: [], severity: "low", criticalEscalation: false, providerOutcomes: [] };
@@ -253,7 +284,7 @@ export async function moderateImageByBuffer(buffer: Buffer, surface: ContentSurf
   for (const provider of imageCapableProviders()) {
     if (provider.capabilities.includes("image")) {
       outcomes.push(
-        await callProvider(provider, () => provider.moderateImage({ buffer, surface })),
+        await callProvider(provider, () => provider.moderateImage({ buffer, mimeType, surface })),
       );
     }
   }
@@ -451,6 +482,35 @@ export async function assessPost(input: AssessPostInput): Promise<ModerationResu
   // 2. Media checks.
   if (hasMedia) {
     const mediaDocs = await resolveMediaDocs(input.mediaUrls ?? [], input.mediaKeys ?? []);
+
+    // Do not leave verified uploads permanently author-only merely because no
+    // visual moderation provider is configured on this deployment. The caption
+    // above has already passed the local text policy (and any configured text
+    // provider); this fallback is NEVER used when a configured provider errors.
+    // Media must resolve to platform-owned records before it can be approved.
+    if (
+      textResult.decision === "APPROVED" &&
+      getModerationConfig().allowUnscannedMedia &&
+      imageCapableProviders().length === 0 &&
+      mediaDocs.length > 0
+    ) {
+      logUnscannedMediaFallback();
+      const fallbackResult = approvedWithoutVisualProvider(textResult);
+      const record = await persistAssessment(
+        {
+          contentType: "post",
+          contentId: input.postId,
+          authorId: input.authorId,
+          surface: "post",
+          mediaIds: mediaDocs.map((media) => String(media._id)),
+          mediaHash: mediaDocs[0]?.contentHash,
+        },
+        fallbackResult,
+      );
+      await applyPostDecision(input.postId, fallbackResult, record);
+      return fallbackResult;
+    }
+
     if (isVideo) {
       // Videos: always async (frame sampling). Content stays "processing".
       const enqueue = await enqueueModerationJob({
@@ -542,6 +602,123 @@ export async function assessPost(input: AssessPostInput): Promise<ModerationResu
   );
   await applyPostDecision(input.postId, textResult, record);
   return textResult;
+}
+
+/**
+ * One-time startup repair for posts that were already stranded in processing
+ * solely because the old code found zero usable visual providers. This is
+ * deliberately narrow: records must say FAILED with no provider outcomes and
+ * the exact "No safety check was able to run" error (or the corresponding
+ * no-frame error for videos). Posts flagged for human review or rejected are
+ * never auto-published by this repair.
+ */
+export async function recoverPostsStuckWithoutVisualProvider(): Promise<number> {
+  const config = getModerationConfig();
+  if (!config.enabled || !config.allowUnscannedMedia || imageCapableProviders().length > 0) return 0;
+
+  const candidates = await Post.find({
+    status: "processing",
+    "moderation.status": "failed",
+  })
+    .sort({ createdAt: 1 })
+    .limit(200);
+
+  let recovered = 0;
+  for (const post of candidates) {
+    const priorFailure = await ModerationRecord.findOne({
+      contentType: "post",
+      contentId: post._id,
+      decision: "FAILED",
+      error: { $in: ["No safety check was able to run", "Video frames could not be extracted for verification"] },
+    }).sort({ createdAt: -1 });
+    if (!priorFailure || (priorFailure.providerOutcomes?.length ?? 0) > 0) continue;
+
+    const captionResult = await moderateText({
+      text: post.body || "",
+      surface: post.kind === "reel" ? "reel" : "post",
+    });
+    if (captionResult.decision !== "APPROVED") continue;
+
+    const mediaUrls = String(post.mediaUrl ?? "").split(",").map((url) => url.trim()).filter(Boolean);
+    const mediaDocs = await resolveMediaDocs(mediaUrls, post.mediaKey ? [String(post.mediaKey)] : []);
+    if (mediaDocs.length === 0) continue;
+
+    logUnscannedMediaFallback();
+    const result = approvedWithoutVisualProvider(captionResult);
+    const record = await persistAssessment(
+      {
+        contentType: "post",
+        contentId: String(post._id),
+        authorId: String(post.author),
+        surface: "post",
+        mediaIds: mediaDocs.map((media) => String(media._id)),
+        mediaHash: mediaDocs[0]?.contentHash,
+      },
+      result,
+    );
+    await applyPostDecision(String(post._id), result, record);
+    recovered += 1;
+  }
+
+  return recovered;
+}
+
+/**
+ * One-time recovery for posts that were held because the previous OpenAI
+ * adapter could not accept raw image/video-frame buffers. The adapter now
+ * sends those bytes as a supported base64 data URL. Only this exact technical
+ * input failure is retried; safety rejections, human-review decisions, and
+ * actual provider outages are not auto-published.
+ */
+export async function recoverPostsWithUnsupportedMediaInput(): Promise<number> {
+  const candidates = await Post.find({
+    status: "processing",
+    "moderation.status": { $in: ["failed", "pending_review"] },
+  })
+    .sort({ createdAt: 1 })
+    .limit(200);
+
+  let retried = 0;
+  for (const post of candidates) {
+    if (!["photo", "video", "reel"].includes(String(post.kind))) continue;
+    const priorFailure = await ModerationRecord.findOne({
+      contentType: "post",
+      contentId: post._id,
+      providerOutcomes: {
+        $elemMatch: { verdict: "error", error: "Provider cannot process this input type" },
+      },
+    }).sort({ createdAt: -1 });
+    if (!priorFailure) continue;
+    const hadUnsupportedProvider = (priorFailure.providerOutcomes ?? []).some(
+      (outcome: any) => outcome?.verdict === "error" && outcome?.error === "Provider cannot process this input type",
+    );
+    if (!hadUnsupportedProvider) continue;
+
+    const mediaUrls = String(post.mediaUrl ?? "").split(",").map((url) => url.trim()).filter(Boolean);
+    if (mediaUrls.length === 0 && !post.mediaKey) continue;
+
+    // A previous video/image-batch job may have completed with this unsupported
+    // input error. Mark only those completed jobs retryable; queued jobs remain
+    // untouched and will run with the updated adapter once the queue starts.
+    await ModerationJob.updateMany(
+      {
+        jobKey: { $in: [`post:video:${String(post._id)}`, `post:images:${String(post._id)}`] },
+        status: "done",
+      },
+      { $set: { status: "failed", lastError: "Retrying with image-buffer support" } },
+    );
+
+    await assessPost({
+      postId: String(post._id),
+      authorId: String(post.author),
+      body: String(post.body ?? ""),
+      kind: post.kind as "photo" | "video" | "reel",
+      mediaUrls,
+      mediaKeys: post.mediaKey ? [String(post.mediaKey)] : [],
+    });
+    retried += 1;
+  }
+  return retried;
 }
 
 /** Applies a decision to the Post document (visibility + messaging). */
@@ -668,7 +845,7 @@ export async function moderateMediaDoc(
     const localPath = candidates.find((candidate) => fs.existsSync(candidate));
     if (localPath) {
       const buffer = fs.readFileSync(localPath);
-      return moderateImageByBuffer(buffer, surface, ownerId);
+      return moderateImageByBuffer(buffer, surface, ownerId, media.mimeType);
     }
   }
   // Legacy or missing: fail-closed when the pipeline is on.
@@ -1155,7 +1332,7 @@ async function moderateVideoFrames(media: IMedia | undefined, ownerId: string): 
     if (fs.existsSync(localPath)) {
       const frames = await extractFramesLocally(localPath, plan.timestamps);
       for (const frame of frames) {
-        const result = await moderateImageByBuffer(frame.buffer, "post", ownerId);
+        const result = await moderateImageByBuffer(frame.buffer, "post", ownerId, "image/jpeg");
         results.push(result);
         if (result.decision === "REJECTED") break;
       }

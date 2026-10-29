@@ -172,7 +172,11 @@ export const googleVisionProvider: ModerationProvider = {
 
   isConfigured() {
     const config = getModerationConfig();
-    return config.visionEnabled && config.visionCredentialsPresent && config.visionProjectIdPresent;
+    if (!config.visionEnabled || !config.visionCredentialsPresent || !config.visionProjectIdPresent) return false;
+    // Presence of a path is not enough: a stale/malformed Render Secret File
+    // must not count as a usable required provider and hold every post forever.
+    const credentials = inspectVisionCredentials();
+    return credentials.status === "ok" && !credentials.projectIdMismatch;
   },
 
   async moderateText(_params: ModerateTextParams): Promise<CategoryAssessment[]> {

@@ -16,6 +16,8 @@ export interface ModerateTextParams {
 
 export interface ModerateImageParams {
   buffer?: Buffer;
+  /** MIME type for byte-backed images (including sampled video frames). */
+  mimeType?: string;
   url?: string;
   surface: string;
 }

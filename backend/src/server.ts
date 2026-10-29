@@ -13,7 +13,7 @@ import { startAchievementSweeper } from "./lib/achievementSweeper";
 import { startStorySweeper } from "./lib/storySweeper";
 import { verifyMailer } from "./lib/mailer";
 import { ensureDefaultAchievementDefinitions } from "./services/achievementService";
-import { registerModerationJobHandler } from "./services/moderation/contentModerationService";
+import { registerModerationJobHandler, recoverPostsStuckWithoutVisualProvider, recoverPostsWithUnsupportedMediaInput } from "./services/moderation/contentModerationService";
 import { startModerationQueue, recoverStuckJobs } from "./services/moderation/moderationQueue";
 import { publicSummary } from "./lib/moderation/config";
 import { inspectVisionCredentials } from "./lib/moderation/visionCredentials";
@@ -117,7 +117,17 @@ async function startServer() {
     // of truth, so nothing is lost and nothing publishes unverified.
     registerModerationJobHandler();
     recoverStuckJobs()
-      .then(() => startModerationQueue())
+      .then(async () => {
+        const recoveredPosts = await recoverPostsStuckWithoutVisualProvider();
+        if (recoveredPosts > 0) {
+          console.warn(`[Moderation] Published ${recoveredPosts} previously stuck post(s) after caption checks; no visual AI provider is configured.`);
+        }
+        const retriedPosts = await recoverPostsWithUnsupportedMediaInput();
+        if (retriedPosts > 0) {
+          console.warn(`[Moderation] Retried ${retriedPosts} post(s) held by the previous unsupported-media input path.`);
+        }
+        startModerationQueue();
+      })
       .catch((err) => console.error("[ModerationQueue] startup failed:", err));
 
     // Startup configuration surface — secret-free summary + warnings.

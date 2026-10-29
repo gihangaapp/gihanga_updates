@@ -94,17 +94,26 @@ export const openaiModerationProvider: ModerationProvider = {
     if (!this.isConfigured()) {
       throw new ProviderCallError("OpenAI provider is disabled or unconfigured", { retryable: false });
     }
-    if (!params.url) {
-      // The moderations endpoint takes image URLs, not raw uploads.
-      throw new ProviderInputUnsupportedError(
-        "OpenAI image moderation requires a publicly fetchable image URL",
-      );
+
+    // The Moderation API accepts image URLs and base64 data URLs. Raw uploaded
+    // images and sampled video frames are buffers, not publicly fetchable URLs;
+    // wrapping those bytes as a data URL lets OpenAI moderate them without
+    // exposing quarantined media through a public URL or making the check fail.
+    const supportedMimeTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+    const mimeType = params.mimeType?.toLowerCase().split(";")[0].trim();
+    const imageUrl = params.url || (params.buffer
+      ? `data:${mimeType && supportedMimeTypes.has(mimeType) ? mimeType : "image/jpeg"};base64,${params.buffer.toString("base64")}`
+      : undefined);
+
+    if (!imageUrl) {
+      throw new ProviderInputUnsupportedError("OpenAI image moderation requires image bytes or a URL");
     }
+
     try {
       return await callModerations([
         {
           type: "image_url",
-          image_url: { url: params.url },
+          image_url: { url: imageUrl },
         } as never,
       ]);
     } catch (err: any) {

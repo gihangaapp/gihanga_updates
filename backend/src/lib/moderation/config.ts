@@ -46,8 +46,10 @@ function envNumber(
 export interface ModerationConfig {
   /** Master switch — when false the pipeline is bypassed entirely (local dev). */
   enabled: boolean;
-  /** Fail-closed: failed/timed-out required checks never approve content. */
+  /** Fail-closed: failed/timed-out configured checks never approve content. */
   failClosed: boolean;
+  /** Allow publishing verified uploads after caption checks only when no visual provider exists. */
+  allowUnscannedMedia: boolean;
   /** Normalized score >= reviewThreshold on a non-critical category -> PENDING_REVIEW. */
   reviewThreshold: number;
   /** Normalized score >= blockThreshold -> REJECTED. */
@@ -146,16 +148,25 @@ export function getModerationConfig(): ModerationConfig {
     warnings.push("Stub provider requested but refused in production (NODE_ENV=production)");
   }
 
+  const visionCredentialReport = visionCredentialsPresent ? inspectVisionCredentials() : undefined;
+  const visionProviderUsable =
+    visionEnabled &&
+    visionCredentialsPresent &&
+    visionProjectIdPresent &&
+    visionCredentialReport?.status === "ok" &&
+    !visionCredentialReport.projectIdMismatch;
+
   const anyProviderConfigured =
     (openaiEnabled && openaiApiKeyPresent) ||
-    (visionEnabled && visionCredentialsPresent && visionProjectIdPresent) ||
+    visionProviderUsable ||
     stubProviderEnabled;
 
   if (envBool("CONTENT_MODERATION_ENABLED", true) && !anyProviderConfigured) {
     warnings.push(
       "CONTENT_MODERATION_ENABLED=true but NO AI provider is fully configured. " +
-        "The pipeline still enforces local prohibited-term policy for text, but media " +
-        "will be held for human review (fail-closed). See docs/MODERATION_SETUP.md.",
+        "Captions still use local prohibited-term checks; posts with verified uploaded media " +
+        "can publish without visual AI scanning so they are not stranded in processing. " +
+        "Configure OpenAI Moderation or Google Cloud Vision for visual checks. See docs/MODERATION_SETUP.md.",
     );
   }
 
@@ -167,12 +178,11 @@ export function getModerationConfig(): ModerationConfig {
     } else if (!visionCredentialsPresent && visionProjectIdPresent) {
       warnings.push("[Vision] GOOGLE_CLOUD_PROJECT_ID is set but GOOGLE_APPLICATION_CREDENTIALS is missing — Vision stays inactive.");
     }
-    if (visionCredentialsPresent) {
-      const cred = inspectVisionCredentials();
+    if (visionCredentialsPresent && visionCredentialReport) {
       // safeMessage is path-free: warnings are exposed through publicSummary()
       // (staff API), which must never reveal the credentials path.
-      if (cred.status !== "ok") warnings.push(`[Vision] ${cred.safeMessage}`);
-      else if (cred.projectIdMismatch) warnings.push(`[Vision] ${cred.safeMessage}`);
+      if (visionCredentialReport.status !== "ok") warnings.push(`[Vision] ${visionCredentialReport.safeMessage}`);
+      else if (visionCredentialReport.projectIdMismatch) warnings.push(`[Vision] ${visionCredentialReport.safeMessage}`);
     }
   }
   if (openaiEnabled && !openaiApiKeyPresent) {
@@ -185,6 +195,7 @@ export function getModerationConfig(): ModerationConfig {
   cachedConfig = {
     enabled: envBool("CONTENT_MODERATION_ENABLED", true),
     failClosed: envBool("CONTENT_MODERATION_FAIL_CLOSED", true),
+    allowUnscannedMedia: envBool("CONTENT_MODERATION_ALLOW_UNSCANNED_MEDIA", true),
     reviewThreshold,
     blockThreshold,
     timeoutMs: envNumber("CONTENT_MODERATION_TIMEOUT_MS", 15000, { min: 2000, max: 60000 }, warnings),
@@ -252,9 +263,18 @@ export function configWarnings(): string[] {
  */
 export function publicSummary() {
   const c = getModerationConfig();
+  const visionCredentialReport = c.visionCredentialsPresent ? inspectVisionCredentials() : undefined;
+  const visionProviderUsable = Boolean(
+    c.visionEnabled &&
+    c.visionCredentialsPresent &&
+    c.visionProjectIdPresent &&
+    visionCredentialReport?.status === "ok" &&
+    !visionCredentialReport.projectIdMismatch
+  );
   return {
     enabled: c.enabled,
     failClosed: c.failClosed,
+    allowUnscannedMedia: c.allowUnscannedMedia,
     reviewThreshold: c.reviewThreshold,
     blockThreshold: c.blockThreshold,
     providers: {
@@ -265,16 +285,16 @@ export function publicSummary() {
       },
       googleVision: {
         enabled: c.visionEnabled,
-        configured: c.visionCredentialsPresent && c.visionProjectIdPresent,
+        configured: visionProviderUsable,
         // Status enum only — never file contents. "ok" means the key file looks
         // valid, NOT that Google has accepted it (only a live call proves that).
-        credentialFile: c.visionCredentialsPresent ? inspectVisionCredentials().status : "not_configured",
+        credentialFile: visionCredentialReport?.status ?? "not_configured",
       },
       stub: { enabled: c.stubProviderEnabled },
     },
     anyProviderConfigured:
       (c.openaiEnabled && c.openaiApiKeyPresent) ||
-      (c.visionEnabled && c.visionCredentialsPresent && c.visionProjectIdPresent) ||
+      visionProviderUsable ||
       c.stubProviderEnabled,
     queue: {
       concurrency: c.queueConcurrency,
