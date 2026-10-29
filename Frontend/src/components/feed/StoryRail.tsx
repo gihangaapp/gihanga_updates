@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 
 export function StoryRail() {
   const { user: me } = useSessionUser();
-  const { data } = useStories();
+  const { data, isLoading } = useStories();
   const railRef = useRef<HTMLDivElement>(null);
   const [viewing, setViewing] = useState<number | null>(null);
 
@@ -26,7 +26,13 @@ export function StoryRail() {
         className="flex gap-4 overflow-x-auto pb-1 no-scrollbar"
         style={{ scrollSnapType: "x proximity" }}
       >
-        <button
+        {isLoading && Array.from({ length: 6 }, (_, index) => (
+          <div key={`story-skeleton-${index}`} className="flex w-[72px] shrink-0 flex-col items-center gap-1.5" aria-hidden="true">
+            <div className="shimmer size-16 rounded-full bg-muted" />
+            <div className="shimmer h-2.5 w-14 rounded-full bg-muted" />
+          </div>
+        ))}
+        {!isLoading && <button
           type="button"
           onClick={() => (myGroupIndex >= 0 ? setViewing(myGroupIndex) : openCreate("story"))}
           className="press flex w-[72px] shrink-0 flex-col items-center gap-1.5"
@@ -51,9 +57,9 @@ export function StoryRail() {
             </span>
           </span>
           <span className="w-full truncate text-center text-[11px] font-semibold">Your story</span>
-        </button>
+        </button>}
 
-        {others.map((group) => (
+        {!isLoading && others.map((group) => (
           <button
             key={group.author.username}
             type="button"

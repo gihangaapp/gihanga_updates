@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeft, ChevronRight, Heart } from "lucide-react";
 import { mediaUrlWithAuth } from "@/lib/api-client";
@@ -33,13 +33,11 @@ interface PostMediaCarouselProps {
 /**
  * B1/B2 — best-fit media stage.
  *
- * The container height is the image's OWN height at container width, clamped
- * to a sensible range: aspect ratio clamped to [4:5 portrait … 1.91:1
- * landscape] and max height ≈ min(80dvh, 720px). Nothing important is ever
- * cropped — when the ratio or the height clamp kicks in, the media renders
- * object-contain over a blurred backdrop of itself. Space is reserved via
- * aspect-ratio BEFORE load (zero layout shift), with a lazy natural-size
- * fallback for legacy posts that never persisted their geometry.
+ * Each active item uses its own measured/persisted aspect ratio and the stage
+ * is capped at 56dvh (or 680px) so feed cards stay compact on short screens.
+ * Nothing important is cropped: common photo/video ratios use object-contain
+ * over a blurred backdrop when the stage is height-limited. Aspect-ratio
+ * reserves space before load, with a natural-size fallback for legacy posts.
  */
 const RATIO_MIN = 0.4; // extreme-portrait safety clamp only
 const RATIO_MAX = 4; // extreme-panorama safety clamp only
@@ -94,23 +92,19 @@ export function PostMediaCarousel({
     }
   };
 
-  // B1.4 — the stage ratio is the FIRST item's ratio (or the tallest clamped
-  // one), so swiping multi-image posts never jumps the layout.
-  const firstItem = mediaItems?.find((m) => m.url === rawUrls[0]);
-  const firstItemRatio =
-    firstItem?.aspectRatio ??
-    (firstItem?.width && firstItem?.height ? firstItem.width / firstItem.height : undefined);
-  const stageRatio = clampRatio(measuredRatio ?? aspectRatio ?? firstItemRatio) ?? DEFAULT_RATIO;
+  // Each carousel item uses its own measured/persisted dimensions. That lets a
+  // portrait slide and a landscape slide use the most natural stage height.
   const activeItem = mediaItems?.find((m) => m.url === activeRawUrl);
   const activeItemRatio =
     activeItem?.aspectRatio ??
     (activeItem?.width && activeItem?.height ? activeItem.width / activeItem.height : undefined);
-  const intrinsicRatio: number =
-    activeMeasured ?? activeItemRatio ?? (activeIdx === 0 ? aspectRatio : undefined) ?? stageRatio;
-  // Cover (edge-to-edge, no bars) whenever the media matches the stage ratio;
-  // contain only when it genuinely differs (extreme clamp, or a carousel item
-  // with a different shape than the first) so nothing is ever cropped.
-  const needsContain = Math.abs(intrinsicRatio / stageRatio - 1) > 0.02;
+  const stageRatio =
+    clampRatio(activeMeasured ?? activeItemRatio ?? (activeIdx === 0 ? aspectRatio : undefined) ?? measuredRatio) ??
+    DEFAULT_RATIO;
+  const intrinsicRatio: number = activeMeasured ?? activeItemRatio ?? stageRatio;
+  // Portrait media and extreme ratios always use contain so the real image or
+  // video remains undistorted when the viewport height limits the stage.
+  const needsContain = Math.abs(intrinsicRatio / stageRatio - 1) > 0.02 || intrinsicRatio < 3.5;
 
   const handleMediaTap = () => {
     const now = Date.now();
@@ -161,13 +155,26 @@ export function PostMediaCarousel({
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      onKeyDown={(e) => e.key === "Enter" && onDoubleTapLike && onDoubleTapLike()}
-      aria-label="Double tap to like or swipe to view next image"
+      onKeyDown={(e) => {
+        if (e.key === "ArrowRight" && activeIdx < rawUrls.length - 1) {
+          e.preventDefault();
+          setActiveIdx((prev) => prev + 1);
+        } else if (e.key === "ArrowLeft" && activeIdx > 0) {
+          e.preventDefault();
+          setActiveIdx((prev) => prev - 1);
+        } else if (e.key === "Enter" && onDoubleTapLike) {
+          onDoubleTapLike();
+        }
+      }}
+      aria-roledescription="carousel"
+      aria-label="Post media. Swipe horizontally or use arrow keys to change media. Double tap to like."
       className="relative mx-4 mb-3 w-[calc(100%-2rem)] overflow-hidden rounded-2xl bg-black select-none group flex items-center justify-center"
       style={{
-        // B1.3 — the media's own height at container width (true ratio, no
-        // letterbox bars). Reserved BEFORE load → zero layout shift.
+        // Preserve the current item's natural shape, but cap its height so the
+        // post and its controls remain usable within short desktop/mobile screens.
         aspectRatio: `${stageRatio ?? DEFAULT_RATIO}`,
+        maxHeight: "min(56dvh, 680px)",
+        touchAction: "pan-y",
       }}
     >
       {/* Current Active Item Stage */}

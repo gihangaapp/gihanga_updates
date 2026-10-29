@@ -58,8 +58,8 @@ function Panel({
 }
 
 export function RightRail() {
-  const { data: tagsData } = useTrendingTags();
-  const { data: suggestedData } = useSuggestedUsers();
+  const { data: tagsData, isLoading: isTagsLoading } = useTrendingTags();
+  const { data: suggestedData, isLoading: isSuggestedLoading } = useSuggestedUsers();
   const followUser = useFollowUser();
   const { data: followingSet } = useFollowingSet();
   const tags = (tagsData?.tags ?? []).slice(0, 5);
@@ -72,73 +72,102 @@ export function RightRail() {
   );
 
   return (
-    <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-[336px] shrink-0 flex-col gap-4 overflow-y-auto px-4 py-5 no-scrollbar xl:flex">
-      {tags.length > 0 && (
+    <aside className="sticky top-16 hidden h-[calc(100dvh-4rem)] w-[336px] min-w-0 shrink-0 flex-col gap-4 overflow-x-hidden overflow-y-auto overscroll-y-contain px-4 py-5 custom-scrollbar xl:flex">
+      {(tags.length > 0 || isTagsLoading) && (
         <Panel title="Trending" icon={Flame} action="Explore">
-          <ul className="flex flex-col">
-            {tags.map((t, i) => (
-              <li key={t.tag}>
-                <Link
-                  to="/tag/$tag"
-                  params={{ tag: t.tag }}
-                  className="press group flex w-full items-center gap-3 rounded-xl px-1.5 py-2 text-left hover:bg-muted"
-                >
-                  <span className="w-4 font-display text-sm font-bold text-muted-foreground">
-                    {i + 1}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-bold">#{t.tag}</span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {formatCount(t.postsCount)} posts
-                    </span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-      )}
-
-      {suggested.length > 0 && (
-        <Panel title="Suggested creators" icon={Sparkles}>
-          <ul className="flex flex-col gap-2.5">
-            {suggested.map((u) => {
-              const following = followingSet?.has(u.username) ?? false;
-              return (
-                <li key={u._id} className="flex items-center gap-3">
-                  <Link to="/profile/$username" params={{ username: u.username }}>
-                    <GAvatar user={toDisplayUser(u)} size="sm" />
-                  </Link>
-                  <span className="min-w-0 flex-1">
-                    <UserName user={toDisplayUser(u)} className="text-sm" />
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {formatCount(u.followersCount)} followers
-                    </span>
-                  </span>
-                  <Button
-                    variant={following ? "soft" : "default"}
-                    size="sm"
-                    onClick={() => {
-                      followUser.mutate({ username: u.username, follow: !following });
-                      if (!following) toast.success(`Following @${u.username}`);
-                    }}
-                    className="shrink-0"
+          {isTagsLoading && tags.length === 0 ? (
+            <div className="space-y-3" aria-label="Loading trending topics" aria-busy="true">
+              {Array.from({ length: 5 }, (_, index) => (
+                <div key={`tag-skeleton-${index}`} className="flex items-center gap-3 px-1.5 py-1">
+                  <div className="shimmer h-4 w-4 rounded bg-muted" />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="shimmer h-3.5 w-2/3 rounded-full bg-muted" />
+                    <div className="shimmer h-2.5 w-1/3 rounded-full bg-muted" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <ul className="flex flex-col">
+              {tags.map((t, i) => (
+                <li key={t.tag}>
+                  <Link
+                    to="/tag/$tag"
+                    params={{ tag: t.tag }}
+                    className="press group flex w-full items-center gap-3 rounded-xl px-1.5 py-2 text-left hover:bg-muted"
                   >
-                    {following ? "Following" : "Follow"}
-                  </Button>
+                    <span className="w-4 font-display text-sm font-bold text-muted-foreground">
+                      {i + 1}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-bold">#{t.tag}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {formatCount(t.postsCount)} posts
+                      </span>
+                    </span>
+                  </Link>
                 </li>
-              );
-            })}
-          </ul>
+              ))}
+            </ul>
+          )}
         </Panel>
       )}
 
-      <section className="surface-card halo relative overflow-hidden p-4">
+      {(suggested.length > 0 || isSuggestedLoading) && (
+        <Panel title="Suggested creators" icon={Sparkles}>
+          {isSuggestedLoading && suggested.length === 0 ? (
+            <div className="space-y-3" aria-label="Loading suggested creators" aria-busy="true">
+              {Array.from({ length: 5 }, (_, index) => (
+                <div key={`creator-skeleton-${index}`} className="flex items-center gap-3">
+                  <div className="shimmer size-9 shrink-0 rounded-full bg-muted" />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="shimmer h-3.5 w-3/4 rounded-full bg-muted" />
+                    <div className="shimmer h-2.5 w-1/2 rounded-full bg-muted" />
+                  </div>
+                  <div className="shimmer h-7 w-16 shrink-0 rounded-full bg-muted" />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-2.5">
+              {suggested.map((u) => {
+                const following = followingSet?.has(u.username) ?? false;
+                return (
+                  <li key={u._id} className="flex items-center gap-3">
+                    <Link to="/profile/$username" params={{ username: u.username }}>
+                      <GAvatar user={toDisplayUser(u)} size="sm" />
+                    </Link>
+                    <span className="min-w-0 flex-1">
+                      <UserName user={toDisplayUser(u)} className="text-sm" />
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {formatCount(u.followersCount)} followers
+                      </span>
+                    </span>
+                    <Button
+                      variant={following ? "soft" : "default"}
+                      size="sm"
+                      onClick={() => {
+                        followUser.mutate({ username: u.username, follow: !following });
+                        if (!following) toast.success(`Following @${u.username}`);
+                      }}
+                      className="shrink-0"
+                    >
+                      {following ? "Following" : "Follow"}
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Panel>
+      )}
+
+      <section className="surface-card halo relative min-w-0 shrink-0 overflow-hidden p-4">
         <span className="mb-2 inline-block rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-bold tracking-wider text-muted-foreground uppercase">
           Sponsored
         </span>
-        <h3 className="font-display text-base font-bold">Grow with Gihanga Ads</h3>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h3 className="break-words font-display text-base font-bold leading-snug">Grow with Gihanga Ads</h3>
+        <p className="mt-1 break-words text-sm leading-relaxed text-muted-foreground [overflow-wrap:anywhere]">
           Reach viewers and creators across Rwanda with campaign budgets from 5,000 RWF.
         </p>
         <Button variant="outline" size="sm" className="mt-3" asChild>
@@ -149,7 +178,7 @@ export function RightRail() {
         </Button>
       </section>
 
-      <p className="px-1.5 pb-4 text-xs leading-relaxed text-muted-foreground">
+      <p className="shrink-0 break-words px-1.5 pb-4 text-xs leading-relaxed text-muted-foreground">
         About · Help · Guidelines · Privacy · Terms
         <br />© 2026 Gihanga Updates
       </p>

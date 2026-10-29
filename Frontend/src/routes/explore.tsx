@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "motion/react";
 import {
@@ -86,9 +86,18 @@ export function ExplorePage() {
   const [activeTab, setActiveTab] = useState<ExploreTab>("all");
   const [userFilter, setUserFilter] = useState<"all" | "creators" | "verified">("all");
   const [visibleCount, setVisibleCount] = useState(24);
+  const [debouncedTerm, setDebouncedTerm] = useState("");
 
   const term = q.trim();
-  const search = useSearch(term);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedTerm(term), 250);
+    return () => window.clearTimeout(timer);
+  }, [term]);
+  const search = useSearch(debouncedTerm);
+  const searchPending = Boolean(
+    term && (term !== debouncedTerm || search.isLoading || search.isFetching),
+  );
+  const accountsPending = term ? searchPending : suggested.isLoading;
   const trending = useTrendingTags();
   const suggested = useSuggestedUsers();
   const explore = useExplore();
@@ -199,11 +208,15 @@ export function ExplorePage() {
               <div className="flex items-center gap-2">
                 <Users className="size-4.5 text-primary" />
                 <h2 className="font-display text-base font-extrabold tracking-tight text-foreground">
-                  {term
-                    ? `Found ${filteredUsers.length} account${filteredUsers.length === 1 ? "" : "s"}`
-                    : "Suggested Creators & Accounts"}
+                  {accountsPending
+                    ? (term ? "Searching creators and accounts…" : "Loading creators and accounts…")
+                    : term && search.isError
+                      ? "Search couldn’t be completed"
+                      : term
+                        ? `Found ${filteredUsers.length} account${filteredUsers.length === 1 ? "" : "s"}`
+                        : "Suggested Creators & Accounts"}
                 </h2>
-                {filteredUsers.length > 0 && (
+                {filteredUsers.length > 0 && !accountsPending && (
                   <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-extrabold text-primary">
                     {filteredUsers.length}
                   </span>
@@ -252,7 +265,25 @@ export function ExplorePage() {
             </div>
 
             {/* High-Performance, Density-Optimized Responsive User Grid (Handles 100+ accounts gracefully) */}
-            {filteredUsers.length > 0 ? (
+            {accountsPending ? (
+              <div className={cn(
+                "grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3",
+              )} aria-label="Searching for accounts" aria-busy="true">
+                {Array.from({ length: 6 }, (_, index) => (
+                  <div key={index} className="surface-card rounded-2xl border border-border p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="shimmer size-11 shrink-0 rounded-full bg-muted" />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="shimmer h-3.5 w-3/4 rounded-full bg-muted" />
+                        <div className="shimmer h-3 w-1/2 rounded-full bg-muted" />
+                      </div>
+                    </div>
+                    <div className="shimmer mt-4 h-3 w-full rounded-full bg-muted" />
+                    <div className="shimmer mt-2 h-3 w-2/3 rounded-full bg-muted" />
+                  </div>
+                ))}
+              </div>
+            ) : filteredUsers.length > 0 ? (
               <div
                 className={cn(
                   "gap-3.5",
@@ -356,7 +387,11 @@ export function ExplorePage() {
               <div className="surface-card rounded-2xl p-8 text-center text-muted-foreground">
                 <Users className="mx-auto mb-2 size-8 text-muted-foreground/50" />
                 <p className="text-sm font-semibold">
-                  {term ? `No creator or user accounts match “${q}”.` : "No accounts available."}
+                  {term && search.isError
+                    ? "Search couldn’t be completed. Check your connection and try again."
+                    : term
+                      ? `No creator or user accounts match “${q}”.`
+                      : "No accounts available."}
                 </p>
               </div>
             )}
@@ -431,7 +466,16 @@ export function ExplorePage() {
                 </Link>
               ))}
 
-              {!trendingTags.length && (
+              {trending.isLoading && !trendingTags.length && Array.from({ length: 5 }, (_, index) => (
+                <div key={`tag-skeleton-${index}`} className="surface-card flex w-[82%] max-w-[340px] shrink-0 items-center gap-3.5 rounded-2xl border border-border p-3.5 sm:w-auto sm:max-w-none" aria-hidden="true">
+                  <div className="shimmer size-10 shrink-0 rounded-xl bg-muted" />
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="shimmer h-3.5 w-2/3 rounded-full bg-muted" />
+                    <div className="shimmer h-3 w-1/3 rounded-full bg-muted" />
+                  </div>
+                </div>
+              ))}
+              {!trending.isLoading && !trendingTags.length && (
                 <p className="col-span-full py-4 text-center text-xs text-muted-foreground">
                   No trending tags yet — post with a #hashtag to get on the leaderboard!
                 </p>
@@ -480,7 +524,7 @@ export function ExplorePage() {
                           poster={mediaUrl(item.thumbnailUrl)}
                           muted
                           playsInline
-                          preload="metadata"
+                          preload="none"
                           className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
                         />
                       ) : (
@@ -527,7 +571,11 @@ export function ExplorePage() {
                   );
                 })}
 
-              {!mediaPosts.length && (
+              {(activeTab === "reels" ? reelsFeed.isLoading : explore.isLoading) && !mediaPosts.length &&
+                Array.from({ length: 8 }, (_, index) => (
+                  <div key={`media-skeleton-${index}`} className="shimmer aspect-[3/4] rounded-2xl bg-muted" aria-hidden="true" />
+                ))}
+              {!mediaPosts.length && !(activeTab === "reels" ? reelsFeed.isLoading : explore.isLoading) && (
                 <div className="col-span-full py-8 text-center text-xs text-muted-foreground">
                   <ImageIcon className="mx-auto mb-2 size-6 text-muted-foreground/50" />
                   No media posts available yet.

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { BadgeCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { mediaUrl } from "@/lib/api-client";
@@ -35,14 +36,26 @@ export function GAvatar({
   className?: string;
 }) {
   const resolvedUrl = user?.avatarUrl ? mediaUrl(user.avatarUrl) : undefined;
+  const [avatarLoaded, setAvatarLoaded] = useState(false);
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
-  const inner = resolvedUrl ? (
+  useEffect(() => {
+    setAvatarLoaded(false);
+    setAvatarFailed(false);
+  }, [resolvedUrl]);
+
+  const inner = resolvedUrl && !avatarFailed ? (
     <img
       src={resolvedUrl}
       alt={user.name || "User avatar"}
       loading="lazy"
+      decoding="async"
+      onLoad={() => setAvatarLoaded(true)}
+      onError={() => setAvatarFailed(true)}
       className={cn(
-        "shrink-0 rounded-full object-cover object-center select-none overflow-hidden aspect-square",
+        "shrink-0 rounded-full bg-muted object-cover object-center select-none overflow-hidden aspect-square transition-opacity duration-200",
+        !avatarLoaded && "shimmer opacity-0",
+        avatarLoaded && "opacity-100",
         sizes[size],
         className,
       )}

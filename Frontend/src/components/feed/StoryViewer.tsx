@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ShareSheet } from "@/components/viewing/ShareSheet";
 import { StoryComments } from "@/components/feed/StoryComments";
-import { formatCount, timeAgo } from "@/lib/format";
+import { timeAgo } from "@/lib/format";
 import { mediaUrlWithAuth, StoryGroup } from "@/lib/api-client";
 import { useMarkStoryViewed, useDeleteStory, useReplyToStory } from "@/hooks/use-stories";
 import { useAuth } from "@/lib/auth-context";
@@ -75,13 +75,14 @@ export function StoryViewer({
   const replyToStory = useReplyToStory();
 
   const handleSendReply = async () => {
-    if (!replyText.trim() || !item?._id || !group) return;
+    if (!replyText.trim() || !item?._id || !group || replyToStory.isPending) return;
     const msg = replyText.trim();
     setReplyText("");
     try {
       await replyToStory.mutateAsync({ storyId: item._id, message: msg });
       toast.success(`Reply sent to @${group.author.username}!`);
     } catch (err: any) {
+      setReplyText(msg);
       toast.error(err.message || "Failed to send reply");
     }
   };
@@ -98,7 +99,8 @@ export function StoryViewer({
   const group = groups[index];
   const item = group?.items[step];
   const count = Math.max(1, group?.items.length ?? 1);
-  const duration = (item?.duration ?? 4200) as number;
+  // Photo stories stay visible for eight seconds; video duration remains media-driven.
+  const duration = (item?.mediaType === "video" ? (item?.duration ?? 4200) : 8000) as number;
   const isOwnStory = user?.username === group?.author?.username;
 
   const next = useCallback(() => {
@@ -253,17 +255,32 @@ export function StoryViewer({
   // Keyboard Navigation Support
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (commentsOpen) {
+          setCommentsOpen(false);
+          setPaused(false);
+        } else if (shareOpen) {
+          setShareOpen(false);
+        } else {
+          onClose();
+        }
+        return;
+      }
+      if (commentsOpen || shareOpen) return;
       if (e.key === "ArrowRight") next();
       if (e.key === "ArrowLeft") prev();
     };
     window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [next, prev, onClose, commentsOpen, shareOpen]);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = "";
+      document.body.style.overflow = previousOverflow;
     };
-  }, [next, prev, onClose]);
+  }, []);
 
   if (!group || !item) return null;
   // Token-aware URL: checked media (/api/v1/media/file/:id) is consumed by
@@ -287,13 +304,13 @@ export function StoryViewer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/92 p-0 sm:p-6 select-none">
+    <div className="fixed inset-0 z-[60] flex h-[100dvh] items-center justify-center overflow-hidden bg-black/95 p-0 sm:p-6 select-none">
       {/* Close Button */}
       <button
         type="button"
         aria-label="Close stories"
         onClick={onClose}
-        className="press absolute top-4 right-4 z-50 grid size-10 place-items-center rounded-full bg-white/20 text-white backdrop-blur-md hover:bg-white/30"
+        className="press absolute right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[70] grid size-10 place-items-center rounded-full bg-black/55 text-white shadow-lg ring-1 ring-white/20 backdrop-blur-md transition hover:bg-white/25 sm:fixed sm:right-5 sm:top-5"
       >
         <X className="size-5" />
       </button>
@@ -303,7 +320,7 @@ export function StoryViewer({
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className="relative h-full w-full overflow-hidden bg-black sm:h-[88vh] sm:w-[420px] sm:rounded-3xl shadow-float"
+        className="relative h-[100dvh] w-full overflow-hidden bg-black sm:h-[88vh] sm:max-h-[900px] sm:w-[420px] sm:rounded-3xl shadow-float"
       >
         {/* Video or Image Stage */}
         {image && item.mediaType === "video" ? (
@@ -355,7 +372,7 @@ export function StoryViewer({
         {/* Slide Progress Bars */}
         <div
           className={cn(
-            "absolute inset-x-3 top-3 z-30 flex gap-1 transition-opacity",
+            "absolute left-3 right-14 top-[max(0.75rem,env(safe-area-inset-top))] z-30 flex gap-1 transition-opacity sm:inset-x-3 sm:top-3",
             paused && "opacity-0",
           )}
         >
@@ -372,7 +389,7 @@ export function StoryViewer({
         {/* Header Overlay */}
         <header
           className={cn(
-            "absolute inset-x-3 top-7 z-30 flex items-center gap-3 pt-2 text-white transition-opacity",
+            "absolute inset-x-3 top-[calc(3.5rem+env(safe-area-inset-top))] z-30 flex items-center gap-2 pt-1 text-white transition-opacity sm:top-7 sm:gap-3 sm:pt-2",
             paused && "opacity-0",
           )}
         >
@@ -384,13 +401,13 @@ export function StoryViewer({
           >
             {group.author.username}
           </Link>
-          <span className="text-xs text-white/70 shrink-0">{timeAgo(item.createdAt)}</span>
+          <span className="hidden shrink-0 text-xs text-white/70 sm:inline">{timeAgo(item.createdAt)}</span>
 
           {/* Story comments */}
           <button
             type="button"
             aria-label="View comments"
-            onClick={() => setCommentsOpen(true)}
+            onClick={() => { setPaused(true); setCommentsOpen(true); }}
             className="press grid size-8 place-items-center rounded-full bg-black/40 text-white backdrop-blur-md"
           >
             <MessageCircle className="size-4" />
@@ -490,7 +507,7 @@ export function StoryViewer({
         )}
 
         {/* Bottom Reply Bar */}
-        <footer className="absolute inset-x-0 bottom-0 z-50 flex items-center gap-2 p-3 bg-gradient-to-t from-black/95 via-black/80 to-transparent">
+        <footer className="absolute inset-x-0 bottom-0 z-50 flex items-center gap-2 bg-gradient-to-t from-black/95 via-black/80 to-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           <Input
             value={replyText}
             onChange={(e) => setReplyText(e.target.value)}
@@ -504,10 +521,10 @@ export function StoryViewer({
             size="icon-sm"
             variant="brand"
             onClick={handleSendReply}
-            disabled={!replyText.trim()}
+            disabled={!replyText.trim() || replyToStory.isPending}
             className="rounded-full shrink-0"
           >
-            <Send className="size-4" />
+            {replyToStory.isPending ? <span className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent" /> : <Send className="size-4" />}
           </Button>
         </footer>
       </div>
@@ -525,7 +542,7 @@ export function StoryViewer({
         <StoryComments
           storyId={item._id}
           authorUsername={group.author.username}
-          onClose={() => setCommentsOpen(false)}
+          onClose={() => { setCommentsOpen(false); setPaused(false); }}
         />
       )}
     </div>

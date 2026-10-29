@@ -5,6 +5,7 @@ import { BottomNav } from "./BottomNav";
 import { RightRail } from "./RightRail";
 import { SideNav } from "./SideNav";
 import { TopBar } from "./TopBar";
+import { AppScrollbar } from "./AppScrollbar";
 import { CreateHost } from "@/components/create/CreateHub";
 import { useAuth } from "@/lib/auth-context";
 
@@ -47,7 +48,7 @@ export function AppShell({
         <div className={immersiveMobile ? "max-lg:hidden" : undefined}>
           <TopBar />
         </div>
-        <div className="mx-auto flex w-full max-w-[1400px] flex-1 justify-center">
+        <div className="mx-auto flex min-w-0 w-full max-w-[1400px] flex-1 justify-center">
           <main
             className={
               immersiveMobile
@@ -64,6 +65,7 @@ export function AppShell({
         <BottomNav />
       </div>
       <CreateHost />
+      <AppScrollbar />
     </div>
   );
 }

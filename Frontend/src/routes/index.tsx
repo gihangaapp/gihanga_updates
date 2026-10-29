@@ -9,7 +9,6 @@ import { Composer } from "@/components/feed/Composer";
 import { PostCard } from "@/components/feed/PostCard";
 import { PostSkeleton } from "@/components/feed/PostSkeleton";
 import { FeedAdCard } from "@/components/ads/FeedAdCard";
-import { Button } from "@/components/ui/button";
 import { useFeed, useExplore, useTrending } from "@/hooks/use-posts";
 import { useFeedAds } from "@/hooks/use-ads";
 import { useLiveStreams } from "@/hooks/use-live";
@@ -143,6 +142,7 @@ function HomeFeed() {
     user?.id ? readRecentPublishedPost(user.id) : null,
   );
   const pinVisitConsumed = useRef(false);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const pendingPinId = recentPostPin && !isRecentPostReady(recentPostPin.post)
     ? recentPostPin.postId
     : "";
@@ -175,6 +175,8 @@ function HomeFeed() {
     !trending.isLoading && (trending.data?.pages.flatMap((p) => p.posts).length ?? 0) === 0;
   const trendingSource = trendingEmpty ? explore : trending;
   const active = tab === "foryou" ? forYou : trendingSource;
+  const activeFeedRef = useRef(active);
+  activeFeedRef.current = active;
   const activePages = active.data?.pages;
   const posts = useMemo(() => {
     const next = (activePages?.flatMap((p) => p.posts) ?? []).slice();
@@ -234,6 +236,27 @@ function HomeFeed() {
     if (!pinned) return posts;
     return [pinned, ...posts.filter((post) => post._id !== pinned._id)];
   }, [posts, recentPostPin, pendingPinStatus.data]);
+
+  // Prefetch the next page as the user approaches the end of the loaded feed.
+  // Re-observe after each successful page so short viewports can keep filling
+  // naturally, without exposing a manual "Load more" control.
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    if (!sentinel || !active.hasNextPage) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        const feed = activeFeedRef.current;
+        if (feed.hasNextPage && !feed.isFetchingNextPage) {
+          void feed.fetchNextPage().catch(() => undefined);
+        }
+      },
+      { root: null, rootMargin: "700px 0px", threshold: 0 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [active.hasNextPage, active.data?.pages.length, tab, trendingEmpty]);
 
   const isFollowingAnyone = forYou.data?.pages[0]?.isFollowingAnyone ?? true;
 
@@ -311,15 +334,28 @@ function HomeFeed() {
               );
             })}
             {active.hasNextPage && (
-              <div className="flex justify-center py-6">
-                <Button
-                  variant="outline"
-                  onClick={() => active.fetchNextPage()}
-                  disabled={active.isFetchingNextPage}
-                >
-                  {active.isFetchingNextPage && <Loader2 className="size-4 animate-spin" />}
-                  Load more
-                </Button>
+              <div
+                ref={loadMoreRef}
+                className="flex min-h-14 items-center justify-center gap-2 py-4 text-xs text-muted-foreground"
+                aria-live="polite"
+                aria-busy={active.isFetchingNextPage}
+              >
+                {active.isFetchingNextPage ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin text-primary" />
+                    <span>Loading more posts…</span>
+                  </>
+                ) : active.isFetchNextPageError ? (
+                  <button
+                    type="button"
+                    className="rounded-full px-3 py-1.5 font-semibold text-primary transition-colors hover:bg-primary/10"
+                    onClick={() => void active.fetchNextPage()}
+                  >
+                    Couldn’t load more posts. Try again
+                  </button>
+                ) : (
+                  <span className="sr-only">More posts load automatically as you scroll.</span>
+                )}
               </div>
             )}
           </>

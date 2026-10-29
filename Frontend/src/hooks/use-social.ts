@@ -16,11 +16,50 @@ export function useCreateComment(postId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: { body: string; parent?: string | undefined }) =>
-      api.post<{ comment: PostComment }>(`/comments/post/${postId}`, input),
-    onSuccess: () => {
+      api.post<{
+        comment: PostComment | null;
+        moderation?: { status?: string; userMessage?: string };
+        pendingNotice?: string;
+      }>(`/comments/post/${postId}`, input),
+    onSuccess: (result) => {
+      const comment = result.comment;
+      // A successfully approved comment is inserted into the visible cache
+      // immediately; the refetch below still reconciles it with the server.
+      // Comments awaiting moderation stay local to the sender and aren't
+      // exposed to other viewers before the moderation pipeline clears them.
+      if (comment && (!result.moderation || result.moderation.status === "approved")) {
+        queryClient.setQueryData<{ comments: PostComment[] }>(["comments", postId], (current) => {
+          if (!current) return comment.parent ? current : { comments: [comment] };
+          if (!comment.parent) {
+            return {
+              ...current,
+              comments: [comment, ...current.comments.filter((item) => item._id !== comment._id)],
+            };
+          }
+          return { ...current, comments: insertReply(current.comments, comment) };
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["comments", postId] });
       queryClient.invalidateQueries({ queryKey: ["posts"] });
     },
+  });
+}
+
+function insertReply(comments: PostComment[], reply: PostComment): PostComment[] {
+  return comments.map((comment) => {
+    if (comment._id === reply.parent) {
+      return {
+        ...comment,
+        replies: [...(comment.replies ?? []).filter((item) => item._id !== reply._id), reply],
+        repliesCount: (comment.repliesCount ?? 0) + 1,
+      };
+    }
+    const replies = comment.replies ?? [];
+    const nested = insertReply(replies, reply);
+    if (nested.some((item, index) => item !== replies[index])) {
+      return { ...comment, replies: nested };
+    }
+    return comment;
   });
 }
 
@@ -40,8 +79,43 @@ export function useToggleCommentLike(postId: string) {
   return useMutation({
     mutationFn: (commentId: string) =>
       api.post<{ liked: boolean; likesCount: number }>(`/likes/comment/${commentId}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["comments", postId] }),
+    onMutate: async (commentId: string) => {
+      await queryClient.cancelQueries({ queryKey: ["comments", postId] });
+      const previous = queryClient.getQueriesData<{ comments: PostComment[] }>({
+        queryKey: ["comments", postId],
+      });
+      queryClient.setQueriesData<{ comments: PostComment[] }>(
+        { queryKey: ["comments", postId] },
+        (current) =>
+          current
+            ? {
+                ...current,
+                comments: current.comments.map((comment) => patchCommentLike(comment, commentId)),
+              }
+            : current,
+      );
+      return { previous };
+    },
+    onError: (_error, _commentId, context) => {
+      context?.previous.forEach(([key, data]) => queryClient.setQueryData(key, data));
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["comments", postId] }),
   });
+}
+
+function patchCommentLike(comment: PostComment, commentId: string): PostComment {
+  if (comment._id === commentId) {
+    const liked = !comment.liked;
+    return {
+      ...comment,
+      liked,
+      likesCount: Math.max(0, comment.likesCount + (liked ? 1 : -1)),
+    };
+  }
+  return {
+    ...comment,
+    replies: (comment.replies ?? []).map((reply) => patchCommentLike(reply, commentId)),
+  };
 }
 
 // ── Follow ──────────────────────────────────────────────────────────────────

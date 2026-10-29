@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Bell, Moon, Radio, Search, Sun } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Logo } from "@/components/common/Logo";
@@ -7,15 +8,45 @@ import { AccountMenu } from "@/components/auth/AccountMenu";
 import { useUnreadNotificationCount } from "@/hooks/use-notifications";
 
 export function TopBar() {
+  const [isHidden, setIsHidden] = useState(false);
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
   const unread = useUnreadNotificationCount();
+
+  // Keep the top bar out of the way while scrolling down, and bring it back
+  // as soon as the user scrolls upward (on every page that uses AppShell).
+  useEffect(() => {
+    let previousY = window.scrollY;
+    let lastDirectionChange = 0;
+    const handleScroll = () => {
+      const currentY = Math.max(0, window.scrollY);
+      const delta = currentY - previousY;
+      if (currentY <= 48) {
+        setIsHidden(false);
+        previousY = currentY;
+        return;
+      }
+      if (Math.abs(delta) >= 5) {
+        const now = performance.now();
+        if (now - lastDirectionChange > 35) {
+          setIsHidden(delta > 0);
+          lastDirectionChange = now;
+        }
+        previousY = currentY;
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   return (
     <>
     {/* Spacer reserves the top bar's height on mobile, where the bar is fixed */}
     <div aria-hidden className="h-16 lg:hidden" />
-    <header className="glass fixed inset-x-0 top-0 z-40 border-b lg:sticky lg:inset-x-auto">
+    <header
+      aria-hidden={isHidden || undefined}
+      className={`glass fixed inset-x-0 top-0 z-40 border-b transition-transform duration-300 ease-out will-change-transform lg:sticky lg:inset-x-auto ${isHidden ? "-translate-y-[110%]" : "translate-y-0"}`}
+    >
       <div className="mx-auto flex h-16 max-w-[1600px] items-center gap-3 px-4 sm:px-6">
         <div className="lg:hidden">
           <Logo compact />

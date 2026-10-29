@@ -104,7 +104,7 @@ function ProfilePostPreview({ post }: { post: FeedPost }) {
           poster={thumbnailSrc}
           muted
           playsInline
-          preload="metadata"
+          preload="none"
           onError={() => {
             if (thumbnailSrc && thumbnailSrc !== videoSrc) setUseThumbnailOnly(true);
             else setFailed(true);
@@ -295,7 +295,24 @@ function ProfilePage() {
   if (isLoading) {
     return (
       <AppShell>
-        <p className="py-16 text-center text-sm text-muted-foreground">Loading profile…</p>
+        <div className="mx-auto w-full max-w-[900px] space-y-4" aria-label="Loading profile" aria-busy="true">
+          <div className="surface-card rounded-3xl border border-border p-5 sm:p-6">
+            <div className="flex items-center gap-4">
+              <div className="shimmer size-24 shrink-0 rounded-full bg-muted" />
+              <div className="min-w-0 flex-1 space-y-3">
+                <div className="shimmer h-5 w-2/3 rounded-full bg-muted" />
+                <div className="shimmer h-3.5 w-1/3 rounded-full bg-muted" />
+                <div className="shimmer h-3 w-full max-w-md rounded-full bg-muted" />
+              </div>
+            </div>
+            <div className="mt-6 flex gap-6">
+              {[0, 1, 2].map((item) => <div key={item} className="space-y-2"><div className="shimmer h-5 w-12 rounded-full bg-muted" /><div className="shimmer h-3 w-16 rounded-full bg-muted" /></div>)}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {Array.from({ length: 6 }, (_, index) => <div key={index} className="shimmer aspect-square rounded-2xl bg-muted" />)}
+          </div>
+        </div>
       </AppShell>
     );
   }
@@ -501,7 +518,13 @@ function ProfilePage() {
         </div>
 
         {/* Posts, Reels, and Likes Media Grid with full audio/video/image support and delete menu */}
-        {grid.length === 0 ? (
+        {((tab === "likes" ? likesQuery.isLoading : postsQuery.isLoading) && grid.length === 0) ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label="Loading profile posts" aria-busy="true">
+            {Array.from({ length: 6 }, (_, index) => (
+              <div key={`profile-post-skeleton-${index}`} className="shimmer aspect-square rounded-2xl bg-muted" aria-hidden="true" />
+            ))}
+          </div>
+        ) : grid.length === 0 ? (
           <div className="surface-card rounded-3xl p-12 text-center text-muted-foreground border border-border">
             <p className="text-sm font-semibold">
               {tab === "posts"

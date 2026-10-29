@@ -222,19 +222,21 @@ export function CreateHost() {
           </div>
         </div>
 
-        <Textarea
-          value={body}
-          onChange={(e) => setBody(e.target.value)}
-          maxLength={500}
-          placeholder={
-            mode === "story"
-              ? "Add a caption to your story…"
-              : mode === "reel"
-                ? "Describe your reel. Use #tags to reach more people."
-                : `What's the update, ${user.name.split(" ")[0]}?`
-          }
-          className="mt-3 min-h-[110px] resize-none border-0 bg-transparent px-5 text-[15px] leading-relaxed shadow-none focus-visible:ring-0"
-        />
+        <div className="px-5 pt-3">
+          <Textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            maxLength={500}
+            placeholder={
+              mode === "story"
+                ? "Add a caption to your story…"
+                : mode === "reel"
+                  ? "Describe your reel. Use #tags to reach more people."
+                  : `What's the update, ${user.name.split(" ")[0]}?`
+            }
+            className="box-border min-h-[110px] w-full resize-none rounded-xl border-0 bg-transparent p-3 text-[15px] leading-relaxed shadow-none placeholder:text-muted-foreground focus-visible:ring-0"
+          />
+        </div>
 
         {previewUrl && (
           <div className="relative mx-5 overflow-hidden rounded-2xl bg-black">

@@ -1,10 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Flame, Hash, Loader2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { PostCard } from "@/components/feed/PostCard";
-import { Button } from "@/components/ui/button";
 import { formatCount } from "@/lib/format";
 import { useTagPosts } from "@/hooks/use-posts";
 import { useTrendingTags } from "@/hooks/use-search";
@@ -35,9 +34,36 @@ const tabs = ["All", "Reels"] as const;
 function TagPage() {
   const { tag } = Route.useLoaderData();
   const [tab, setTab] = useState<(typeof tabs)[number]>("All");
-  const { data, isLoading, postsCount, fetchNextPage, hasNextPage, isFetchingNextPage } =
-    useTagPosts(tag);
+  const {
+    data,
+    isLoading,
+    postsCount,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isFetchNextPageError,
+  } = useTagPosts(tag);
   const trending = useTrendingTags();
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  const feedRef = useRef({ fetchNextPage, hasNextPage, isFetchingNextPage });
+  feedRef.current = { fetchNextPage, hasNextPage, isFetchingNextPage };
+
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    if (!sentinel || !hasNextPage) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        const feed = feedRef.current;
+        if (feed.hasNextPage && !feed.isFetchingNextPage) {
+          void feed.fetchNextPage().catch(() => undefined);
+        }
+      },
+      { rootMargin: "700px 0px", threshold: 0 },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasNextPage, data?.pages.length, tag]);
 
   const allPosts = data?.pages.flatMap((p) => p.posts) ?? [];
   const list = tab === "Reels" ? allPosts.filter((p) => p.kind === "reel") : allPosts;
@@ -89,15 +115,25 @@ function TagPage() {
             <PostCard key={p._id} post={p} />
           ))}
           {hasNextPage && (
-            <div className="flex justify-center py-2">
-              <Button
-                variant="outline"
-                onClick={() => fetchNextPage()}
-                disabled={isFetchingNextPage}
-              >
-                {isFetchingNextPage && <Loader2 className="size-4 animate-spin" />}
-                Load more
-              </Button>
+            <div
+              ref={loadMoreRef}
+              className="flex min-h-12 items-center justify-center gap-2 py-3 text-xs text-muted-foreground"
+              aria-live="polite"
+              aria-busy={isFetchingNextPage}
+            >
+              {isFetchingNextPage ? (
+                <><Loader2 className="size-4 animate-spin text-primary" /><span>Loading more posts…</span></>
+              ) : isFetchNextPageError ? (
+                <button
+                  type="button"
+                  className="rounded-full px-3 py-1.5 font-semibold text-primary transition-colors hover:bg-primary/10"
+                  onClick={() => void fetchNextPage()}
+                >
+                  Couldn’t load more posts. Try again
+                </button>
+              ) : (
+                <span className="sr-only">More posts load automatically as you scroll.</span>
+              )}
             </div>
           )}
         </div>
