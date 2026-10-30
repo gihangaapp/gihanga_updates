@@ -25,7 +25,7 @@ export interface FeedResponse {
   isFollowingAnyone?: boolean;
 }
 
-async function withViewerFlags(posts: any[], viewerId?: string) {
+export async function withViewerFlags(posts: any[], viewerId?: string) {
   if (!viewerId || posts.length === 0) {
     return posts.map((p) => ({
       ...(p.toObject ? p.toObject() : p),

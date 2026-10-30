@@ -74,7 +74,7 @@ export function RightRail() {
   return (
     <aside className="right-rail sticky top-16 hidden h-[calc(100dvh-4rem)] w-[clamp(280px,24vw,336px)] min-w-0 shrink-0 flex-col gap-4 overflow-x-hidden overflow-y-auto overscroll-y-contain px-4 py-5 no-scrollbar xl:flex">
       {(tags.length > 0 || isTagsLoading) && (
-        <Panel title="Trending" icon={Flame} action="Explore">
+        <Panel title="Trending" icon={Flame} action="See all" actionTo="/trending">
           {isTagsLoading && tags.length === 0 ? (
             <div className="space-y-3" aria-label="Loading trending topics" aria-busy="true">
               {Array.from({ length: 5 }, (_, index) => (

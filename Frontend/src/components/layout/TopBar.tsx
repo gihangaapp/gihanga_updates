@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Bell, Moon, Radio, Search, Sun } from "lucide-react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Logo } from "@/components/common/Logo";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/hooks/use-theme";
@@ -11,6 +11,7 @@ export function TopBar() {
   const [isHidden, setIsHidden] = useState(false);
   const { theme, toggle } = useTheme();
   const navigate = useNavigate();
+  const onSearchPage = useRouterState({ select: (s) => s.location.pathname === "/search" });
   const unread = useUnreadNotificationCount();
 
   // Keep the top bar out of the way while scrolling down, and bring it back
@@ -68,12 +69,14 @@ export function TopBar() {
           <Logo compact />
         </div>
 
-        <div className="relative hidden min-w-0 flex-1 max-w-lg md:block">
+        <div
+          className={`relative hidden min-w-0 flex-1 max-w-lg ${onSearchPage ? "" : "md:block"}`}
+        >
           <Search className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="search"
             placeholder="Search creators, hashtags, sounds…"
-            onFocus={() => navigate({ to: "/explore" })}
+            onFocus={() => navigate({ to: "/search" })}
             className="h-11 w-full rounded-2xl border border-border bg-elevated pr-4 pl-10 text-sm outline-none transition-shadow placeholder:text-muted-foreground focus:border-ring focus:bg-surface focus:shadow-soft"
           />
         </div>

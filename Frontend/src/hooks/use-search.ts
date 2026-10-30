@@ -15,11 +15,13 @@ export function useSearch(query: string) {
   });
 }
 
-export function useTrendingTags() {
+export function useTrendingTags(limit = 5) {
   return useQuery({
-    queryKey: ["trending-tags"],
+    queryKey: limit === 5 ? ["trending-tags"] : ["trending-tags", limit],
     queryFn: () =>
-      api.get<{ tags: { tag: string; postsCount: number; trend: number }[] }>("/search/trending"),
+      api.get<{ tags: { tag: string; postsCount: number; trend: number }[] }>(
+        limit === 5 ? "/search/trending" : `/search/trending?limit=${limit}`,
+      ),
   });
 }
 

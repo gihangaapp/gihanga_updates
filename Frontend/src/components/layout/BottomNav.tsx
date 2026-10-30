@@ -11,7 +11,7 @@ export function BottomNav() {
 
   const items = [
     { label: "Home", icon: Home, to: "/" },
-    { label: "Search", icon: Search, to: "/explore" },
+    { label: "Search", icon: Search, to: "/search" },
     { label: "Reels", icon: Film, to: "/reels" },
     { label: "Profile", icon: User, to: profileLink },
   ];

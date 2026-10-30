@@ -23,9 +23,11 @@ import { Route as NotificationsRouteImport } from './routes/notifications'
 import { Route as ReelsRouteImport } from './routes/reels'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SearchRouteImport } from './routes/search'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as StudioRouteImport } from './routes/studio'
 import { Route as StyleguideRouteImport } from './routes/styleguide'
+import { Route as TrendingRouteImport } from './routes/trending'
 import { Route as VerifyRouteImport } from './routes/verify'
 import { Route as WalletRouteImport } from './routes/wallet'
 import { Route as WelcomeRouteImport } from './routes/welcome'
@@ -121,6 +123,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SearchRoute = SearchRouteImport.update({
+  id: '/search',
+  path: '/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -134,6 +141,11 @@ const StudioRoute = StudioRouteImport.update({
 const StyleguideRoute = StyleguideRouteImport.update({
   id: '/styleguide',
   path: '/styleguide',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TrendingRoute = TrendingRouteImport.update({
+  id: '/trending',
+  path: '/trending',
   getParentRoute: () => rootRouteImport,
 } as any)
 const VerifyRoute = VerifyRouteImport.update({
@@ -276,9 +288,11 @@ export interface FileRoutesByFullPath {
   '/reels': typeof ReelsRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/studio': typeof StudioRoute
   '/styleguide': typeof StyleguideRoute
+  '/trending': typeof TrendingRoute
   '/verify': typeof VerifyRoute
   '/wallet': typeof WalletRoute
   '/welcome': typeof WelcomeRoute
@@ -319,9 +333,11 @@ export interface FileRoutesByTo {
   '/reels': typeof ReelsRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/studio': typeof StudioRoute
   '/styleguide': typeof StyleguideRoute
+  '/trending': typeof TrendingRoute
   '/verify': typeof VerifyRoute
   '/wallet': typeof WalletRoute
   '/welcome': typeof WelcomeRoute
@@ -362,9 +378,11 @@ export interface FileRoutesById {
   '/reels': typeof ReelsRoute
   '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/studio': typeof StudioRoute
   '/styleguide': typeof StyleguideRoute
+  '/trending': typeof TrendingRoute
   '/verify': typeof VerifyRoute
   '/wallet': typeof WalletRoute
   '/welcome': typeof WelcomeRoute
@@ -407,9 +425,11 @@ export interface FileRouteTypes {
     | '/reels'
     | '/register'
     | '/reset-password'
+    | '/search'
     | '/settings'
     | '/studio'
     | '/styleguide'
+    | '/trending'
     | '/verify'
     | '/wallet'
     | '/welcome'
@@ -450,9 +470,11 @@ export interface FileRouteTypes {
     | '/reels'
     | '/register'
     | '/reset-password'
+    | '/search'
     | '/settings'
     | '/studio'
     | '/styleguide'
+    | '/trending'
     | '/verify'
     | '/wallet'
     | '/welcome'
@@ -492,9 +514,11 @@ export interface FileRouteTypes {
     | '/reels'
     | '/register'
     | '/reset-password'
+    | '/search'
     | '/settings'
     | '/studio'
     | '/styleguide'
+    | '/trending'
     | '/verify'
     | '/wallet'
     | '/welcome'
@@ -536,9 +560,11 @@ export interface RootRouteChildren {
   ReelsRoute: typeof ReelsRoute
   RegisterRoute: typeof RegisterRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRoute
   StudioRoute: typeof StudioRoute
   StyleguideRoute: typeof StyleguideRoute
+  TrendingRoute: typeof TrendingRoute
   VerifyRoute: typeof VerifyRoute
   WalletRoute: typeof WalletRoute
   WelcomeRoute: typeof WelcomeRoute
@@ -650,6 +676,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/search': {
+      id: '/search'
+      path: '/search'
+      fullPath: '/search'
+      preLoaderRoute: typeof SearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -669,6 +702,13 @@ declare module '@tanstack/react-router' {
       path: '/styleguide'
       fullPath: '/styleguide'
       preLoaderRoute: typeof StyleguideRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/trending': {
+      id: '/trending'
+      path: '/trending'
+      fullPath: '/trending'
+      preLoaderRoute: typeof TrendingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/verify': {
@@ -905,9 +945,11 @@ const rootRouteChildren: RootRouteChildren = {
   ReelsRoute: ReelsRoute,
   RegisterRoute: RegisterRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  SearchRoute: SearchRoute,
   SettingsRoute: SettingsRoute,
   StudioRoute: StudioRoute,
   StyleguideRoute: StyleguideRoute,
+  TrendingRoute: TrendingRoute,
   VerifyRoute: VerifyRoute,
   WalletRoute: WalletRoute,
   WelcomeRoute: WelcomeRoute,
