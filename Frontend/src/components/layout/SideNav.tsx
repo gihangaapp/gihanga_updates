@@ -82,12 +82,14 @@ export function SideNav() {
   };
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-[264px] shrink-0 flex-col border-r border-border bg-sidebar px-4 py-5 lg:flex">
-      <Link to="/" className="press mb-6 px-1">
+    <aside className="sticky top-0 hidden h-dvh w-[264px] shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar px-4 py-5 lg:flex">
+      <Link to="/" className="press mb-4 shrink-0 px-1 [@media(max-height:760px)]:mb-2">
         <Logo />
       </Link>
 
-      <nav className="flex flex-col gap-1" aria-label="Primary">
+      {/* Scrollable middle: nav links + Create. The profile card below stays pinned. */}
+      <div className="slim-scrollbar -mr-2 flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-y-contain pr-2">
+      <nav className="flex shrink-0 flex-col gap-1" aria-label="Primary">
         {primaryNav.map((item) => (
           <NavRow
             key={item.label}
@@ -101,8 +103,8 @@ export function SideNav() {
 
       {user?.creator ? (
         <>
-          <div className="my-4 h-px bg-border" />
-          <nav className="flex flex-col gap-1" aria-label="Creator">
+          <div className="my-4 h-px shrink-0 bg-border [@media(max-height:760px)]:my-2" />
+          <nav className="flex shrink-0 flex-col gap-1" aria-label="Creator">
             {secondaryNav.map((item) => (
               <NavRow
                 key={item.label}
@@ -120,16 +122,17 @@ export function SideNav() {
         <Button
           variant="brand"
           size="lg"
-          className="mt-5 w-full"
+          className="mt-5 w-full shrink-0 [@media(max-height:760px)]:mt-3"
           onClick={() => openCreate("post")}
         >
           <Plus strokeWidth={3} />
           Create
         </Button>
       ) : null}
+      </div>
 
       {user ? (
-        <div className="mt-auto flex items-center gap-3 rounded-2xl border border-border bg-surface p-2.5">
+        <div className="mt-3 flex shrink-0 items-center gap-3 rounded-2xl border border-border bg-surface p-2.5">
           <GAvatar user={user} size="sm" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-bold">{user.name}</span>
@@ -150,7 +153,7 @@ export function SideNav() {
           </Button>
         </div>
       ) : (
-        <div className="mt-auto rounded-2xl border border-border bg-surface p-4">
+        <div className="mt-3 shrink-0 rounded-2xl border border-border bg-surface p-4">
           <p className="text-sm font-bold">Join Gihanga Updates</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Create an account to post, follow and save.

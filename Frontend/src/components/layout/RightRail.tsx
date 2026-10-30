@@ -31,15 +31,17 @@ function Panel({
   children,
   action,
   actionTo,
+  className,
 }: {
   title: string;
   icon: typeof Flame;
   children: React.ReactNode;
   action?: string;
   actionTo?: string;
+  className?: string;
 }) {
   return (
-    <section className="surface-card p-4">
+    <section className={`surface-card p-4 ${className ?? ""}`}>
       <header className="mb-3 flex items-center gap-2">
         <Icon className="size-4 text-primary" />
         <h2 className="text-sm font-bold tracking-tight">{title}</h2>
@@ -72,9 +74,15 @@ export function RightRail() {
   );
 
   return (
-    <aside className="right-rail sticky top-16 hidden h-[calc(100dvh-4rem)] w-[clamp(280px,24vw,336px)] min-w-0 shrink-0 flex-col gap-4 overflow-x-hidden overflow-y-auto overscroll-y-contain px-4 py-5 no-scrollbar xl:flex">
+    <aside className="right-rail sticky top-16 hidden h-[calc(100dvh-4rem)] w-[clamp(280px,24vw,336px)] min-w-0 shrink-0 flex-col gap-4 overflow-hidden px-4 py-5 no-scrollbar xl:flex">
       {(tags.length > 0 || isTagsLoading) && (
-        <Panel title="Trending" icon={Flame} action="See all" actionTo="/trending">
+        <Panel
+          title="Trending"
+          icon={Flame}
+          action="See all"
+          actionTo="/trending"
+          className="rail-trending"
+        >
           {isTagsLoading && tags.length === 0 ? (
             <div className="space-y-3" aria-label="Loading trending topics" aria-busy="true">
               {Array.from({ length: 5 }, (_, index) => (
@@ -114,11 +122,11 @@ export function RightRail() {
       )}
 
       {(suggested.length > 0 || isSuggestedLoading) && (
-        <Panel title="Suggested creators" icon={Sparkles}>
+        <Panel title="Suggested creators" icon={Sparkles} className="rail-creators">
           {isSuggestedLoading && suggested.length === 0 ? (
             <div className="space-y-3" aria-label="Loading suggested creators" aria-busy="true">
               {Array.from({ length: 5 }, (_, index) => (
-                <div key={`creator-skeleton-${index}`} className="flex items-center gap-3">
+                <div key={`creator-skeleton-${index}`} className="rail-creator flex items-center gap-3">
                   <div className="shimmer size-9 shrink-0 rounded-full bg-muted" />
                   <div className="min-w-0 flex-1 space-y-2">
                     <div className="shimmer h-3.5 w-3/4 rounded-full bg-muted" />
@@ -133,7 +141,7 @@ export function RightRail() {
               {suggested.map((u) => {
                 const following = followingSet?.has(u.username) ?? false;
                 return (
-                  <li key={u._id} className="flex items-center gap-3">
+                  <li key={u._id} className="rail-creator flex items-center gap-3">
                     <Link to="/profile/$username" params={{ username: u.username }}>
                       <GAvatar user={toDisplayUser(u)} size="sm" />
                     </Link>
@@ -178,7 +186,7 @@ export function RightRail() {
         </Button>
       </section>
 
-      <p className="shrink-0 break-words px-1.5 pb-4 text-xs leading-relaxed text-muted-foreground">
+      <p className="mt-auto shrink-0 break-words px-1.5 pb-1 text-xs leading-relaxed text-muted-foreground">
         About · Help · Guidelines · Privacy · Terms
         <br />© 2026 Gihanga Updates
       </p>
