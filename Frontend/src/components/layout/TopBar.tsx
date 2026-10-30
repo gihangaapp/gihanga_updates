@@ -61,7 +61,7 @@ export function TopBar() {
     <header
       data-topbar
       aria-hidden={isHidden || undefined}
-      className={`glass fixed inset-x-0 top-0 z-40 border-b transition-transform duration-300 ease-out will-change-transform lg:sticky lg:inset-x-auto ${isHidden ? "-translate-y-[110%]" : "translate-y-0"}`}
+      className={`glass fixed inset-x-0 top-0 z-40 border-b transition-transform duration-[350ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform motion-reduce:transition-none lg:sticky lg:inset-x-auto ${isHidden ? "-translate-y-[110%]" : "translate-y-0"}`}
     >
       <div className="mx-auto flex h-16 max-w-[1600px] items-center gap-3 px-4 sm:px-6">
         <div className="lg:hidden">

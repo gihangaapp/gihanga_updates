@@ -14,7 +14,7 @@ export function Logo({ className, compact }: { className?: string; compact?: boo
           <span className="block font-display text-[15px] font-extrabold tracking-tight text-foreground">
             Gihanga
           </span>
-          <span className="block text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
+          <span className="mt-1.5 block text-[11px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
             Updates
           </span>
         </span>

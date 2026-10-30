@@ -305,6 +305,7 @@
   }
 
   html {
+    background-color: var(--background);
     /* Router scroll restoration and navigation should not animate through a
        long feed; local carousels opt into smooth movement where appropriate. */
     scroll-behavior: auto;
@@ -470,7 +471,15 @@
 .right-rail {
   scrollbar-width: none;
   -ms-overflow-style: none;
-  transition: top 300ms ease-out, height 300ms ease-out;
+  transition:
+    top 350ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 350ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: top, height;
+}
+@media (prefers-reduced-motion: reduce) {
+  .right-rail {
+    transition: none;
+  }
 }
 .right-rail::-webkit-scrollbar {
   display: none;
