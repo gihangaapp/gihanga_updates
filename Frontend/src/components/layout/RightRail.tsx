@@ -74,7 +74,9 @@ export function RightRail() {
   );
 
   return (
-    <aside className="right-rail sticky top-16 hidden h-[calc(100dvh-4rem)] w-[clamp(280px,24vw,336px)] min-w-0 shrink-0 flex-col gap-4 overflow-hidden px-4 py-5 no-scrollbar xl:flex">
+    <aside className="right-rail sticky top-0 -mt-16 hidden h-dvh w-[clamp(280px,24vw,336px)] min-w-0 shrink-0 flex-col overflow-hidden no-scrollbar xl:flex">
+      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="right-rail-body flex h-[calc(100%-4rem)] min-w-0 flex-col gap-4 overflow-hidden px-4 pt-5">
       {(tags.length > 0 || isTagsLoading) && (
         <Panel
           title="Trending"
@@ -186,7 +188,10 @@ export function RightRail() {
         </Button>
       </section>
 
-      <p className="mt-auto shrink-0 break-words px-1.5 pb-1 text-xs leading-relaxed text-muted-foreground">
+      </div>
+      </div>
+
+      <p className="shrink-0 break-words px-5 pb-5 pt-2 text-xs leading-relaxed text-muted-foreground">
         About · Help · Guidelines · Privacy · Terms
         <br />© 2026 Gihanga Updates
       </p>

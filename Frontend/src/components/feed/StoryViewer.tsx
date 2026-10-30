@@ -59,9 +59,17 @@ export function StoryViewer({
   const { user } = useAuth();
   const [index, setIndex] = useState(startIndex);
   const [step, setStep] = useState(0);
-  const [progress, setProgress] = useState(0);
+  // Progress is written directly to the active fill element. Updating React
+  // state on every animation frame rerendered the entire viewer ~60 times/sec.
   const progressRef = useRef(0);
+  const progressFillRef = useRef<HTMLSpanElement | null>(null);
   const [readyItemId, setReadyItemId] = useState<string | null>(null);
+  const [videoPlayingItemId, setVideoPlayingItemId] = useState<string | null>(null);
+  const [videoFailedItemId, setVideoFailedItemId] = useState<string | null>(null);
+  const [pageVisible, setPageVisible] = useState(
+    () => typeof document === "undefined" || document.visibilityState !== "hidden",
+  );
+  const activeItemIdRef = useRef<string | null>(null);
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(false);
   const [replyText, setReplyText] = useState("");
@@ -93,60 +101,68 @@ export function StoryViewer({
   const updateProgress = useCallback((value: number) => {
     const nextProgress = Math.max(0, Math.min(1, value));
     progressRef.current = nextProgress;
-    setProgress(nextProgress);
+    progressFillRef.current?.style.setProperty("transform", `scaleX(${nextProgress})`);
   }, []);
 
   const group = groups[index];
   const item = group?.items[step];
+  const itemId = item?._id ?? null;
+  activeItemIdRef.current = itemId;
   const count = Math.max(1, group?.items.length ?? 1);
   // Photo stories stay visible for eight seconds; video duration remains media-driven.
   const duration = (item?.mediaType === "video" ? (item?.duration ?? 4200) : 8000) as number;
   const isOwnStory = user?.username === group?.author?.username;
 
-  const next = useCallback(() => {
+  const resetStoryPlayback = useCallback(() => {
+    if (raf.current !== null) cancelAnimationFrame(raf.current);
+    raf.current = null;
     updateProgress(0);
     setReadyItemId(null);
-    setStep((s) => {
-      if (s + 1 < count) return s + 1;
-      setIndex((i) => {
-        if (i + 1 < groups.length) return i + 1;
-        onClose();
-        return i;
-      });
-      return 0;
-    });
-  }, [count, groups.length, onClose, updateProgress]);
+    setVideoPlayingItemId(null);
+    setVideoFailedItemId(null);
+  }, [updateProgress]);
+
+  const next = useCallback(() => {
+    resetStoryPlayback();
+    if (step + 1 < count) {
+      setStep(step + 1);
+      return;
+    }
+    if (index + 1 < groups.length) {
+      setIndex(index + 1);
+      setStep(0);
+      return;
+    }
+    onClose();
+  }, [step, count, index, groups.length, onClose, resetStoryPlayback]);
 
   const prev = useCallback(() => {
-    updateProgress(0);
-    setReadyItemId(null);
-    setStep((s) => {
-      if (s > 0) return s - 1;
-      setIndex((i) => {
-        if (i > 0) return i - 1;
-        return 0;
-      });
-      return 0;
-    });
-  }, [updateProgress]);
+    if (step > 0) {
+      resetStoryPlayback();
+      setStep(step - 1);
+    } else if (index > 0) {
+      resetStoryPlayback();
+      setIndex(index - 1);
+      setStep(0);
+    }
+  }, [step, index, resetStoryPlayback]);
 
   const nextGroup = useCallback(() => {
-    updateProgress(0);
-    setReadyItemId(null);
-    setStep(0);
-    setIndex((i) => {
-      if (i + 1 < groups.length) return i + 1;
+    if (index + 1 >= groups.length) {
       onClose();
-      return i;
-    });
-  }, [groups.length, onClose, updateProgress]);
+      return;
+    }
+    resetStoryPlayback();
+    setStep(0);
+    setIndex(index + 1);
+  }, [index, groups.length, onClose, resetStoryPlayback]);
 
   const prevGroup = useCallback(() => {
-    updateProgress(0);
-    setReadyItemId(null);
+    if (index === 0) return;
+    resetStoryPlayback();
     setStep(0);
-    setIndex((i) => (i > 0 ? i - 1 : 0));
-  }, [updateProgress]);
+    setIndex(index - 1);
+  }, [index, resetStoryPlayback]);
 
   // Touch swipe handlers for switching stories
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -183,40 +199,66 @@ export function StoryViewer({
     }
   }, [item?._id]);
 
-  // Reset the loading line the moment the displayed story changes — moving
-  // back (or forward) must NEVER show the previous line re-filling from its
-  // old position; the target story starts a fresh loading line at 0.
+  // Story playback must stop while the document is backgrounded. This also
+  // prevents a throttled animation frame from counting hidden time on resume.
   useEffect(() => {
-    updateProgress(0);
-  }, [index, step, item?._id, updateProgress]);
+    const updateVisibility = () => setPageVisible(document.visibilityState !== "hidden");
+    document.addEventListener("visibilitychange", updateVisibility);
+    updateVisibility();
+    return () => document.removeEventListener("visibilitychange", updateVisibility);
+  }, []);
 
-  // A story without a usable media URL cannot emit a load/error event. Allow it
-  // to progress rather than leaving the viewer permanently paused on black.
+  // A story without a media URL cannot emit a load/error event. Keep its
+  // existing fallback behavior so the viewer does not remain stuck on black.
   useEffect(() => {
-    if (item?._id && !item.mediaUrl?.trim()) setReadyItemId(item._id);
-  }, [item?._id, item?.mediaUrl]);
-
-  // Start the image timer only after its media is ready to display. This avoids
-  // consuming story time while an image is still loading on a slow connection.
-  // For playable videos, native media time drives the line; an errored video
-  // falls back to the regular duration so the viewer never gets stuck.
-  useEffect(() => {
-    if (paused || !item?._id || readyItemId !== item._id) return;
-    const video = videoRef.current;
-    if (
-      item?.mediaType === "video" &&
-      video &&
-      video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA &&
-      !video.error
-    ) {
-      return;
+    if (itemId && !item?.mediaUrl?.trim()) {
+      setReadyItemId(itemId);
+      if (item.mediaType === "video") setVideoFailedItemId(itemId);
     }
+  }, [itemId, item?.mediaUrl, item?.mediaType]);
+
+  // Images start their viewing clock only after load + decode. Videos use their
+  // own playback clock and pause automatically while buffering or backgrounded.
+  useEffect(() => {
+    if (paused || !pageVisible || !itemId || readyItemId !== itemId) return;
+
+    if (item?.mediaType === "video" && videoFailedItemId !== itemId) {
+      if (videoPlayingItemId !== itemId) return;
+      const video = videoRef.current;
+      if (!video) return;
+
+      let cancelled = false;
+      const tick = () => {
+        if (cancelled) return;
+        if (video.paused || video.ended || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+          raf.current = null;
+          return;
+        }
+        if (Number.isFinite(video.duration) && video.duration > 0) {
+          updateProgress(video.currentTime / video.duration);
+        }
+        raf.current = requestAnimationFrame(tick);
+      };
+      raf.current = requestAnimationFrame(tick);
+      return () => {
+        cancelled = true;
+        if (raf.current !== null) cancelAnimationFrame(raf.current);
+        raf.current = null;
+      };
+    }
+
+    // Failed video playback falls back to the story's configured duration;
+    // normal videos never use this timer and therefore cannot advance while
+    // paused or buffering.
     let cancelled = false;
+    let elapsed = 0;
+    let previousFrame = performance.now();
     const startProgress = progressRef.current;
-    const start = performance.now();
     const tick = (now: number) => {
       if (cancelled) return;
-      const p = Math.min(1, startProgress + (now - start) / duration);
+      elapsed += Math.max(0, now - previousFrame);
+      previousFrame = now;
+      const p = Math.min(1, startProgress + elapsed / duration);
       updateProgress(p);
       if (p >= 1) {
         next();
@@ -227,30 +269,47 @@ export function StoryViewer({
     raf.current = requestAnimationFrame(tick);
     return () => {
       cancelled = true;
-      if (raf.current) cancelAnimationFrame(raf.current);
+      if (raf.current !== null) cancelAnimationFrame(raf.current);
+      raf.current = null;
     };
   }, [
     index,
     step,
     paused,
+    pageVisible,
     next,
     duration,
-    item?._id,
+    itemId,
     item?.mediaType,
     readyItemId,
+    videoPlayingItemId,
+    videoFailedItemId,
     updateProgress,
   ]);
 
-  // Sync video playback with story pause/resume
+  // Attempt normal playback first. If autoplay with sound is blocked, retry
+  // muted (the viewer already exposes its sound toggle). A second rejection or
+  // media error falls back to the safe timed-advance path.
   useEffect(() => {
-    if (item?.mediaType === "video" && videoRef.current) {
-      if (paused) {
-        videoRef.current.pause();
-      } else {
-        videoRef.current.play().catch(() => {});
-      }
+    if (item?.mediaType !== "video" || !itemId) return;
+    const video = videoRef.current;
+    if (!video) return;
+    let cancelled = false;
+    if (paused || !pageVisible) {
+      video.pause();
+      return () => { cancelled = true; };
     }
-  }, [paused, index, step, item?.mediaType]);
+    void video.play().catch(() => {
+      if (cancelled || activeItemIdRef.current !== itemId) return;
+      if (!muted) {
+        setMuted(true);
+      } else {
+        setVideoFailedItemId(itemId);
+        setReadyItemId(itemId);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [paused, pageVisible, muted, index, step, item?.mediaType, itemId]);
 
   // Keyboard Navigation Support
   useEffect(() => {
@@ -287,6 +346,23 @@ export function StoryViewer({
   // plain <img>/<video> tags that cannot send an Authorization header, so the
   // token rides in the query string for the author's own pending media.
   const image = mediaUrlWithAuth(item.mediaUrl);
+  const storyItemId = item._id;
+  const handleImageLoad = async (event: React.SyntheticEvent<HTMLImageElement>) => {
+    const element = event.currentTarget;
+    if (!element.naturalWidth) return;
+    try {
+      await element.decode();
+    } catch {
+      // The load event is still authoritative when decode is unsupported or
+      // rejects for a browser-specific reason.
+    }
+    if (!element.isConnected || (element.currentSrc && element.currentSrc !== image)) return;
+    if (activeItemIdRef.current === storyItemId) setReadyItemId(storyItemId);
+  };
+
+  const handleImageError = () => {
+    if (activeItemIdRef.current === storyItemId) setReadyItemId(storyItemId);
+  };
 
   const handleDeleteCurrentStory = () => {
     if (!item) return;
@@ -325,18 +401,46 @@ export function StoryViewer({
         {/* Video or Image Stage */}
         {image && item.mediaType === "video" ? (
           <video
+            key={storyItemId}
             ref={videoRef}
             src={image}
             autoPlay
             muted={muted}
             playsInline
             preload="auto"
-            onLoadedData={() => setReadyItemId(item._id)}
-            onError={() => setReadyItemId(item._id)}
-            onEnded={next}
+            onPlaying={() => {
+              if (activeItemIdRef.current !== storyItemId) return;
+              setReadyItemId(storyItemId);
+              setVideoFailedItemId(null);
+              setVideoPlayingItemId(storyItemId);
+            }}
+            onWaiting={() =>
+              setVideoPlayingItemId((current) => (current === storyItemId ? null : current))
+            }
+            onStalled={() =>
+              setVideoPlayingItemId((current) => (current === storyItemId ? null : current))
+            }
+            onPause={() =>
+              setVideoPlayingItemId((current) => (current === storyItemId ? null : current))
+            }
+            onError={() => {
+              if (activeItemIdRef.current !== storyItemId) return;
+              setVideoPlayingItemId(null);
+              setVideoFailedItemId(storyItemId);
+              setReadyItemId(storyItemId);
+            }}
+            onEnded={() => {
+              if (activeItemIdRef.current === storyItemId && !paused && pageVisible) next();
+            }}
             onTimeUpdate={() => {
-              if (videoRef.current && videoRef.current.duration) {
-                updateProgress(videoRef.current.currentTime / videoRef.current.duration);
+              const video = videoRef.current;
+              if (
+                activeItemIdRef.current === storyItemId &&
+                video &&
+                Number.isFinite(video.duration) &&
+                video.duration > 0
+              ) {
+                updateProgress(video.currentTime / video.duration);
               }
             }}
             className="absolute inset-0 size-full object-contain bg-black"
@@ -350,12 +454,13 @@ export function StoryViewer({
               aria-hidden="true"
             />
             <img
+              key={storyItemId}
               src={image}
               alt={item.caption || "Story item"}
               loading="eager"
               decoding="async"
-              onLoad={() => setReadyItemId(item._id)}
-              onError={() => setReadyItemId(item._id)}
+              onLoad={handleImageLoad}
+              onError={handleImageError}
               className="relative z-10 size-full object-contain"
             />
           </div>
@@ -379,8 +484,12 @@ export function StoryViewer({
           {Array.from({ length: count }).map((_, i) => (
             <span key={i} className="h-[3px] flex-1 overflow-hidden rounded-full bg-white/30">
               <span
-                className="block h-full rounded-full bg-white transition-none"
-                style={{ width: `${i < step ? 100 : i === step ? progress * 100 : 0}%` }}
+                ref={i === step ? progressFillRef : null}
+                className="block h-full w-full rounded-full bg-white transition-none"
+                style={{
+                  transform: `scaleX(${i < step ? 1 : i === step ? progressRef.current : 0})`,
+                  transformOrigin: "left center",
+                }}
               />
             </span>
           ))}

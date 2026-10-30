@@ -495,13 +495,20 @@
 .right-rail {
   scrollbar-width: none;
   -ms-overflow-style: none;
-  transition:
-    top 350ms cubic-bezier(0.22, 1, 0.36, 1),
-    height 350ms cubic-bezier(0.22, 1, 0.36, 1);
-  will-change: top, height;
+}
+/* The rail itself never changes size or sticky offset (no layout work while
+   the top bar animates). Only its content glides with a GPU transform, using
+   the exact same duration/easing as the top bar so both move as one. */
+.right-rail .right-rail-body {
+  transform: translate3d(0, 4rem, 0);
+  transition: transform 350ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+html.topbar-hidden .right-rail .right-rail-body {
+  transform: translate3d(0, 0, 0);
 }
 @media (prefers-reduced-motion: reduce) {
-  .right-rail {
+  .right-rail .right-rail-body {
     transition: none;
   }
 }
@@ -509,10 +516,6 @@
   display: none;
   width: 0;
   height: 0;
-}
-html.topbar-hidden .right-rail {
-  top: 0;
-  height: 100dvh;
 }
 
 /* Right rail never scrolls: on shorter screens it drops sections / items so

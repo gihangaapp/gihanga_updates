@@ -164,15 +164,19 @@ function HomeFeed() {
       return 5_000;
     },
   });
-  const forYou = useFeed();
-  const trending = useTrending();
-  const explore = useExplore();
+  // Do not fetch and poll both inactive feeds while the user is browsing For You.
+  // React Query retains their cache, so switching tabs still renders warm data.
+  const forYou = useFeed(tab === "foryou");
+  const trending = useTrending(tab === "trending");
+  const trendingEmpty =
+    tab === "trending" &&
+    trending.isFetched &&
+    (trending.data?.pages.flatMap((p) => p.posts).length ?? 0) === 0;
+  const explore = useExplore(trendingEmpty);
   const { data: feedAds = [] } = useFeedAds();
 
   // Trending uses the dedicated ranked trending feed; if it has nothing yet
   // (fresh platform) fall back to the explore feed ordered by engagement.
-  const trendingEmpty =
-    !trending.isLoading && (trending.data?.pages.flatMap((p) => p.posts).length ?? 0) === 0;
   const trendingSource = trendingEmpty ? explore : trending;
   const active = tab === "foryou" ? forYou : trendingSource;
   const activeFeedRef = useRef(active);

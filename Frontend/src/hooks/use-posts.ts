@@ -25,7 +25,7 @@ function useCursoredPosts(key: string, endpoint: string, enabled = true) {
   });
 }
 
-export function useFeed() {
+export function useFeed(enabled = true) {
   const { user } = useAuth();
   return useInfiniteQuery({
     queryKey: ["posts", "feed", user?.id],
@@ -40,11 +40,11 @@ export function useFeed() {
     // Existing IndexedDB data remains available for instant rendering, but is
     // quietly reconciled against the full public feed after every mount.
     staleTime: 0,
-    enabled: Boolean(user),
+    enabled: Boolean(user) && enabled,
   });
 }
 
-export function useExplore() {
+export function useExplore(enabled = true) {
   const { user } = useAuth();
   return useInfiniteQuery({
     queryKey: ["posts", "explore", user?.id],
@@ -56,10 +56,11 @@ export function useExplore() {
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled,
   });
 }
 
-export function useTrending() {
+export function useTrending(enabled = true) {
   const { user } = useAuth();
   return useInfiniteQuery({
     queryKey: ["posts", "trending", user?.id],
@@ -71,6 +72,7 @@ export function useTrending() {
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
+    enabled,
     refetchInterval: 60_000,
   });
 }
@@ -96,13 +98,10 @@ export function useTagPosts(tag: string) {
     `/posts/tag/${encodeURIComponent(tag)}`,
     Boolean(tag),
   );
-  const meta = useQuery({
-    queryKey: ["tag-meta", tag],
-    queryFn: () =>
-      api.get<{ tag: string; postsCount: number }>(`/posts/tag/${encodeURIComponent(tag)}`),
-    enabled: Boolean(tag),
-  });
-  return { ...query, postsCount: meta.data?.postsCount ?? 0 };
+  // The paginated endpoint includes postsCount in the same response. Reuse it
+  // instead of issuing a second identical request under a separate query key.
+  const firstPage = query.data?.pages[0] as (PostsPage & { postsCount?: number }) | undefined;
+  return { ...query, postsCount: firstPage?.postsCount ?? 0 };
 }
 
 export function useUserPosts(username: string) {

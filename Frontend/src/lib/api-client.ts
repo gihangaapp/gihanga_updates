@@ -121,13 +121,16 @@ async function apiFetch<T>(
 ): Promise<T> {
   const token = isStaffRequest ? getStaffAccessToken() : getConsumerAccessToken();
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(options.headers as Record<string, string>),
-  };
+  const headers = new Headers(options.headers);
+  if (!headers.has("Accept")) headers.set("Accept", "application/json");
+  const hasBody = options.body !== undefined && options.body !== null;
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+  if (hasBody && !isFormData && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
 
   if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+    headers.set("Authorization", `Bearer ${token}`);
   }
 
   let response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -145,7 +148,7 @@ async function apiFetch<T>(
     if (refreshed) {
       const newToken = isStaffRequest ? getStaffAccessToken() : getConsumerAccessToken();
       if (newToken) {
-        headers["Authorization"] = `Bearer ${newToken}`;
+        headers.set("Authorization", `Bearer ${newToken}`);
         response = await fetch(`${API_BASE_URL}${endpoint}`, {
           ...options,
           headers,
