@@ -28,7 +28,7 @@ import { Button } from "@/components/ui/button";
 import { CommentSheet } from "@/components/viewing/CommentSheet";
 import { ShareSheet } from "@/components/viewing/ShareSheet";
 import { formatCount } from "@/lib/format";
-import { FeedPost, mediaUrl } from "@/lib/api-client";
+import { api, FeedPost, mediaUrl } from "@/lib/api-client";
 import { useReelsFeed, useToggleLike, useToggleBookmark, useDeletePost } from "@/hooks/use-posts";
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { useAuth } from "@/lib/auth-context";
@@ -114,6 +114,11 @@ function ReelCard({
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastTap = useRef(0);
+  const impressionTracked = useRef(false);
+  const playbackStarted = useRef(false);
+  const activePreviously = useRef(false);
+  const watchedMilestones = useRef(new Set<number>());
+  const lastPlaybackTime = useRef(0);
 
   const toggleLike = useToggleLike();
   const toggleBookmark = useToggleBookmark();
@@ -122,6 +127,8 @@ function ReelCard({
   const { data: followingSet } = useFollowingSet();
 
   const authorObj = typeof reel.author === "object" ? reel.author : null;
+  const creatorId = String(authorObj?._id ?? reel.author);
+  const reelTags = Array.isArray(reel.tags) ? reel.tags : [];
   const authorUsername = authorObj?.username || "creator";
   const authorName = authorObj?.name || "Creator";
   const authorAvatar = authorObj?.avatarUrl;
@@ -134,6 +141,50 @@ function ReelCard({
   // mounted (sources attached) so arrow/wheel navigation is INSTANT; anything
   // further away renders an empty snap cell (no network, no decode).
   const attachSrc = (isActive || isNeighbor) && !hasError;
+
+  // A Reel impression starts when the item becomes the active, visible card.
+  // Playback milestones are tracked once per pass; a loop/rewatch starts a new pass.
+  useEffect(() => {
+    if (!isActive) {
+      if (activePreviously.current && !watchedMilestones.current.has(25)) {
+        void logRecommendationEvent({
+          event: "reel_skip",
+          targetKind: "reel",
+          targetId: reel._id,
+          creatorId,
+          tags: reelTags,
+          watchDuration: lastPlaybackTime.current,
+          ...(videoRef.current && Number.isFinite(videoRef.current.duration)
+            ? { contentDuration: videoRef.current.duration }
+            : {}),
+          skipped: true,
+        });
+      }
+      activePreviously.current = false;
+      return;
+    }
+
+    if (!impressionTracked.current) {
+      impressionTracked.current = true;
+      void api.post(`/posts/${reel._id}/view`).catch(() => undefined);
+      void logRecommendationEvent({
+        event: "reel_impression",
+        targetKind: "reel",
+        targetId: reel._id,
+        creatorId,
+        tags: reelTags,
+      });
+    } else if (!activePreviously.current) {
+      void logRecommendationEvent({
+        event: "reel_rewatch",
+        targetKind: "reel",
+        targetId: reel._id,
+        creatorId,
+        tags: reelTags,
+      });
+    }
+    activePreviously.current = true;
+  }, [isActive, reel._id, creatorId, reelTags]);
 
   // Viewport Active Playing & Audio Isolation Management
   useEffect(() => {
@@ -163,15 +214,84 @@ function ReelCard({
   }, [isActive, hasError]);
 
   const handleLike = useCallback(() => {
-    logRecommendationEvent({
-      event: reel.liked ? "reel_unlike" : "reel_like",
+    // The API route records the confirmed like/unlike for recommendation ranking.
+    toggleLike.mutate(reel._id);
+  }, [toggleLike, reel._id]);
+
+  const handleShare = useCallback(() => {
+    void api.post(`/posts/${reel._id}/share`).catch(() => undefined);
+  }, [reel._id]);
+
+  const handleCreatorOpen = useCallback(() => {
+    void logRecommendationEvent({
+      event: "reel_open_creator",
       targetKind: "reel",
       targetId: reel._id,
-      creatorId: String(authorObj?._id ?? reel.author),
-      tags: Array.isArray(reel.tags) ? reel.tags : [],
+      creatorId,
+      tags: reelTags,
     });
-    toggleLike.mutate(reel._id);
-  }, [toggleLike, reel._id, reel.liked, authorObj?._id, reel.author, reel.tags]);
+  }, [reel._id, creatorId, reelTags]);
+
+  const handlePlaybackStart = () => {
+    if (!isActive) return;
+    void logRecommendationEvent({
+      event: playbackStarted.current ? "reel_resume" : "reel_start",
+      targetKind: "reel",
+      targetId: reel._id,
+      creatorId,
+      tags: reelTags,
+    });
+    playbackStarted.current = true;
+  };
+
+  const handlePlaybackPause = () => {
+    if (!isActive || !playbackStarted.current) return;
+    void logRecommendationEvent({
+      event: "reel_pause",
+      targetKind: "reel",
+      targetId: reel._id,
+      creatorId,
+      tags: reelTags,
+      watchDuration: lastPlaybackTime.current,
+      ...(videoRef.current && Number.isFinite(videoRef.current.duration)
+        ? { contentDuration: videoRef.current.duration }
+        : {}),
+    });
+  };
+
+  const handleTimeUpdate = () => {
+    const video = videoRef.current;
+    if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return;
+    const currentTime = video.currentTime;
+    if (currentTime + 1 < lastPlaybackTime.current) {
+      watchedMilestones.current.clear();
+      void logRecommendationEvent({
+        event: "reel_rewatch",
+        targetKind: "reel",
+        targetId: reel._id,
+        creatorId,
+        tags: reelTags,
+      });
+    }
+    lastPlaybackTime.current = currentTime;
+    const percentage = Math.min(100, Math.floor((currentTime / video.duration) * 100));
+    for (const milestone of [25, 50, 75, 100]) {
+      if (percentage >= milestone && !watchedMilestones.current.has(milestone)) {
+        watchedMilestones.current.add(milestone);
+        void logRecommendationEvent({
+          event: `reel_${milestone}_percent` as "reel_25_percent" | "reel_50_percent" | "reel_75_percent" | "reel_100_percent",
+          targetKind: "reel",
+          targetId: reel._id,
+          creatorId,
+          tags: reelTags,
+          watchDuration: currentTime,
+          contentDuration: video.duration,
+          watchPercentage: percentage,
+          completed: milestone === 100,
+        });
+      }
+    }
+  };
 
   const togglePlay = () => {
     if (!videoRef.current || hasError) return;
@@ -228,6 +348,9 @@ function ReelCard({
           playsInline
           preload={isActive ? "auto" : "metadata"}
           onLoadedData={() => setIsLoading(false)}
+          onPlay={handlePlaybackStart}
+          onPause={handlePlaybackPause}
+          onTimeUpdate={handleTimeUpdate}
           onError={() => {
             setIsLoading(false);
             setHasError(true);
@@ -424,6 +547,7 @@ function ReelCard({
           <Link
             to="/profile/$username"
             params={{ username: authorUsername }}
+            onClick={handleCreatorOpen}
             className="press flex items-center gap-2"
           >
             <GAvatar user={toDisplayUser(reel.author)} size="sm" />
@@ -492,6 +616,7 @@ function ReelCard({
         title={`Reel by @${authorUsername} on Gihanga Updates`}
         text={reel.body}
         url={`${typeof window !== "undefined" ? window.location.origin : ""}/post/${reel._id}`}
+        onShare={handleShare}
       />
 
       {/* More Options Modal Sheet */}

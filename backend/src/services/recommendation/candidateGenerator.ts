@@ -4,7 +4,7 @@ import { Follow } from "../../models/Follow";
 import { IUserInterestProfile } from "../../models/UserInterestProfile";
 
 export interface CandidateSource {
-  source: "following" | "interest" | "trending" | "similar" | "fresh" | "exploration";
+  source: "following" | "interest" | "trending" | "similar" | "fresh" | "exploration" | "own" | "search";
   post: IPost;
 }
 
@@ -26,7 +26,7 @@ export async function getFollowingCandidates(
 
   const posts = await Post.find(query)
     .sort({ createdAt: -1 })
-    .limit(40)
+    .limit(60)
     .populate("author", "name username avatarHue avatarUrl isCreator verified isLive");
 
   return posts.map((post) => ({ source: "following", post }));
@@ -42,13 +42,15 @@ export async function getInterestCandidates(
   try {
     if (profile.tagWeights instanceof Map) {
       topTags = Array.from(profile.tagWeights.entries())
+        .filter(([, weight]) => Number(weight) > 0)
         .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
+        .slice(0, 10)
         .map(([tag]) => tag);
     } else if (typeof profile.tagWeights === "object") {
       topTags = Object.entries(profile.tagWeights)
+        .filter(([, weight]) => Number(weight) > 0)
         .sort((a: any, b: any) => b[1] - a[1])
-        .slice(0, 5)
+        .slice(0, 10)
         .map(([tag]) => tag);
     }
   } catch {
@@ -57,8 +59,14 @@ export async function getInterestCandidates(
 
   if (topTags.length === 0) return [];
 
+  const escapedTerms = topTags.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const contentTopicRegex = new RegExp(escapedTerms.join("|"), "i");
   const query: any = {
-    tags: { $in: topTags },
+    $or: [
+      { tags: { $in: topTags } },
+      { body: contentTopicRegex },
+      { location: contentTopicRegex },
+    ],
     status: "published",
     audience: "public",
   };
@@ -67,7 +75,7 @@ export async function getInterestCandidates(
 
   const posts = await Post.find(query)
     .sort({ createdAt: -1 })
-    .limit(40)
+    .limit(60)
     .populate("author", "name username avatarHue avatarUrl isCreator verified isLive");
 
   return posts.map((post) => ({ source: "interest", post }));
@@ -86,7 +94,7 @@ export async function getTrendingCandidates(
   // Select top posts by views, likes, shares count
   const posts = await Post.find(query)
     .sort({ viewsCount: -1, likesCount: -1, createdAt: -1 })
-    .limit(30)
+    .limit(50)
     .populate("author", "name username avatarHue avatarUrl isCreator verified isLive");
 
   return posts.map((post) => ({ source: "trending", post }));
@@ -104,7 +112,7 @@ export async function getFreshCandidates(
 
   const posts = await Post.find(query)
     .sort({ createdAt: -1 })
-    .limit(30)
+    .limit(50)
     .populate("author", "name username avatarHue avatarUrl isCreator verified isLive");
 
   return posts.map((post) => ({ source: "fresh", post }));

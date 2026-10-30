@@ -8,6 +8,19 @@ import { applyLedgerEntry } from "../../../../lib/wallet";
 
 const router = Router();
 
+function serializeStaffCampaign(campaign: any, role: string) {
+  const value = typeof campaign?.toObject === "function" ? campaign.toObject() : { ...campaign };
+  // Contact and manual payment reference are financial-contact data.
+  // Moderators can review/approve creative but only admins can access these fields.
+  if (role === "moderator") {
+    delete value.manualPaymentContact;
+    delete value.manualPaymentReference;
+    delete value.manualPaymentVerifiedBy;
+    if (value.creator && typeof value.creator === "object") delete value.creator.email;
+  }
+  return value;
+}
+
 // GET /api/v1/system/ads — List all campaigns across the platform (Admin/Moderator dashboard)
 router.get("/", authenticateStaff, requirePermission("ads.view"), async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -24,14 +37,14 @@ router.get("/", authenticateStaff, requirePermission("ads.view"), async (req: Au
       .limit(200)
       .populate("creator", "name username email avatarHue avatarUrl isCreator verified");
 
-    return res.json({ campaigns });
+    return res.json({ campaigns: campaigns.map((campaign) => serializeStaffCampaign(campaign, req.staffUser!.role)) });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to load campaigns", details: error.message });
   }
 });
 
 // GET /api/v1/system/ads/analytics/summary — Platform-wide advertising analytics summary
-router.get("/analytics/summary", authenticateStaff, requirePermission("ads.view"), async (_req, res: Response) => {
+router.get("/analytics/summary", authenticateStaff, requirePermission("ads.view"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const [stats] = await Advertisement.aggregate([
       { $match: { _legacySystem: { $ne: true } } },
@@ -45,6 +58,12 @@ router.get("/analytics/summary", authenticateStaff, requirePermission("ads.view"
           pendingReview: {
             $sum: { $cond: [{ $eq: ["$status", "pending_review"] }, 1, 0] },
           },
+          awaitingManualPayment: {
+            $sum: { $cond: [{ $and: [{ $eq: ["$status", "approved"] }, { $eq: ["$manualPaymentStatus", "awaiting_payment"] }] }, 1, 0] },
+          },
+          manualPaymentVerified: {
+            $sum: { $cond: [{ $eq: ["$manualPaymentStatus", "verified"] }, 1, 0] },
+          },
           approvedCampaigns: {
             $sum: { $cond: [{ $eq: ["$status", "approved"] }, 1, 0] },
           },
@@ -52,7 +71,28 @@ router.get("/analytics/summary", authenticateStaff, requirePermission("ads.view"
             $sum: { $cond: [{ $eq: ["$status", "rejected"] }, 1, 0] },
           },
           totalRwfRevenue: {
-            $sum: { $cond: [{ $eq: ["$paymentMethod", "real_money"] }, "$totalRwfCost", 0] },
+            $sum: { $cond: [
+              { $and: [
+                { $in: ["$paymentMethod", ["real_money", "manual"]] },
+                { $eq: ["$paymentStatus", "paid"] },
+                { $or: [
+                  { $ne: ["$paymentMethod", "manual"] },
+                  { $eq: ["$manualPaymentStatus", "verified"] },
+                ] },
+              ] },
+              "$totalRwfCost",
+              0,
+            ] },
+          },
+          manualPaymentRevenue: {
+            $sum: { $cond: [
+              { $and: [
+                { $eq: ["$paymentMethod", "manual"] },
+                { $eq: ["$manualPaymentStatus", "verified"] },
+              ] },
+              "$totalRwfCost",
+              0,
+            ] },
           },
           totalPointsSpent: {
             $sum: { $cond: [{ $eq: ["$paymentMethod", "gihanga_points"] }, "$totalGpCost", 0] },
@@ -65,21 +105,30 @@ router.get("/analytics/summary", authenticateStaff, requirePermission("ads.view"
       },
     ]);
 
-    return res.json({
-      summary: stats || {
-        totalCampaigns: 0,
-        activeCampaigns: 0,
-        pendingReview: 0,
-        approvedCampaigns: 0,
-        rejectedCampaigns: 0,
-        totalRwfRevenue: 0,
-        totalPointsSpent: 0,
-        totalAdvertisingMinutes: 0,
-        totalImpressions: 0,
-        totalClicks: 0,
-        totalViews: 0,
-      },
-    });
+    const summary = stats || {
+      totalCampaigns: 0,
+      activeCampaigns: 0,
+      pendingReview: 0,
+      awaitingManualPayment: 0,
+      manualPaymentVerified: 0,
+      approvedCampaigns: 0,
+      rejectedCampaigns: 0,
+      totalRwfRevenue: 0,
+      manualPaymentRevenue: 0,
+      totalPointsSpent: 0,
+      totalAdvertisingMinutes: 0,
+      totalImpressions: 0,
+      totalClicks: 0,
+      totalViews: 0,
+    };
+    // Moderators can review creative and see delivery counts, but aggregate
+    // revenue/payment totals are only exposed to Admin and Super Admin.
+    if (req.staffUser!.role === "moderator") {
+      delete summary.totalRwfRevenue;
+      delete summary.manualPaymentRevenue;
+      delete summary.totalPointsSpent;
+    }
+    return res.json({ summary });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to load ad analytics summary", details: error.message });
   }
@@ -94,52 +143,119 @@ router.get("/:id", authenticateStaff, requirePermission("ads.view"), async (req:
     );
     if (!campaign) return res.status(404).json({ error: "Campaign not found" });
 
-    return res.json({ campaign });
+    return res.json({ campaign: serializeStaffCampaign(campaign, req.staffUser!.role) });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to fetch campaign details", details: error.message });
   }
 });
 
-// POST /api/v1/system/ads/:id/approve — Approve a paid advertisement for active delivery
+// Content approval is separate from payment collection. Manual campaigns become
+// active only after an admin/superadmin verifies that offline payment was received.
 router.post("/:id/approve", authenticateStaff, requirePermission("ads.approve"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const campaign = await Advertisement.findById(req.params.id);
     if (!campaign) return res.status(404).json({ error: "Campaign not found" });
-
-    if (campaign.paymentStatus !== "paid") {
-      return res.status(400).json({ error: "Cannot approve an unpaid advertisement campaign" });
+    if (campaign.status !== "pending_review") {
+      return res.status(409).json({ error: `Only campaigns pending content review can be approved. Current status: ${campaign.status}` });
     }
 
     const now = new Date();
-    const endDate = new Date(now.getTime() + campaign.campaignDurationDays * 24 * 60 * 60 * 1000);
-
-    campaign.status = "active";
     campaign.approvedBy = req.staffUser!.userId as any;
     campaign.approvedAt = now;
     campaign.reviewedBy = req.staffUser!.userId as any;
     campaign.reviewedAt = now;
-    campaign.startDate = campaign.startDate || now;
-    campaign.endDate = endDate;
+    campaign.rejectionReason = undefined;
+
+    if (campaign.paymentMethod === "manual") {
+      campaign.status = "approved";
+      campaign.paymentStatus = "pending";
+      campaign.manualPaymentStatus = "awaiting_payment";
+    } else {
+      // Backward compatibility for already-existing campaigns that used the
+      // previous in-app checkout flow. New submissions cannot use that flow.
+      if (campaign.paymentStatus !== "paid") {
+        return res.status(400).json({ error: "Legacy campaigns must have a confirmed payment before activation" });
+      }
+      campaign.status = "active";
+      campaign.startDate = campaign.startDate || now;
+      campaign.endDate = new Date(now.getTime() + campaign.campaignDurationDays * 24 * 60 * 60 * 1000);
+    }
     campaign.pausedBy = undefined;
     await campaign.save();
 
     await AuditLog.create({
-      actor: req.staffUser!.userId,
-      actorUsername: req.staffUser!.username,
-      action: "ads.approve",
-      targetId: String(campaign._id),
-      meta: { title: campaign.title, paymentMethod: campaign.paymentMethod },
+      actor: req.staffUser!.userId, actorUsername: req.staffUser!.username,
+      action: "ads.approve", targetId: String(campaign._id),
+      meta: { title: campaign.title, paymentMethod: campaign.paymentMethod, statusAfterApproval: campaign.status },
     });
 
     await notify({
-      recipient: String(campaign.creator),
-      kind: "system",
-      text: `Your ad campaign "${campaign.title}" was approved and is now active!`,
+      recipient: String(campaign.creator), kind: "system",
+      text: campaign.paymentMethod === "manual"
+        ? `Your advertisement "${campaign.title}" passed content review. Our team will contact you using your supplied email and phone to arrange payment. It will be published after payment is confirmed.`
+        : `Your ad campaign "${campaign.title}" was approved and is now active!`,
     });
 
-    return res.json({ campaign });
+    return res.json({ campaign: serializeStaffCampaign(campaign, req.staffUser!.role) });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to approve campaign", details: error.message });
+  }
+});
+
+// Manual payment confirmation is restricted to Admin and Super Admin.
+router.post("/:id/confirm-manual-payment", authenticateStaff, requirePermission("ads.payment.verify"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const now = new Date();
+    const reference = String(req.body?.reference || "").trim().slice(0, 120) || undefined;
+    const filter = {
+      _id: req.params.id,
+      paymentMethod: "manual",
+      status: "approved",
+      manualPaymentStatus: "awaiting_payment",
+    } as const;
+    const existing = await Advertisement.findOne(filter).select("campaignDurationDays").lean();
+    if (!existing) {
+      const current = await Advertisement.findById(req.params.id).select("paymentMethod status manualPaymentStatus");
+      if (!current) return res.status(404).json({ error: "Campaign not found" });
+      return res.status(409).json({ error: "Only an approved manual-payment campaign awaiting payment can be activated. Refresh the campaign before retrying." });
+    }
+
+    const campaign = await Advertisement.findOneAndUpdate(
+      filter,
+      {
+        $set: {
+          manualPaymentStatus: "verified",
+          manualPaymentVerifiedBy: req.staffUser!.userId,
+          manualPaymentVerifiedAt: now,
+          manualPaymentReference: reference,
+          paymentStatus: "paid",
+          paidAt: now,
+          status: "active",
+          startDate: now,
+          endDate: new Date(now.getTime() + existing.campaignDurationDays * 24 * 60 * 60 * 1000),
+        },
+        $unset: { pausedBy: 1 },
+      },
+      { new: true, runValidators: true },
+    );
+    if (!campaign) {
+      return res.status(409).json({ error: "Campaign state changed while payment was being verified. Refresh and try again." });
+    }
+
+    await AuditLog.create({
+      actor: req.staffUser!.userId, actorUsername: req.staffUser!.username,
+      action: "ads.manual_payment.verify", targetId: String(campaign._id),
+      meta: { title: campaign.title, amountRwf: campaign.totalRwfCost, reference },
+    });
+
+    await notify({
+      recipient: String(campaign.creator), kind: "payment",
+      text: `Manual payment for your campaign "${campaign.title}" has been confirmed. Your advertisement is now active on Gihanga Updates.`,
+    });
+
+    return res.json({ campaign: serializeStaffCampaign(campaign, req.staffUser!.role), message: "Manual payment verified and campaign activated" });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to verify manual payment", details: error.message });
   }
 });
 
@@ -148,10 +264,16 @@ router.post("/:id/reject", authenticateStaff, requirePermission("ads.approve"), 
   try {
     const { reason, autoRefund } = req.body;
     if (!reason?.trim()) return res.status(400).json({ error: "Rejection reason is required" });
+    if (autoRefund && !["admin", "superadmin"].includes(req.staffUser!.role)) {
+      return res.status(403).json({ error: "Only administrators can initiate legacy ad refunds" });
+    }
 
     const campaign = await Advertisement.findById(req.params.id);
     if (!campaign) return res.status(404).json({ error: "Campaign not found" });
 
+    if (!["pending_review", "approved"].includes(campaign.status)) {
+      return res.status(409).json({ error: `Campaign cannot be rejected from status ${campaign.status}` });
+    }
     campaign.status = "rejected";
     campaign.rejectionReason = reason.trim();
     campaign.reviewedBy = req.staffUser!.userId as any;
@@ -173,7 +295,7 @@ router.post("/:id/reject", authenticateStaff, requirePermission("ads.approve"), 
     });
 
     // Option to auto-refund on rejection if requested
-    if (autoRefund && campaign.paymentStatus === "paid") {
+    if (autoRefund && campaign.paymentStatus === "paid" && campaign.paymentMethod !== "manual") {
       if (campaign.paymentMethod === "gihanga_points") {
         await refundAdPoints(String(campaign._id), req.staffUser!.userId);
       } else if (campaign.paymentMethod === "real_money" && campaign.totalRwfCost > 0) {
@@ -189,7 +311,7 @@ router.post("/:id/reject", authenticateStaff, requirePermission("ads.approve"), 
       }
     }
 
-    return res.json({ campaign });
+    return res.json({ campaign: serializeStaffCampaign(campaign, req.staffUser!.role) });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to reject campaign", details: error.message });
   }

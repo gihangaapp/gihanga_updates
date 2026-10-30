@@ -45,7 +45,9 @@ export async function filterEligibleCandidates(
   const negativeCreatorIds = new Set<string>();
   negativeFeedbacks.forEach((nf) => {
     if (nf.content) negativeContentIds.add(String(nf.content));
-    if (nf.creator) negativeCreatorIds.add(String(nf.creator));
+    // A single "not interested" post should not hide every post from its author.
+    // Only explicit creator-level feedback suppresses the creator altogether.
+    if (nf.creator && nf.reason === "dont_like_creator") negativeCreatorIds.add(String(nf.creator));
   });
 
   views.forEach((v) => {

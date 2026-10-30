@@ -12,6 +12,7 @@ interface ShareSheetProps {
   title?: string;
   text?: string;
   url?: string;
+  onShare?: () => void;
 }
 
 export function ShareSheet({
@@ -20,17 +21,23 @@ export function ShareSheet({
   title = "Check this out on Gihanga Updates",
   text,
   url,
+  onShare,
 }: ShareSheetProps) {
   const isMobile = useIsMobile();
   const [copied, setCopied] = useState(false);
 
   const targetUrl = url || (typeof window !== "undefined" ? window.location.href : "");
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(targetUrl);
-    setCopied(true);
-    toast.success("Link copied to clipboard!");
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(targetUrl);
+      onShare?.();
+      setCopied(true);
+      toast.success("Link copied to clipboard!");
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Could not copy the link");
+    }
   };
 
   const handleNativeShare = async () => {
@@ -41,6 +48,7 @@ export function ShareSheet({
           text: text || title,
           url: targetUrl,
         });
+        onShare?.();
         onOpenChange(false);
       } catch (err: any) {
         if (err.name !== "AbortError") {
@@ -99,7 +107,10 @@ export function ShareSheet({
               href={item.href}
               target="_blank"
               rel="noopener noreferrer"
-              onClick={() => onOpenChange(false)}
+              onClick={() => {
+                onShare?.();
+                onOpenChange(false);
+              }}
               className="press flex flex-col items-center gap-2"
             >
               <div

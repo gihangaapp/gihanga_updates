@@ -8,6 +8,7 @@ import { notify } from "../../../lib/notify";
 import { getIO } from "../../../lib/socket";
 import { moderationActive } from "../../../middleware/upload";
 import { assessComment } from "../../../services/moderation/contentModerationService";
+import { logInteractionEvent } from "../../../services/recommendation/eventTracker";
 
 const router = Router();
 const AUTHOR_FIELDS = "name username avatarHue avatarUrl isCreator verified";
@@ -122,6 +123,14 @@ router.post("/post/:postId", authenticateConsumer, async (req: AuthenticatedRequ
         relatedPost: String(post._id),
       });
 
+      await logInteractionEvent({
+        userId: req.user!.userId,
+        event: post.kind === "reel" ? "reel_comment" : "post_comment",
+        targetKind: post.kind === "reel" ? "reel" : "post",
+        targetId: String(post._id),
+        creatorId: String(post.author),
+        tags: post.tags || [],
+      });
       const populated = await comment.populate("author", AUTHOR_FIELDS);
       return res.status(201).json({ comment: { ...populated.toObject(), liked: false, replies: [] } });
     }
@@ -167,6 +176,14 @@ router.post("/post/:postId", authenticateConsumer, async (req: AuthenticatedRequ
       });
     }
 
+    await logInteractionEvent({
+      userId: req.user!.userId,
+      event: post.kind === "reel" ? "reel_comment" : "post_comment",
+      targetKind: post.kind === "reel" ? "reel" : "post",
+      targetId: String(post._id),
+      creatorId: String(post.author),
+      tags: post.tags || [],
+    });
     const populated = await Comment.findById(comment._id).populate("author", AUTHOR_FIELDS);
     return res.status(approved ? 201 : 202).json({
       comment: populated ? { ...populated.toObject(), liked: false, replies: [] } : null,

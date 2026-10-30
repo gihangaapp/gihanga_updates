@@ -48,12 +48,14 @@ export type EventType =
   | "story_open_creator"
   | "story_mute_creator"
   | "search"
-  | "search_result_open";
+  | "search_result_open"
+  | "user_follow"
+  | "user_unfollow";
 
 export interface LogEventPayload {
   event: EventType;
-  targetKind: "post" | "reel" | "story" | "user" | "tag";
-  targetId: string;
+  targetKind: "post" | "reel" | "story" | "user" | "tag" | "search";
+  targetId?: string;
   creatorId?: string;
   watchDuration?: number;
   contentDuration?: number;

@@ -46,14 +46,21 @@ export type EventType =
   | "story_open_creator"
   | "story_mute_creator"
   | "search"
-  | "search_result_open";
+  | "search_result_open"
+  | "user_follow"
+  | "user_unfollow"
+  | "ad_impression"
+  | "ad_view"
+  | "ad_click"
+  | "ad_hide"
+  | "ad_report";
 
 export interface IUserInteraction extends Document {
   user?: Types.ObjectId;
   sessionId?: string;
   event: EventType;
-  targetKind: "post" | "reel" | "story" | "user" | "tag";
-  targetId: Types.ObjectId;
+  targetKind: "post" | "reel" | "story" | "user" | "tag" | "search" | "ad";
+  targetId?: Types.ObjectId;
   creatorId?: Types.ObjectId;
   watchDuration?: number;
   contentDuration?: number;
@@ -72,8 +79,9 @@ const UserInteractionSchema = new Schema<IUserInteraction>(
     user: { type: Schema.Types.ObjectId, ref: "User", index: true },
     sessionId: { type: String },
     event: { type: String, required: true, index: true },
-    targetKind: { type: String, enum: ["post", "reel", "story", "user", "tag"], required: true },
-    targetId: { type: Schema.Types.ObjectId, required: true, index: true },
+    targetKind: { type: String, enum: ["post", "reel", "story", "user", "tag", "search", "ad"], required: true },
+    // Search events describe a query rather than a single MongoDB content ID.
+    targetId: { type: Schema.Types.ObjectId, required: false, index: true },
     creatorId: { type: Schema.Types.ObjectId, ref: "User", index: true },
     watchDuration: { type: Number, default: 0 },
     contentDuration: { type: Number, default: 0 },

@@ -3,6 +3,7 @@ import { Bookmark } from "../../../models/Bookmark";
 import { Post } from "../../../models/Post";
 import { Like } from "../../../models/Like";
 import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/rbac";
+import { logInteractionEvent } from "../../../services/recommendation/eventTracker";
 
 const router = Router();
 const AUTHOR_FIELDS = "name username avatarHue avatarUrl isCreator verified isLive";
@@ -42,10 +43,26 @@ router.post("/:postId", authenticateConsumer, async (req: AuthenticatedRequest, 
     const existing = await Bookmark.findOne({ user: req.user!.userId, post: post._id });
     if (existing) {
       await Bookmark.deleteOne({ _id: existing._id });
+      await logInteractionEvent({
+        userId: req.user!.userId,
+        event: post.kind === "reel" ? "reel_unsave" : "post_unsave",
+        targetKind: post.kind === "reel" ? "reel" : "post",
+        targetId: String(post._id),
+        creatorId: String(post.author),
+        tags: post.tags || [],
+      });
       return res.json({ bookmarked: false });
     }
 
     await Bookmark.create({ user: req.user!.userId, post: post._id });
+    await logInteractionEvent({
+      userId: req.user!.userId,
+      event: post.kind === "reel" ? "reel_save" : "post_save",
+      targetKind: post.kind === "reel" ? "reel" : "post",
+      targetId: String(post._id),
+      creatorId: String(post.author),
+      tags: post.tags || [],
+    });
     return res.json({ bookmarked: true });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to save post", details: error.message });

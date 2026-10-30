@@ -7,6 +7,7 @@ import { notify } from "../../../lib/notify";
 import { getIO } from "../../../lib/socket";
 import { awardPoints } from "../../../lib/rewards";
 import { invalidateUserMetrics, evaluateUser } from "../../../services/achievementService";
+import { logInteractionEvent } from "../../../services/recommendation/eventTracker";
 
 const router = Router();
 const PUBLIC_FIELDS = "name username avatarHue avatarUrl isCreator verified bio followersCount followingCount postsCount isLive";
@@ -37,6 +38,14 @@ router.post("/:username", authenticateConsumer, async (req: AuthenticatedRequest
     }
 
     await Follow.create({ follower: req.user!.userId, following: target._id });
+    await logInteractionEvent({
+      userId: req.user!.userId,
+      event: "user_follow",
+      targetKind: "user",
+      targetId: String(target._id),
+      creatorId: String(target._id),
+      tags: Array.isArray(target.interests) ? target.interests : [],
+    });
     const [, updatedTarget] = await Promise.all([
       User.findByIdAndUpdate(req.user!.userId, { $inc: { followingCount: 1 } }),
       User.findByIdAndUpdate(target._id, { $inc: { followersCount: 1 } }, { new: true }),
@@ -77,6 +86,14 @@ router.delete("/:username", authenticateConsumer, async (req: AuthenticatedReque
       return res.json({ following: false, followersCount: target.followersCount });
     }
 
+    await logInteractionEvent({
+      userId: req.user!.userId,
+      event: "user_unfollow",
+      targetKind: "user",
+      targetId: String(target._id),
+      creatorId: String(target._id),
+      tags: Array.isArray(target.interests) ? target.interests : [],
+    });
     const [, updatedTarget] = await Promise.all([
       User.findByIdAndUpdate(req.user!.userId, { $inc: { followingCount: -1 } }),
       User.findByIdAndUpdate(target._id, { $inc: { followersCount: -1 } }, { new: true }),

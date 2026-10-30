@@ -182,13 +182,12 @@ function HomeFeed() {
   const activeFeedRef = useRef(active);
   activeFeedRef.current = active;
   const activePages = active.data?.pages;
-  const posts = useMemo(() => {
-    const next = (activePages?.flatMap((p) => p.posts) ?? []).slice();
-    if (tab === "trending" && trendingEmpty) {
-      next.sort((a, b) => b.likesCount - a.likesCount);
-    }
-    return next;
-  }, [activePages, tab, trendingEmpty]);
+  // The backend has already applied personalized ranking and diversity rules.
+  // Keep that order intact, including when Trending falls back to Explore.
+  const posts = useMemo(
+    () => activePages?.flatMap((page) => page.posts) ?? [],
+    [activePages],
+  );
 
   // A successful post gets priority in the home feed for four visits by its
   // author. The counter lives in user-scoped localStorage so it survives reloads;
@@ -334,7 +333,7 @@ function HomeFeed() {
               return (
                 <React.Fragment key={p._id}>
                   <PostCard post={p} index={i} />
-                  {showAd && currentAd && <FeedAdCard ad={currentAd} />}
+                  {showAd && currentAd && <FeedAdCard key={currentAd._id} ad={currentAd} />}
                 </React.Fragment>
               );
             })}

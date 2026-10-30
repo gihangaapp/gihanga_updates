@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api, FeedPost, PublicUser } from "@/lib/api-client";
+import { logRecommendationEvent } from "@/hooks/use-recommendations";
 
 interface SearchResponse {
   users: PublicUser[];
@@ -10,8 +11,17 @@ interface SearchResponse {
 export function useSearch(query: string) {
   return useQuery({
     queryKey: ["search", query],
-    queryFn: () => api.get<SearchResponse>(`/search?q=${encodeURIComponent(query)}`),
+    queryFn: async () => {
+      await logRecommendationEvent({
+        event: "search",
+        targetKind: "search",
+        metadata: { searchQuery: query.slice(0, 160) },
+      });
+      return api.get<SearchResponse>(`/search?q=${encodeURIComponent(query)}`);
+    },
     enabled: query.trim().length > 0,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }
 

@@ -21,7 +21,7 @@ export function applyDiversity(
     for (let i = 0; i < remaining.length; i++) {
       const item = remaining[i];
       const authorId = String(item.post.author._id ?? item.post.author);
-      const mainTag = item.post.tags[0] || "general";
+      const mainTag = Array.isArray(item.post.tags) ? item.post.tags[0] || "general" : "general";
 
       const sameAuthorCount = authorId === lastAuthor ? (authorCountMap.get(authorId) || 0) + 1 : 1;
       const sameTagCount = mainTag === lastTag ? (tagCountMap.get(mainTag) || 0) + 1 : 1;
@@ -37,7 +37,7 @@ export function applyDiversity(
 
     const [picked] = remaining.splice(pickedIndex, 1);
     const authorId = String(picked.post.author._id ?? picked.post.author);
-    const mainTag = picked.post.tags[0] || "general";
+    const mainTag = Array.isArray(picked.post.tags) ? picked.post.tags[0] || "general" : "general";
 
     if (authorId === lastAuthor) {
       authorCountMap.set(authorId, (authorCountMap.get(authorId) || 0) + 1);

@@ -6,6 +6,7 @@ import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/
 import { notify } from "../../../lib/notify";
 import { getIO } from "../../../lib/socket";
 import { awardPoints } from "../../../lib/rewards";
+import { logInteractionEvent } from "../../../services/recommendation/eventTracker";
 
 const router = Router();
 
@@ -19,12 +20,28 @@ router.post("/post/:id", authenticateConsumer, async (req: AuthenticatedRequest,
     if (existing) {
       await Like.deleteOne({ _id: existing._id });
       const updated = await Post.findByIdAndUpdate(post._id, { $inc: { likesCount: -1 } }, { new: true });
+      await logInteractionEvent({
+        userId: req.user!.userId,
+        event: post.kind === "reel" ? "reel_unlike" : "post_unlike",
+        targetKind: post.kind === "reel" ? "reel" : "post",
+        targetId: String(post._id),
+        creatorId: String(post.author),
+        tags: post.tags || [],
+      });
       getIO()?.emit("post:updated", { postId: String(post._id), likesCount: updated?.likesCount ?? 0 });
       return res.json({ liked: false, likesCount: updated?.likesCount ?? 0 });
     }
 
     await Like.create({ user: req.user!.userId, target: post._id, kind: "post" });
     const updated = await Post.findByIdAndUpdate(post._id, { $inc: { likesCount: 1 } }, { new: true });
+    await logInteractionEvent({
+      userId: req.user!.userId,
+      event: post.kind === "reel" ? "reel_like" : "post_like",
+      targetKind: post.kind === "reel" ? "reel" : "post",
+      targetId: String(post._id),
+      creatorId: String(post.author),
+      tags: post.tags || [],
+    });
     getIO()?.emit("post:updated", { postId: String(post._id), likesCount: updated?.likesCount ?? 0 });
     await awardPoints(String(post.author), "like", "Your post got a like").catch((err) =>
       console.error("[Rewards] Like bonus failed:", err),

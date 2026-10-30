@@ -18,7 +18,8 @@ export type AdStatus =
   | "refund_pending"
   | "refunded";
 
-export type PaymentMethod = "real_money" | "gihanga_points";
+export type PaymentMethod = "real_money" | "gihanga_points" | "manual";
+export type ManualPaymentStatus = "not_applicable" | "awaiting_payment" | "verified";
 export type PaymentStatus =
   "unpaid" | "pending" | "processing" | "paid" | "refund_pending" | "refunded";
 
@@ -102,6 +103,10 @@ export interface Advertisement {
   paymentStatus: PaymentStatus;
   paymentMethod?: PaymentMethod;
   paidAt?: string;
+  manualPaymentStatus: ManualPaymentStatus;
+  manualPaymentContact?: { name: string; email: string; phone: string };
+  manualPaymentVerifiedAt?: string;
+  manualPaymentReference?: string;
 
   status: AdStatus;
   rejectionReason?: string;
@@ -198,8 +203,11 @@ export function useCreateAd() {
       thumbnailUrl?: string | undefined;
       campaignDurationDays: number;
       advertisingMinutes: number;
+      contactName: string;
+      contactEmail: string;
+      contactPhone: string;
       targeting?: { interests?: string[]; location?: string };
-    }) => api.post<{ campaign: Advertisement; price: AdPriceResult }>("/ads", input),
+    }) => api.post<{ campaign: Advertisement; price: AdPriceResult; message: string }>("/ads", input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["ads"] }),
   });
 }
@@ -318,6 +326,24 @@ export function useRecordView() {
   });
 }
 
+export function useAdFeedback() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, action, reason }: { id: string; action: "hide" | "report"; reason?: string }) =>
+      api.post<{ success: boolean; message: string }>(`/ads/${id}/feedback`, { action, reason }),
+    onSuccess: (_data, variables) => {
+      if (variables.action === "hide") {
+        queryClient.setQueryData<Advertisement[]>(["ads", "delivery", "feed"], (current) =>
+          current?.filter((ad) => ad._id !== variables.id),
+        );
+        queryClient.setQueryData<Advertisement[]>(["ads", "delivery", "story"], (current) =>
+          current?.filter((ad) => ad._id !== variables.id),
+        );
+      }
+    },
+  });
+}
+
 // ── Staff Oversight & Admin Hooks ────────────────────────────────────────────
 
 export function useStaffAds(filters?: {
@@ -360,6 +386,9 @@ export function useStaffAdSummary() {
             totalCampaigns: number;
             activeCampaigns: number;
             pendingReview: number;
+            awaitingManualPayment: number;
+            manualPaymentVerified: number;
+            manualPaymentRevenue: number;
             approvedCampaigns: number;
             rejectedCampaigns: number;
             totalRwfRevenue: number;
@@ -386,6 +415,23 @@ export function useApproveAd() {
       api.post<{ campaign: Advertisement }>(`/system/ads/${id}/approve`, undefined, true),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["staff", "ads"] });
+      queryClient.invalidateQueries({ queryKey: ["ads"] });
+    },
+  });
+}
+
+export function useConfirmManualAdPayment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reference }: { id: string; reference?: string }) =>
+      api.post<{ campaign: Advertisement; message: string }>(
+        `/system/ads/${id}/confirm-manual-payment`,
+        { reference },
+        true,
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["staff", "ads"] });
+      queryClient.invalidateQueries({ queryKey: ["ads"] });
     },
   });
 }
@@ -409,6 +455,7 @@ export function useRejectAd() {
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["staff", "ads"] });
+      queryClient.invalidateQueries({ queryKey: ["ads"] });
     },
   });
 }

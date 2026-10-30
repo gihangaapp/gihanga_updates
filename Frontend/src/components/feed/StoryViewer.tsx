@@ -29,6 +29,8 @@ import { mediaUrlWithAuth, StoryGroup } from "@/lib/api-client";
 import { useMarkStoryViewed, useDeleteStory, useReplyToStory } from "@/hooks/use-stories";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
+import { Advertisement } from "@/hooks/use-ads";
+import { StoryAdOverlay } from "@/components/ads/StoryAdOverlay";
 
 function toDisplayUser(author: StoryGroup["author"]) {
   return {
@@ -49,16 +51,21 @@ function toDisplayUser(author: StoryGroup["author"]) {
 
 export function StoryViewer({
   groups,
+  ads = [],
   startIndex,
   onClose,
 }: {
   groups: StoryGroup[];
+  ads?: Advertisement[];
   startIndex: number;
   onClose: () => void;
 }) {
   const { user } = useAuth();
   const [index, setIndex] = useState(startIndex);
   const [step, setStep] = useState(0);
+  const [showingAdIndex, setShowingAdIndex] = useState<number | null>(null);
+  const storyGroupsSinceAd = useRef(0);
+  const nextStoryAdIndex = useRef(0);
   // Progress is written directly to the active fill element. Updating React
   // state on every animation frame rerendered the entire viewer ~60 times/sec.
   const progressRef = useRef(0);
@@ -122,6 +129,23 @@ export function StoryViewer({
     setVideoFailedItemId(null);
   }, [updateProgress]);
 
+  const continueAfterAd = useCallback(() => {
+    setShowingAdIndex(null);
+    resetStoryPlayback();
+    setStep(0);
+    setIndex((current) => Math.min(current + 1, Math.max(0, groups.length - 1)));
+  }, [groups.length, resetStoryPlayback]);
+
+  const shouldShowStoryAd = useCallback(() => {
+    if (ads.length === 0) return false;
+    storyGroupsSinceAd.current += 1;
+    if (storyGroupsSinceAd.current < 3) return false;
+    storyGroupsSinceAd.current = 0;
+    setShowingAdIndex(nextStoryAdIndex.current % ads.length);
+    nextStoryAdIndex.current += 1;
+    return true;
+  }, [ads.length]);
+
   const next = useCallback(() => {
     resetStoryPlayback();
     if (step + 1 < count) {
@@ -129,12 +153,15 @@ export function StoryViewer({
       return;
     }
     if (index + 1 < groups.length) {
+      // Interleave one paid placement after every three groups actually viewed
+      // in this Story session, regardless of which group the viewer opened.
+      if (shouldShowStoryAd()) return;
       setIndex(index + 1);
       setStep(0);
       return;
     }
     onClose();
-  }, [step, count, index, groups.length, onClose, resetStoryPlayback]);
+  }, [step, count, index, groups.length, onClose, resetStoryPlayback, shouldShowStoryAd]);
 
   const prev = useCallback(() => {
     if (step > 0) {
@@ -153,9 +180,10 @@ export function StoryViewer({
       return;
     }
     resetStoryPlayback();
+    if (shouldShowStoryAd()) return;
     setStep(0);
     setIndex(index + 1);
-  }, [index, groups.length, onClose, resetStoryPlayback]);
+  }, [index, groups.length, onClose, resetStoryPlayback, shouldShowStoryAd]);
 
   const prevGroup = useCallback(() => {
     if (index === 0) return;
@@ -220,7 +248,7 @@ export function StoryViewer({
   // Images start their viewing clock only after load + decode. Videos use their
   // own playback clock and pause automatically while buffering or backgrounded.
   useEffect(() => {
-    if (paused || !pageVisible || !itemId || readyItemId !== itemId) return;
+    if (showingAdIndex !== null || paused || !pageVisible || !itemId || readyItemId !== itemId) return;
 
     if (item?.mediaType === "video" && videoFailedItemId !== itemId) {
       if (videoPlayingItemId !== itemId) return;
@@ -275,6 +303,7 @@ export function StoryViewer({
   }, [
     index,
     step,
+    showingAdIndex,
     paused,
     pageVisible,
     next,
@@ -295,7 +324,7 @@ export function StoryViewer({
     const video = videoRef.current;
     if (!video) return;
     let cancelled = false;
-    if (paused || !pageVisible) {
+    if (showingAdIndex !== null || paused || !pageVisible) {
       video.pause();
       return () => { cancelled = true; };
     }
@@ -309,7 +338,7 @@ export function StoryViewer({
       }
     });
     return () => { cancelled = true; };
-  }, [paused, pageVisible, muted, index, step, item?.mediaType, itemId]);
+  }, [paused, pageVisible, muted, index, step, item?.mediaType, itemId, showingAdIndex]);
 
   // Keyboard Navigation Support
   useEffect(() => {
@@ -325,13 +354,13 @@ export function StoryViewer({
         }
         return;
       }
-      if (commentsOpen || shareOpen) return;
+      if (commentsOpen || shareOpen || showingAdIndex !== null) return;
       if (e.key === "ArrowRight") next();
       if (e.key === "ArrowLeft") prev();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [next, prev, onClose, commentsOpen, shareOpen]);
+  }, [next, prev, onClose, commentsOpen, shareOpen, showingAdIndex]);
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -342,6 +371,15 @@ export function StoryViewer({
   }, []);
 
   if (!group || !item) return null;
+  if (showingAdIndex !== null && ads[showingAdIndex]) {
+    return (
+      <div className="fixed inset-0 z-[60] flex h-[100dvh] items-center justify-center overflow-hidden bg-black/95 p-0 sm:p-6">
+        <div className="relative h-[100dvh] w-full overflow-hidden bg-black sm:h-[88vh] sm:max-h-[900px] sm:w-[420px] sm:rounded-3xl shadow-float">
+          <StoryAdOverlay ad={ads[showingAdIndex]} onClose={continueAfterAd} />
+        </div>
+      </div>
+    );
+  }
   // Token-aware URL: checked media (/api/v1/media/file/:id) is consumed by
   // plain <img>/<video> tags that cannot send an Authorization header, so the
   // token rides in the query string for the author's own pending media.

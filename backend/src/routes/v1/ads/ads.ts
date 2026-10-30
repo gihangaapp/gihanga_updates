@@ -1,13 +1,12 @@
 import { Router, Response } from "express";
-import { Advertisement, AdType, AdPlacement } from "../../../models/Advertisement";
+import { Types } from "mongoose";
+import { Advertisement, AdPlacement } from "../../../models/Advertisement";
 import { User } from "../../../models/User";
-import { Wallet } from "../../../models/Wallet";
-import { Transaction } from "../../../models/Transaction";
 import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/rbac";
+import { optionalAuth } from "../../../middleware/optionalAuth";
+import { UserInteraction } from "../../../models/UserInteraction";
 import { getAdConfig } from "../../../lib/adConfig";
 import { calculateAdPrice, validateAdMinutes, validateCampaignDays } from "../../../lib/adPricing";
-import { payAdWithPoints } from "../../../lib/adPoints";
-import { applyLedgerEntry } from "../../../lib/wallet";
 import { notifyStaff } from "../../../lib/staffNotify";
 import { notify } from "../../../lib/notify";
 
@@ -58,35 +57,45 @@ router.get("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Res
   }
 });
 
-// POST /api/v1/ads — Create a new advertisement campaign draft
+// POST /api/v1/ads — Submit a campaign for content review and manual payment follow-up.
 router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const user = await User.findById(req.user!.userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
     const {
-      adType,
-      placement,
-      title,
-      caption,
-      ctaText,
-      ctaUrl,
-      mediaUrl,
-      mediaKey,
-      mediaType,
-      videoDurationSeconds,
-      thumbnailUrl,
-      campaignDurationDays,
-      advertisingMinutes,
-      targeting,
+      adType, placement, title, caption, ctaText, ctaUrl, mediaUrl, mediaKey,
+      mediaType, videoDurationSeconds, thumbnailUrl, campaignDurationDays,
+      advertisingMinutes, targeting, contactName, contactEmail, contactPhone,
     } = req.body;
 
     if (!title?.trim()) return res.status(400).json({ error: "Title is required" });
+    if (!mediaUrl?.trim()) return res.status(400).json({ error: "Please upload an image or video for your advertisement" });
+    if (!/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+/i.test(String(contactEmail || "").trim())) {
+      return res.status(400).json({ error: "Enter a valid contact email address" });
+    }
+    const normalizedPhone = String(contactPhone || "").trim();
+    if (!/^[+0-9().\s-]{7,32}$/.test(normalizedPhone)) {
+      return res.status(400).json({ error: "Enter a valid contact phone number" });
+    }
+    const normalizedEmail = String(contactEmail).trim().toLowerCase();
+    const destination = String(ctaUrl || "").trim();
+    if (destination) {
+      try {
+        const parsed = new URL(destination);
+        if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("unsupported protocol");
+      } catch {
+        return res.status(400).json({ error: "Destination link must be a valid http or https URL" });
+      }
+    }
     if (!["image", "video", "story_image", "story_video"].includes(adType)) {
       return res.status(400).json({ error: "Invalid advertisement type" });
     }
     if (!["feed", "story"].includes(placement)) {
       return res.status(400).json({ error: "Invalid placement" });
+    }
+    if ((placement === "feed" && String(adType).startsWith("story_")) || (placement === "story" && !String(adType).startsWith("story_"))) {
+      return res.status(400).json({ error: "Advertisement type does not match the selected placement" });
     }
 
     const config = await getAdConfig();
@@ -95,49 +104,53 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
     const minutes = Number(advertisingMinutes) || 1;
     const minutesCheck = validateAdMinutes(minutes, config);
     if (!minutesCheck.valid) return res.status(400).json({ error: minutesCheck.error });
-
     const days = Number(campaignDurationDays) || 1;
     const daysCheck = validateCampaignDays(days, config);
     if (!daysCheck.valid) return res.status(400).json({ error: daysCheck.error });
 
-    if (mediaType === "video" && videoDurationSeconds) {
-      if (Number(videoDurationSeconds) > config.maxVideoDurationSeconds) {
-        return res.status(400).json({
-          error: `Video duration cannot exceed ${config.maxVideoDurationSeconds} seconds`,
-        });
-      }
+    if (mediaType === "video" && videoDurationSeconds && Number(videoDurationSeconds) > config.maxVideoDurationSeconds) {
+      return res.status(400).json({ error: `Video duration cannot exceed ${config.maxVideoDurationSeconds} seconds` });
     }
 
     const price = calculateAdPrice({ advertisingMinutes: minutes, campaignDurationDays: days }, config);
+    const cleanInterests = Array.isArray(targeting?.interests)
+      ? [...new Set(targeting.interests.map((value: unknown) => String(value).trim().toLowerCase()).filter(Boolean))].slice(0, 20)
+      : [];
+    const cleanLocation = typeof targeting?.location === "string" ? targeting.location.trim().slice(0, 100) : "";
 
     const campaign = await Advertisement.create({
       creator: req.user!.userId,
       isCreator: Boolean(user.isCreator),
-      adType,
-      placement,
+      adType, placement,
       title: title.trim().slice(0, 100),
-      caption: caption?.trim(),
-      ctaText: ctaText?.trim() || "Learn More",
-      ctaUrl: ctaUrl?.trim(),
-      mediaUrl,
-      mediaKey,
-      mediaType,
+      caption: String(caption || "").trim().slice(0, 300),
+      ctaText: String(ctaText || "Learn More").trim().slice(0, 30),
+      ctaUrl: destination || undefined,
+      mediaUrl: String(mediaUrl).trim(), mediaKey, mediaType,
       videoDurationSeconds: videoDurationSeconds ? Number(videoDurationSeconds) : undefined,
       thumbnailUrl,
-      campaignDurationDays: days,
-      advertisingMinutes: minutes,
-      rwfPricePerMinute: price.rwfPerMinute,
-      gpPricePerMinute: price.gpPerMinute,
-      totalRwfCost: price.rwfTotal,
-      totalGpCost: price.gpTotal,
-      paymentStatus: "unpaid",
-      status: "draft",
-      targeting: targeting || {},
+      campaignDurationDays: days, advertisingMinutes: minutes,
+      rwfPricePerMinute: price.rwfPerMinute, gpPricePerMinute: 0,
+      totalRwfCost: price.rwfTotal, totalGpCost: 0,
+      paymentMethod: "manual", paymentStatus: "pending",
+      manualPaymentStatus: "awaiting_payment",
+      manualPaymentContact: {
+        name: String(contactName || user.name).trim().slice(0, 100),
+        email: normalizedEmail, phone: normalizedPhone,
+      },
+      status: "pending_review",
+      targeting: { interests: cleanInterests, location: cleanLocation || undefined },
     });
 
-    return res.status(201).json({ campaign, price });
+    await notifyStaff("ads", `New ad campaign submitted for review: "${campaign.title}"`, { campaignId: String(campaign._id) });
+    await notify({
+      recipient: String(user._id), kind: "system",
+      text: `Your campaign "${campaign.title}" was submitted for review. Our team will review the creative and contact you using the details you provided for manual payment.`,
+    });
+
+    return res.status(201).json({ campaign, price, message: "Campaign submitted for review. Payment is handled manually outside Gihanga Updates." });
   } catch (error: any) {
-    return res.status(500).json({ error: "Failed to create campaign draft", details: error.message });
+    return res.status(500).json({ error: "Failed to submit advertisement campaign", details: error.message });
   }
 });
 
@@ -219,221 +232,212 @@ router.delete("/:id", authenticateConsumer, async (req: AuthenticatedRequest, re
   }
 });
 
-// POST /api/v1/ads/:id/pay/points — Pay for advertisement using Gihanga Points (atomic)
-router.post("/:id/pay/points", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const idempotencyKey = String(req.get("Idempotency-Key") || req.body?.idempotencyKey || "").trim();
-    const campaignId = String(req.params.id);
-    const result = await payAdWithPoints(req.user!.userId, campaignId, idempotencyKey);
-
-    if (!result.success) {
-      return res.status(400).json({ error: result.error });
-    }
-
-    if (result.ad) {
-      await notifyStaff("ads", `New ad campaign paid with Gihanga Points awaiting review: "${result.ad.title}"`, {
-        campaignId: String(result.ad._id),
-      });
-    }
-
-    return res.json({
-      success: true,
-      campaign: result.ad,
-      transaction: result.transaction,
-      pointsBefore: result.pointsBefore,
-      pointsDeducted: result.pointsDeducted,
-      pointsAfter: result.pointsAfter,
-    });
-  } catch (error: any) {
-    return res.status(500).json({ error: "Points payment failed", details: error.message });
-  }
+// Online ad checkout is intentionally disabled. Gihanga ad payments are collected
+// offline and verified by authorized staff before delivery.
+router.post("/:id/pay/points", authenticateConsumer, async (_req, res: Response) => {
+  return res.status(410).json({ error: "Online Gihanga Points payment is disabled for advertisements. Submit your contact details and our team will arrange manual payment." });
 });
 
-// POST /api/v1/ads/:id/pay/money — Pay for advertisement using Real Money (Wallet available balance)
-router.post("/:id/pay/money", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
-  try {
-    const userId = req.user!.userId;
-    const ad = await Advertisement.findOne({
-      _id: req.params.id,
-      creator: userId,
-      _legacySystem: { $ne: true },
-    });
-
-    if (!ad) return res.status(404).json({ error: "Advertisement not found" });
-    if (ad.paymentStatus === "paid") return { error: "This advertisement has already been paid" };
-    if (ad.status !== "pending_payment" && ad.status !== "draft") {
-      return res.status(400).json({ error: `Cannot pay for an advertisement with status: ${ad.status}` });
-    }
-
-    const config = await getAdConfig();
-    const price = calculateAdPrice({ advertisingMinutes: ad.advertisingMinutes, campaignDurationDays: ad.campaignDurationDays }, config);
-    const rwfCost = price.rwfTotal;
-
-    const wallet = await Wallet.findOne({ user: userId });
-    if (!wallet) return res.status(404).json({ error: "Wallet not found" });
-    if (wallet.frozen) return res.status(403).json({ error: "Your wallet is frozen — contact support" });
-    if (wallet.available < rwfCost) {
-      return res.status(400).json({
-        error: `Insufficient available balance in wallet. Required: ${rwfCost.toLocaleString()} RWF, Available: ${wallet.available.toLocaleString()} RWF`,
-      });
-    }
-
-    const idempotencyKey = String(req.get("Idempotency-Key") || req.body?.idempotencyKey || "").trim();
-    if (idempotencyKey) {
-      const prior = await Transaction.findOne({ user: userId, kind: "ad_payment", idempotencyKey });
-      if (prior) return res.json({ campaign: ad, transaction: prior, message: "Payment already processed" });
-    }
-
-    // Deduct RWF from wallet balance
-    const { transaction } = await applyLedgerEntry({
-      userId,
-      kind: "ad_payment",
-      amount: -rwfCost,
-      label: `Real Money — Ad payment: "${ad.title}" (${ad.advertisingMinutes} min @ ${price.rwfPerMinute.toLocaleString()} RWF/min)`,
-    });
-
-    ad.paymentMethod = "real_money";
-    ad.paymentStatus = "paid";
-    ad.status = "pending_review"; // Payment NEVER auto-publishes
-    ad.rwfPricePerMinute = price.rwfPerMinute;
-    ad.gpPricePerMinute = price.gpPerMinute;
-    ad.totalRwfCost = rwfCost;
-    ad.totalGpCost = price.gpTotal;
-    ad.paymentTransactionId = transaction._id as any;
-    ad.paymentIdempotencyKey = idempotencyKey || undefined;
-    ad.paidAt = new Date();
-    await ad.save();
-
-    await notify({
-      recipient: userId,
-      kind: "payment",
-      text: `Payment of ${rwfCost.toLocaleString()} RWF received for ad "${ad.title}". It is now pending review.`,
-    });
-
-    await notifyStaff("ads", `New ad campaign paid with Real Money awaiting review: "${ad.title}"`, {
-      campaignId: String(ad._id),
-    });
-
-    return res.json({ success: true, campaign: ad, transaction });
-  } catch (error: any) {
-    return res.status(500).json({ error: "Real money payment failed", details: error.message });
-  }
+router.post("/:id/pay/money", authenticateConsumer, async (_req, res: Response) => {
+  return res.status(410).json({ error: "Online payment is disabled for advertisements. Submit your contact details and our team will arrange manual payment." });
 });
 
 // ─── AD DELIVERY ENGINE & TRACKING ──────────────────────────────────────────
 
-// GET /api/v1/ads/delivery/feed — Get eligible sponsored advertisements for the feed
-router.get("/delivery/feed", async (req, res: Response) => {
+// Delivery candidates are restricted to campaigns that passed content review AND
+// have a verified manual payment (or were paid through the legacy system before
+// the manual-payment workflow was introduced).
+async function deliverAds(placement: AdPlacement, req: AuthenticatedRequest, res: Response) {
   try {
     const config = await getAdConfig();
     if (!config.enabled) return res.json({ ads: [] });
 
     const now = new Date();
-    const ads = await Advertisement.find({
-      placement: "feed",
+    // Keep campaign states consistent when calendar duration has elapsed.
+    await Advertisement.updateMany(
+      { placement, status: "active", endDate: { $lt: now } },
+      { $set: { status: "expired" } },
+    );
+    const userId = req.user?.userId;
+    const user = userId ? await User.findById(userId).select("interests").lean() : null;
+    const userInterests = [...new Set((user?.interests || []).map((value: string) => String(value).trim().toLowerCase()).filter(Boolean))];
+    // If a viewer has not provided interests, do not exclude interest-targeted
+    // ads entirely; without preference data, all otherwise eligible campaigns
+    // remain candidates. Known interests narrow the candidates below.
+    const targetingEligibility = userInterests.length
+      ? { $or: [
+          { "targeting.interests": { $exists: false } },
+          { "targeting.interests": { $size: 0 } },
+          { "targeting.interests": { $in: userInterests } },
+        ] }
+      : null;
+    const query: any = {
+      placement,
       status: "active",
       paymentStatus: "paid",
       _legacySystem: { $ne: true },
-      $or: [{ endDate: { $gte: now } }, { endDate: { $exists: false } }],
-    })
-      .sort({ updatedAt: -1 })
-      .limit(10)
+      ...(userId ? { creator: { $ne: userId } } : {}),
+      $and: [
+        { $or: [{ paymentMethod: { $ne: "manual" } }, { manualPaymentStatus: "verified" }] },
+        { $or: [{ endDate: { $gte: now } }, { endDate: { $exists: false } }] },
+        ...(targetingEligibility ? [targetingEligibility] : []),
+      ],
+    };
+    const candidates = await Advertisement.find(query)
+      // Public delivery responses must never expose advertiser contact details,
+      // payment references, review metadata, or internal targeting data.
+      .select("creator adType placement title caption ctaText ctaUrl mediaUrl mediaType videoDurationSeconds thumbnailUrl analytics.impressions analytics.views analytics.clicks analytics.ctr createdAt")
+      .sort({ "analytics.impressions": 1, createdAt: 1 })
+      .limit(100)
       .populate("creator", "name username avatarHue avatarUrl verified isCreator");
 
-    return res.json({ ads });
+    let eligible = candidates;
+
+    if (userId && eligible.length) {
+      const cutoff = new Date(Date.now() - 60 * 60 * 1000);
+      const ids = eligible.map((ad) => ad._id);
+      const impressions = await UserInteraction.aggregate([
+        { $match: { user: new Types.ObjectId(userId), targetKind: "ad", event: "ad_impression", targetId: { $in: ids }, createdAt: { $gte: cutoff } } },
+        { $group: { _id: "$targetId", count: { $sum: 1 } } },
+      ]);
+      const counts = new Map(impressions.map((item: any) => [String(item._id), Number(item.count)]));
+      eligible = eligible.filter((ad) => (counts.get(String(ad._id)) || 0) < config.frequencyCapPerHour);
+      const hidden = await UserInteraction.find({
+        user: userId, targetKind: "ad", event: "ad_hide", targetId: { $in: eligible.map((ad) => ad._id) },
+      }).distinct("targetId");
+      const hiddenIds = new Set(hidden.map(String));
+      eligible = eligible.filter((ad) => !hiddenIds.has(String(ad._id)));
+    }
+
+    return res.json({ ads: eligible.slice(0, placement === "feed" ? 20 : 10) });
   } catch (error: any) {
-    return res.status(500).json({ error: "Failed to deliver feed ads", details: error.message });
+    return res.status(500).json({ error: `Failed to deliver ${placement} ads`, details: error.message });
+  }
+}
+
+router.get("/delivery/feed", optionalAuth, async (req: AuthenticatedRequest, res: Response) => deliverAds("feed", req, res));
+router.get("/delivery/story", optionalAuth, async (req: AuthenticatedRequest, res: Response) => deliverAds("story", req, res));
+
+// Track only eligible active paid ads. Atomic increments avoid lost updates
+// when multiple viewers interact with the same campaign concurrently.
+router.post("/:id/impression", optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const ad = await Advertisement.findOneAndUpdate(
+      { _id: req.params.id, status: "active", paymentStatus: "paid", $or: [{ paymentMethod: { $ne: "manual" } }, { manualPaymentStatus: "verified" }] },
+      { $inc: { "analytics.impressions": 1 } },
+      { new: true },
+    );
+    if (!ad) return res.status(204).end();
+    const impressions = ad.analytics.impressions || 0;
+    const clicks = ad.analytics.clicks || 0;
+    ad.analytics.ctr = impressions ? Number(((clicks / impressions) * 100).toFixed(2)) : 0;
+    await ad.save();
+    if (req.user?.userId) {
+      await UserInteraction.create({ user: req.user.userId, targetKind: "ad", targetId: ad._id, event: "ad_impression" });
+    }
+    return res.status(204).end();
+  } catch { return res.status(204).end(); }
+});
+
+router.post("/:id/click", optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const ad = await Advertisement.findOneAndUpdate(
+      { _id: req.params.id, status: "active", paymentStatus: "paid", $or: [{ paymentMethod: { $ne: "manual" } }, { manualPaymentStatus: "verified" }] },
+      { $inc: { "analytics.clicks": 1 } },
+      { new: true },
+    );
+    if (!ad) return res.status(204).end();
+    ad.analytics.ctr = ad.analytics.impressions ? Number(((ad.analytics.clicks / ad.analytics.impressions) * 100).toFixed(2)) : 0;
+    await ad.save();
+    if (req.user?.userId) {
+      await UserInteraction.create({ user: req.user.userId, targetKind: "ad", targetId: ad._id, event: "ad_click" });
+    }
+    return res.status(204).end();
+  } catch { return res.status(204).end(); }
+});
+
+// User controls: hide an ad from future delivery or report its content.
+router.post("/:id/feedback", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const { action, reason } = req.body || {};
+    if (!["hide", "report"].includes(action)) return res.status(400).json({ error: "Unsupported ad feedback action" });
+    const ad = await Advertisement.findOne({ _id: req.params.id, status: "active" }).select("_id creator");
+    if (!ad) return res.status(404).json({ error: "Advertisement not found" });
+    await UserInteraction.create({
+      user: req.user!.userId, targetKind: "ad", targetId: ad._id,
+      event: action === "hide" ? "ad_hide" : "ad_report",
+      metadata: { reason: String(reason || "").slice(0, 300) },
+    });
+    if (action === "report") {
+      await notifyStaff("ads", `A user reported advertisement ${String(ad._id)}.`, { campaignId: String(ad._id), reason: String(reason || "") });
+    }
+    return res.json({ success: true, message: action === "hide" ? "This advertisement will be hidden from your future ad delivery." : "Your ad report has been submitted." });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Could not save advertisement feedback", details: error.message });
   }
 });
 
-// GET /api/v1/ads/delivery/story — Get eligible sponsored advertisements for stories
-router.get("/delivery/story", async (req, res: Response) => {
+// POST /api/v1/ads/:id/view — Record authenticated, bounded view time.
+// Repeated submissions for the same user/ad inside a short window are ignored
+// to prevent retries or replayed requests from consuming a campaign quota twice.
+router.post("/:id/view", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const config = await getAdConfig();
-    if (!config.enabled) return res.json({ ads: [] });
-
+    const requestedSeconds = Number(req.body?.seconds);
+    if (!Number.isFinite(requestedSeconds) || requestedSeconds < 1 || requestedSeconds > 600) {
+      return res.status(400).json({ error: "View duration must be between 1 and 600 seconds" });
+    }
+    const viewSeconds = Math.floor(requestedSeconds);
     const now = new Date();
-    const ads = await Advertisement.find({
-      placement: "story",
-      status: "active",
-      paymentStatus: "paid",
-      _legacySystem: { $ne: true },
-      $or: [{ endDate: { $gte: now } }, { endDate: { $exists: false } }],
-    })
-      .sort({ updatedAt: -1 })
-      .limit(10)
-      .populate("creator", "name username avatarHue avatarUrl verified isCreator");
+    const cutoff = new Date(now.getTime() - 10_000);
+    const existingView = await UserInteraction.findOne({
+      user: req.user!.userId,
+      targetKind: "ad",
+      targetId: req.params.id,
+      event: "ad_view",
+      createdAt: { $gte: cutoff },
+    }).select("_id").lean();
+    if (existingView) return res.status(204).end();
 
-    return res.json({ ads });
-  } catch (error: any) {
-    return res.status(500).json({ error: "Failed to deliver story ads", details: error.message });
-  }
-});
+    const ad = await Advertisement.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        status: "active",
+        paymentStatus: "paid",
+        $and: [
+          { $or: [{ paymentMethod: { $ne: "manual" } }, { manualPaymentStatus: "verified" }] },
+          { $or: [{ endDate: { $gte: now } }, { endDate: { $exists: false } }] },
+        ],
+      },
+      { $inc: { "analytics.views": 1, "analytics.totalWatchSeconds": viewSeconds } },
+      { new: true },
+    );
+    if (!ad) return res.status(204).end();
 
-// POST /api/v1/ads/:id/impression — Record an impression
-router.post("/:id/impression", async (req, res: Response) => {
-  try {
-    const ad = await Advertisement.findById(req.params.id);
-    if (!ad || ad.status !== "active") return res.status(204).end();
+    await UserInteraction.create({
+      user: req.user!.userId,
+      targetKind: "ad",
+      targetId: ad._id,
+      event: "ad_view",
+      watchDuration: viewSeconds,
+    });
 
-    ad.analytics.impressions += 1;
-    if (ad.analytics.impressions > 0) {
-      ad.analytics.ctr = Number(((ad.analytics.clicks / ad.analytics.impressions) * 100).toFixed(2));
-    }
-    await ad.save();
-    return res.status(204).end();
-  } catch {
-    return res.status(204).end();
-  }
-});
+    const deliveredMinutes = Number(((ad.analytics.totalWatchSeconds || 0) / 60).toFixed(2));
+    const quotaReached = deliveredMinutes >= ad.advertisingMinutes;
+    const deliveryUpdate = await Advertisement.updateOne(
+      { _id: ad._id, status: "active" },
+      { $set: { advertisingMinutesDelivered: deliveredMinutes, ...(quotaReached ? { status: "expired" } : {}) } },
+    );
 
-// POST /api/v1/ads/:id/click — Record a click
-router.post("/:id/click", async (req, res: Response) => {
-  try {
-    const ad = await Advertisement.findById(req.params.id);
-    if (!ad || ad.status !== "active") return res.status(204).end();
-
-    ad.analytics.clicks += 1;
-    if (ad.analytics.impressions > 0) {
-      ad.analytics.ctr = Number(((ad.analytics.clicks / ad.analytics.impressions) * 100).toFixed(2));
-    }
-    await ad.save();
-    return res.status(204).end();
-  } catch {
-    return res.status(204).end();
-  }
-});
-
-// POST /api/v1/ads/:id/view — Record a view (consumes advertising minutes)
-router.post("/:id/view", async (req, res: Response) => {
-  try {
-    const { seconds } = req.body;
-    const viewSeconds = Math.max(1, Number(seconds) || 1);
-
-    const ad = await Advertisement.findById(req.params.id);
-    if (!ad || ad.status !== "active") return res.status(204).end();
-
-    ad.analytics.views += 1;
-    ad.analytics.totalWatchSeconds += viewSeconds;
-
-    // Convert accumulated watch seconds to delivered advertising minutes
-    const deliveredMinutes = ad.analytics.totalWatchSeconds / 60;
-    ad.advertisingMinutesDelivered = Number(deliveredMinutes.toFixed(2));
-
-    // If quota reached, complete campaign
-    if (ad.advertisingMinutesDelivered >= ad.advertisingMinutes) {
-      ad.status = "expired";
+    if (quotaReached && deliveryUpdate.modifiedCount > 0) {
       await notify({
         recipient: String(ad.creator),
         kind: "system",
         text: `Your advertisement campaign "${ad.title}" has reached its full quota of ${ad.advertisingMinutes} minute(s) and is now completed.`,
       });
     }
-
-    await ad.save();
     return res.status(204).end();
-  } catch {
-    return res.status(204).end();
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to record advertisement view", details: error.message });
   }
 });
 
@@ -441,8 +445,8 @@ router.post("/:id/view", async (req, res: Response) => {
 router.post("/:id/engagement", async (req, res: Response) => {
   try {
     const { action } = req.body;
-    const ad = await Advertisement.findById(req.params.id);
-    if (!ad || ad.status !== "active") return res.status(204).end();
+    const ad = await Advertisement.findOne({ _id: req.params.id, status: "active", paymentStatus: "paid", $or: [{ paymentMethod: { $ne: "manual" } }, { manualPaymentStatus: "verified" }] });
+    if (!ad) return res.status(204).end();
 
     if (action === "like") ad.analytics.likes += 1;
     else if (action === "share") ad.analytics.shares += 1;

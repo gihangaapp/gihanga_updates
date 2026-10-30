@@ -4,12 +4,14 @@ import { openCreate } from "@/components/create/CreateHub";
 import { StoryViewer } from "@/components/feed/StoryViewer";
 import { GAvatar } from "@/components/common/GAvatar";
 import { useStories } from "@/hooks/use-stories";
+import { useStoryAds } from "@/hooks/use-ads";
 import { useSessionUser } from "@/components/auth/AccountMenu";
 import { cn } from "@/lib/utils";
 
 export function StoryRail() {
   const { user: me } = useSessionUser();
   const { data, isLoading } = useStories();
+  const { data: storyAds = [] } = useStoryAds();
   const railRef = useRef<HTMLDivElement>(null);
   const [viewing, setViewing] = useState<number | null>(null);
 
@@ -106,7 +108,7 @@ export function StoryRail() {
         ))}
       </div>
       {viewing !== null && (
-        <StoryViewer groups={groups} startIndex={viewing} onClose={() => setViewing(null)} />
+        <StoryViewer groups={groups} ads={storyAds} startIndex={viewing} onClose={() => setViewing(null)} />
       )}
     </section>
   );

@@ -19,6 +19,7 @@ import { moderationActive } from "../../../middleware/upload";
 import { assessPost } from "../../../services/moderation/contentModerationService";
 import { cancelJobsForContent, retryFailedJob } from "../../../services/moderation/moderationQueue";
 import { decisionToStatus } from "../../../services/moderation/contentModerationService";
+import { logInteractionEvent } from "../../../services/recommendation/eventTracker";
 
 const router = Router();
 
@@ -690,6 +691,16 @@ router.post("/:id/share", optionalAuth, async (req: AuthenticatedRequest, res: R
   try {
     const post = await Post.findByIdAndUpdate(req.params.id, { $inc: { sharesCount: 1 } }, { new: true });
     if (!post) return res.status(404).json({ error: "Post not found" });
+    if (req.user?.userId) {
+      await logInteractionEvent({
+        userId: req.user.userId,
+        event: post.kind === "reel" ? "reel_share" : "post_share",
+        targetKind: post.kind === "reel" ? "reel" : "post",
+        targetId: String(post._id),
+        creatorId: String(post.author),
+        tags: post.tags || [],
+      });
+    }
     await awardPoints(String(post.author), "share", "Your post was shared").catch((err) =>
       console.error("[Rewards] Share bonus failed:", err),
     );

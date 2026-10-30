@@ -1,18 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Sparkles,
   Image as ImageIcon,
-  Video as VideoIcon,
   Layers,
   Clock,
-  Coins,
-  Wallet,
   CheckCircle,
   ArrowRight,
   ArrowLeft,
   Upload,
   Loader2,
-  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -27,8 +23,7 @@ import {
   AdPlacement,
   Advertisement,
 } from "@/hooks/use-ads";
-import { useWallet } from "@/hooks/use-wallet";
-import { formatCount } from "@/lib/format";
+import { useAuth } from "@/lib/auth-context";
 import { uploadFile, mediaUrl as resolveMediaUrl } from "@/lib/api-client";
 import { cn } from "@/lib/utils";
 
@@ -40,7 +35,7 @@ interface AdWizardProps {
 
 export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
   const { data: config } = useAdConfig();
-  const { data: walletData } = useWallet();
+  const { user } = useAuth();
   const createAd = useCreateAd();
 
   const [step, setStep] = useState(1);
@@ -59,6 +54,16 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
 
   const [campaignDurationDays, setCampaignDurationDays] = useState(7);
   const [advertisingMinutes, setAdvertisingMinutes] = useState(10);
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [targetInterests, setTargetInterests] = useState("");
+
+  useEffect(() => {
+    if (!user) return;
+    setContactName((current) => current || user.name || "");
+    setContactEmail((current) => current || user.email || "");
+  }, [user]);
 
   // Live Price Calculation
   const { data: priceData, isLoading: priceLoading } = useCalculateAdPrice(
@@ -98,6 +103,18 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
       toast.error("Please enter a title for your campaign");
       return;
     }
+    if (!mediaUrl) {
+      toast.error("Please upload an image or video for your advertisement");
+      return;
+    }
+    if (!contactName.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail.trim())) {
+      toast.error("Enter the contact name and a valid email address");
+      return;
+    }
+    if (!/^[+0-9().\s-]{7,32}$/.test(contactPhone.trim())) {
+      toast.error("Enter a valid contact phone number");
+      return;
+    }
 
     createAd.mutate(
       {
@@ -113,10 +130,16 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
         thumbnailUrl: thumbnailUrl || undefined,
         campaignDurationDays,
         advertisingMinutes,
+        contactName: contactName.trim(),
+        contactEmail: contactEmail.trim(),
+        contactPhone: contactPhone.trim(),
+        targeting: {
+          interests: targetInterests.split(",").map((interest) => interest.trim()).filter(Boolean),
+        },
       },
       {
         onSuccess: (data) => {
-          toast.success("Ad campaign created!");
+          toast.success("Campaign submitted for review!");
           onCreated?.(data.campaign);
           onOpenChange(false);
         },
@@ -391,6 +414,20 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                     </p>
                   </div>
 
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+                      Audience interests (optional)
+                    </label>
+                    <Input
+                      value={targetInterests}
+                      onChange={(e) => setTargetInterests(e.target.value)}
+                      placeholder="e.g. fashion, technology, education"
+                    />
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Separate interests with commas. Leave empty to reach all eligible users.
+                    </p>
+                  </div>
+
                   {/* Preset Packages */}
                   <div>
                     <label className="mb-2 block text-xs font-bold text-foreground">
@@ -428,7 +465,7 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                     </div>
                   ) : priceData ? (
                     <div className="space-y-3 text-xs">
-                      {priceData.breakdown.map((item, i) => (
+                      {priceData.breakdown.filter((item) => !item.line.toLowerCase().includes("points") && !item.line.toLowerCase().includes("gp")).map((item, i) => (
                         <div
                           key={i}
                           className="flex justify-between border-b border-border/40 pb-1.5"
@@ -438,24 +475,16 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                         </div>
                       ))}
 
-                      {/* Payment Options Summary */}
-                      <div className="mt-4 grid grid-cols-2 gap-2 pt-2">
-                        <div className="rounded-xl bg-primary-soft/40 p-3 text-center">
-                          <span className="text-[10px] text-muted-foreground block font-bold">
-                            Real Money Cost
-                          </span>
-                          <span className="font-display font-extrabold text-sm text-primary">
-                            {priceData.rwfTotal.toLocaleString()} RWF
-                          </span>
-                        </div>
-                        <div className="rounded-xl bg-amber-500/10 p-3 text-center">
-                          <span className="text-[10px] text-muted-foreground block font-bold">
-                            Gihanga Points Cost
-                          </span>
-                          <span className="font-display font-extrabold text-sm text-amber-500">
-                            {formatCount(priceData.gpTotal)} GP
-                          </span>
-                        </div>
+                      <div className="mt-4 rounded-xl bg-primary-soft/40 p-3">
+                        <span className="text-[10px] text-muted-foreground block font-bold">
+                          Estimated campaign fee (manual payment)
+                        </span>
+                        <span className="font-display font-extrabold text-lg text-primary">
+                          {priceData.rwfTotal.toLocaleString()} RWF
+                        </span>
+                        <p className="mt-1 text-[10px] text-muted-foreground">
+                          No online payment is collected. Our advertising team will contact you to arrange payment outside the app.
+                        </p>
                       </div>
                     </div>
                   ) : null}
@@ -467,7 +496,7 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
           {/* STEP 4: REVIEW & CONFIRMATION */}
           {step === 4 && (
             <div className="space-y-6">
-              <h3 className="text-sm font-bold text-foreground">4. Review Campaign & Create</h3>
+              <h3 className="text-sm font-bold text-foreground">4. Review & Submit Campaign</h3>
 
               <div className="grid gap-6 md:grid-cols-2">
                 <div className="rounded-2xl border border-border bg-card p-5 space-y-3 text-xs">
@@ -492,17 +521,31 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
 
                   <div className="mt-4 rounded-xl border border-border/80 bg-elevated p-3 space-y-1">
                     <span className="font-bold text-xs text-foreground block">
-                      Payment Options Available:
+                      Estimated fee: {priceData?.rwfTotal.toLocaleString() ?? "To be confirmed"} RWF
                     </span>
                     <p className="text-muted-foreground text-[11px]">
-                      • Real Money: {priceData?.rwfTotal.toLocaleString()} RWF (Wallet Balance /
-                      MoMo)
-                    </p>
-                    <p className="text-muted-foreground text-[11px]">
-                      • Gihanga Points: {formatCount(priceData?.gpTotal ?? 0)} GP (Your Balance:{" "}
-                      {formatCount(walletData?.wallet?.kingdomPoints ?? 0)} GP)
+                      No payment is collected in the app. After content approval, the team will contact you to arrange manual payment. Your advertisement starts only after an authorized admin confirms the payment.
                     </p>
                   </div>
+                </div>
+
+                <div className="rounded-2xl border border-border bg-card p-5 space-y-3 text-xs">
+                  <h4 className="font-bold text-sm text-foreground">Payment contact details</h4>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-muted-foreground">Contact name *</label>
+                    <Input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Your name or business contact" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-muted-foreground">Email address *</label>
+                    <Input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="you@example.com" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-semibold text-muted-foreground">Phone / WhatsApp number *</label>
+                    <Input type="tel" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="+250..." />
+                  </div>
+                  <p className="text-[10px] leading-relaxed text-muted-foreground">
+                    These details are shared with authorized advertising administrators for campaign payment follow-up. Moderators can review the ad creative but cannot view your payment contact details.
+                  </p>
                 </div>
 
                 {/* Final Preview */}
@@ -560,7 +603,7 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                   </>
                 ) : (
                   <>
-                    Create & Proceed to Checkout
+                    Submit for Review
                     <ArrowRight className="ml-2 size-4" />
                   </>
                 )}

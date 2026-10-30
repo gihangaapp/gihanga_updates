@@ -20,8 +20,15 @@ export type AdStatus =
   | "refund_pending"
   | "refunded";
 
-export type PaymentMethod = "real_money" | "gihanga_points";
+export type PaymentMethod = "real_money" | "gihanga_points" | "manual";
 export type PaymentStatus = "unpaid" | "pending" | "processing" | "paid" | "refund_pending" | "refunded";
+export type ManualPaymentStatus = "not_applicable" | "awaiting_payment" | "verified";
+
+export interface IAdManualPaymentContact {
+  name: string;
+  email: string;
+  phone: string;
+}
 
 // ─── Targeting ────────────────────────────────────────────────────────────────
 export interface IAdTargeting {
@@ -85,6 +92,11 @@ export interface IAdvertisement extends Document {
   paymentTransactionId?: Types.ObjectId;
   paymentIdempotencyKey?: string;
   paidAt?: Date;
+  manualPaymentContact?: IAdManualPaymentContact;
+  manualPaymentStatus: ManualPaymentStatus;
+  manualPaymentVerifiedBy?: Types.ObjectId;
+  manualPaymentVerifiedAt?: Date;
+  manualPaymentReference?: string;
 
   // Status & moderation
   status: AdStatus;
@@ -137,6 +149,15 @@ const AdTargetingSchema = new Schema<IAdTargeting>(
   { _id: false },
 );
 
+const AdManualPaymentContactSchema = new Schema<IAdManualPaymentContact>(
+  {
+    name: { type: String, required: true, trim: true, maxlength: 100 },
+    email: { type: String, required: true, trim: true, lowercase: true, maxlength: 254 },
+    phone: { type: String, required: true, trim: true, maxlength: 32 },
+  },
+  { _id: false },
+);
+
 const AdvertisementSchema = new Schema<IAdvertisement>(
   {
     creator: { type: Schema.Types.ObjectId, ref: "User", required: true },
@@ -183,10 +204,19 @@ const AdvertisementSchema = new Schema<IAdvertisement>(
       enum: ["unpaid", "pending", "processing", "paid", "refund_pending", "refunded"],
       default: "unpaid",
     },
-    paymentMethod: { type: String, enum: ["real_money", "gihanga_points"] },
+    paymentMethod: { type: String, enum: ["real_money", "gihanga_points", "manual"] },
     paymentTransactionId: { type: Schema.Types.ObjectId, ref: "Transaction" },
     paymentIdempotencyKey: { type: String, unique: true, sparse: true, index: true },
     paidAt: { type: Date },
+    manualPaymentContact: { type: AdManualPaymentContactSchema },
+    manualPaymentStatus: {
+      type: String,
+      enum: ["not_applicable", "awaiting_payment", "verified"],
+      default: "not_applicable",
+    },
+    manualPaymentVerifiedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    manualPaymentVerifiedAt: { type: Date },
+    manualPaymentReference: { type: String, maxlength: 120 },
 
     // Status
     status: {
@@ -232,6 +262,7 @@ const AdvertisementSchema = new Schema<IAdvertisement>(
 AdvertisementSchema.index({ creator: 1, status: 1, createdAt: -1 });
 AdvertisementSchema.index({ status: 1, placement: 1, endDate: 1 });
 AdvertisementSchema.index({ paymentStatus: 1 });
+AdvertisementSchema.index({ manualPaymentStatus: 1, status: 1, createdAt: -1 });
 AdvertisementSchema.index({ placement: 1, status: 1, startDate: 1, endDate: 1 });
 AdvertisementSchema.index({ "targeting.interests": 1 });
 AdvertisementSchema.index({ _legacySystem: 1 });

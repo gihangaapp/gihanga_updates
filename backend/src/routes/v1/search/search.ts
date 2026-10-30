@@ -2,7 +2,7 @@ import { Router, Response } from "express";
 import { User } from "../../../models/User";
 import { Hashtag } from "../../../models/Hashtag";
 import { Post } from "../../../models/Post";
-import { withViewerFlags } from "../../../services/recommendation/recommendationService";
+import { rankSearchPosts } from "../../../services/recommendation/recommendationService";
 import { optionalAuth } from "../../../middleware/optionalAuth";
 import { AuthenticatedRequest } from "../../../middleware/rbac";
 
@@ -35,12 +35,16 @@ router.get("/", optionalAuth, async (req: AuthenticatedRequest, res: Response) =
       audience: "public",
       $or: [{ body: regex }, { location: regex }, { tags: tagRegex }],
     })
-      .sort({ likesCount: -1, createdAt: -1 })
-      .limit(40)
+      // Retrieve a broad relevant set, then personalize it with the same
+      // candidate scoring signals used by Feed/Explore rather than sorting
+      // search results by lifetime likes alone.
+      .sort({ createdAt: -1, likesCount: -1 })
+      .limit(60)
       .populate("author", POST_AUTHOR_FIELDS);
-    const posts = await withViewerFlags(
+    const posts = await rankSearchPosts(
       postDocs.filter((p: any) => p.author),
       req.user?.userId,
+      q,
     );
 
     return res.json({ users, posts, tags: [] });

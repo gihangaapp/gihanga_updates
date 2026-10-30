@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { useSubmitNotInterested, logRecommendationEvent } from "@/hooks/use-recommendations";
 import {
@@ -23,7 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatCount, timeAgo } from "@/lib/format";
-import { FeedPost } from "@/lib/api-client";
+import { api, FeedPost } from "@/lib/api-client";
 import { useToggleLike, useToggleBookmark, useDeletePost, useRetryModeration } from "@/hooks/use-posts";
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { useAuth } from "@/lib/auth-context";
@@ -82,18 +82,68 @@ export const PostCard = memo(function PostCard({ post, index = 0 }: {
     isOwnPost && post.moderation && post.moderation.status !== "approved" ? post.moderation : undefined;
   const following = followingSet?.has(post.author.username) ?? post.followingAuthor;
 
-  const handleLike = useCallback(() => {
-    // Make the UI mutation the first action in the click handler. Analytics is
-    // fire-and-forget and must not compete with the user's primary request.
-    toggleLike.mutate(post._id);
-    logRecommendationEvent({
-      event: post.liked ? "post_unlike" : "post_like",
+  const articleRef = useRef<HTMLElement | null>(null);
+  const impressionLogged = useRef(false);
+  const creatorId = String(post.author._id ?? post.author);
+
+  // Count an impression only when the card is genuinely visible. The post
+  // view endpoint maintains the existing view counter and deduplicates views;
+  // the recommendation event separately supplies a lightweight ranking signal.
+  useEffect(() => {
+    if (impressionLogged.current || isOwnPost) return;
+    const element = articleRef.current;
+    if (!element) return;
+
+    const recordImpression = () => {
+      if (impressionLogged.current) return;
+      impressionLogged.current = true;
+      void api.post(`/posts/${post._id}/view`).catch(() => undefined);
+      void logRecommendationEvent({
+        event: post.kind === "reel" ? "reel_impression" : "post_impression",
+        targetKind: post.kind === "reel" ? "reel" : "post",
+        targetId: post._id,
+        creatorId,
+        tags: post.tags,
+      });
+    };
+
+    if (typeof IntersectionObserver === "undefined") {
+      recordImpression();
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.25)) {
+          recordImpression();
+          observer.disconnect();
+        }
+      },
+      { threshold: [0.25] },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [post._id, post.kind, post.tags, creatorId, isOwnPost]);
+
+  const handleCreatorOpen = useCallback(() => {
+    void logRecommendationEvent({
+      event: "post_open_creator",
       targetKind: post.kind === "reel" ? "reel" : "post",
       targetId: post._id,
-      creatorId: String(post.author._id ?? post.author),
+      creatorId,
       tags: post.tags,
     });
-  }, [toggleLike, post._id, post.liked, post.kind, post.author, post.tags]);
+  }, [post._id, post.kind, post.tags, creatorId]);
+
+  const handleLike = useCallback(() => {
+    // The API route records the confirmed like/unlike after the mutation succeeds.
+    toggleLike.mutate(post._id);
+  }, [toggleLike, post._id]);
+
+  const handleShare = useCallback(() => {
+    // ShareSheet calls this only after a share action succeeds.
+    void api.post(`/posts/${post._id}/share`).catch(() => undefined);
+  }, [post._id]);
 
   const handleCommentClick = () => {
     if (isMobile) {
@@ -109,10 +159,10 @@ export const PostCard = memo(function PostCard({ post, index = 0 }: {
     isLongCaption && !isExpanded ? `${post.body.slice(0, maxCharLimit)}…` : post.body;
 
   return (
-    <article className="feed-card animate-in fade-in duration-300 surface-card mb-4 overflow-hidden border border-border bg-card shadow-soft">
+    <article ref={articleRef} className="feed-card animate-in fade-in duration-300 surface-card mb-4 overflow-hidden border border-border bg-card shadow-soft">
       {/* Header */}
       <header className="flex items-center gap-2 p-3 pb-3 sm:gap-3 sm:p-4 sm:pb-3">
-        <Link to="/profile/$username" params={{ username: post.author.username }} className="press shrink-0">
+        <Link to="/profile/$username" params={{ username: post.author.username }} onClick={handleCreatorOpen} className="press shrink-0">
           <GAvatar
             user={toDisplayUser(post.author)}
             size="md"
@@ -124,6 +174,7 @@ export const PostCard = memo(function PostCard({ post, index = 0 }: {
             <Link
               to="/profile/$username"
               params={{ username: post.author.username }}
+              onClick={handleCreatorOpen}
               className="min-w-0 truncate text-sm font-bold hover:underline sm:text-[15px]"
             >
               {post.author.name}
@@ -377,6 +428,7 @@ export const PostCard = memo(function PostCard({ post, index = 0 }: {
         title={`Post by @${post.author.username} on Gihanga Updates`}
         text={post.body}
         url={`${typeof window !== "undefined" ? window.location.origin : ""}/post/${post._id}`}
+        onShare={handleShare}
       />
 
       <ReportDialog

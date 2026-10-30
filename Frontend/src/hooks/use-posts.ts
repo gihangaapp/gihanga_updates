@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, FeedPost } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
@@ -8,6 +9,20 @@ interface PostsPage {
   posts: FeedPost[];
   nextCursor: string | null;
   isFollowingAnyone?: boolean;
+}
+
+let feedVisitSequence = 0;
+
+/** Generate a fresh client-side feed session for every route/component mount.
+ * Cursor pages keep this ID; navigating away and back gets a new ranking seed.
+ */
+function useFeedVisitId() {
+  const [visitId, setVisitId] = useState<string | null>(null);
+  useEffect(() => {
+    feedVisitSequence += 1;
+    setVisitId(`${Date.now().toString(36)}-${feedVisitSequence.toString(36)}`);
+  }, []);
+  return visitId;
 }
 
 function useCursoredPosts(key: string, endpoint: string, enabled = true) {
@@ -27,8 +42,9 @@ function useCursoredPosts(key: string, endpoint: string, enabled = true) {
 
 export function useFeed(enabled = true) {
   const { user } = useAuth();
+  const visitId = useFeedVisitId();
   return useInfiniteQuery({
-    queryKey: ["posts", "feed", user?.id],
+    queryKey: ["posts", "feed", user?.id, visitId],
     queryFn: ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
       api.get<PostsPage>(
         `/recommendations/for-you?limit=12${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
@@ -40,14 +56,16 @@ export function useFeed(enabled = true) {
     // Existing IndexedDB data remains available for instant rendering, but is
     // quietly reconciled against the full public feed after every mount.
     staleTime: 0,
-    enabled: Boolean(user) && enabled,
+    refetchOnMount: "always",
+    enabled: Boolean(user) && enabled && Boolean(visitId),
   });
 }
 
 export function useExplore(enabled = true) {
   const { user } = useAuth();
+  const visitId = useFeedVisitId();
   return useInfiniteQuery({
-    queryKey: ["posts", "explore", user?.id],
+    queryKey: ["posts", "explore", user?.id, visitId],
     queryFn: ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
       api.get<PostsPage>(
         `/recommendations/explore?limit=12${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
@@ -56,14 +74,17 @@ export function useExplore(enabled = true) {
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
-    enabled,
+    enabled: enabled && Boolean(visitId),
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 }
 
 export function useTrending(enabled = true) {
   const { user } = useAuth();
+  const visitId = useFeedVisitId();
   return useInfiniteQuery({
-    queryKey: ["posts", "trending", user?.id],
+    queryKey: ["posts", "trending", user?.id, visitId],
     queryFn: ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
       api.get<PostsPage>(
         `/recommendations/trending?limit=12${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
@@ -72,15 +93,18 @@ export function useTrending(enabled = true) {
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
-    enabled,
+    enabled: enabled && Boolean(visitId),
+    staleTime: 0,
+    refetchOnMount: "always",
     refetchInterval: 60_000,
   });
 }
 
 export function useReelsFeed() {
   const { user } = useAuth();
+  const visitId = useFeedVisitId();
   return useInfiniteQuery({
-    queryKey: ["posts", "reels", user?.id],
+    queryKey: ["posts", "reels", user?.id, visitId],
     queryFn: ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
       api.get<PostsPage>(
         `/recommendations/reels?limit=10${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
@@ -89,6 +113,9 @@ export function useReelsFeed() {
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextCursor ?? undefined,
+    staleTime: 0,
+    refetchOnMount: "always",
+    enabled: Boolean(visitId),
   });
 }
 

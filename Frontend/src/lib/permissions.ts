@@ -31,6 +31,7 @@ export type Permission =
   | "wallet.unfreeze"
   | "ads.view"
   | "ads.approve"
+  | "ads.payment.verify"
   | "ads.manage"
   | "analytics.view"
   | "analytics.revenue"
@@ -57,6 +58,7 @@ const MODERATOR_PERMISSIONS: Set<Permission> = new Set([
   "audit.viewOwn",
   "accounts.view",
   "ads.view",
+  "ads.approve",
 ]);
 
 const ADMIN_PERMISSIONS: Set<Permission> = new Set([
@@ -75,6 +77,7 @@ const ADMIN_PERMISSIONS: Set<Permission> = new Set([
   "wallet.freeze",
   "wallet.unfreeze",
   "ads.approve",
+  "ads.payment.verify",
   "ads.manage",
   "analytics.view",
   "analytics.revenue",

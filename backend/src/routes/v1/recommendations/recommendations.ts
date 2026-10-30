@@ -32,8 +32,9 @@ router.post("/events", optionalAuth, async (req: AuthenticatedRequest, res: Resp
       metadata,
     } = req.body;
 
-    if (!event || !targetKind || !targetId) {
-      return res.status(400).json({ error: "event, targetKind, targetId are required" });
+    const isSearchEvent = targetKind === "search" && ["search", "search_result_open"].includes(event);
+    if (!event || !targetKind || (!targetId && !isSearchEvent)) {
+      return res.status(400).json({ error: "event and targetKind are required; targetId is required for content events" });
     }
 
     await logInteractionEvent({

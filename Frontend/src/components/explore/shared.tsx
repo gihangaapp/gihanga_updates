@@ -18,7 +18,8 @@ import { toast } from "sonner";
 import { GAvatar, VerifiedBadge } from "@/components/common/GAvatar";
 import { Button } from "@/components/ui/button";
 import { formatCount } from "@/lib/format";
-import { mediaUrl, type FeedPost, type PublicUser } from "@/lib/api-client";
+import { api, mediaUrl, type FeedPost, type PublicUser } from "@/lib/api-client";
+import { logRecommendationEvent } from "@/hooks/use-recommendations";
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { useAuth } from "@/lib/auth-context";
 import { cn } from "@/lib/utils";
@@ -192,6 +193,44 @@ export function PostGridSkeleton({ count = 8 }: { count?: number }) {
 }
 
 export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }) {
+  const cardRef = useRef<HTMLAnchorElement | null>(null);
+  const impressionTracked = useRef(false);
+  const { user } = useAuth();
+  const isOwnPost = user?.id === post.author._id;
+
+  useEffect(() => {
+    if (impressionTracked.current || isOwnPost || !cardRef.current) return;
+    const element = cardRef.current;
+    const recordImpression = () => {
+      if (impressionTracked.current) return;
+      impressionTracked.current = true;
+      void api.post(`/posts/${post._id}/view`).catch(() => undefined);
+      void logRecommendationEvent({
+        event: post.kind === "reel" ? "reel_impression" : "post_impression",
+        targetKind: post.kind === "reel" ? "reel" : "post",
+        targetId: post._id,
+        creatorId: post.author._id,
+        tags: post.tags,
+      });
+    };
+
+    if (typeof IntersectionObserver === "undefined") {
+      recordImpression();
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting && entry.intersectionRatio >= 0.25)) {
+          recordImpression();
+          observer.disconnect();
+        }
+      },
+      { threshold: [0.25] },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [post._id, post.kind, post.author._id, post.tags, isOwnPost]);
+
   const isVideo = post.kind === "video" || post.kind === "reel";
   const first = post.media?.[0];
   const thumb = mediaUrl(post.thumbnailUrl);
@@ -203,8 +242,18 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
 
   return (
     <Link
+      ref={cardRef}
       to="/post/$postId"
       params={{ postId: post._id }}
+      onClick={() => {
+        void logRecommendationEvent({
+          event: "post_open",
+          targetKind: post.kind === "reel" ? "reel" : "post",
+          targetId: post._id,
+          creatorId: post.author._id,
+          tags: post.tags,
+        });
+      }}
       className="press group relative aspect-[3/4] overflow-hidden rounded-2xl border border-border/50 bg-muted shadow-soft"
       style={{ animationDelay: `${Math.min(index, 12) * 30}ms` }}
     >
