@@ -9,7 +9,7 @@ import {
   useRecordImpression,
   useRecordView,
 } from "@/hooks/use-ads";
-import { mediaUrl as resolveMediaUrl } from "@/lib/api-client";
+import { mediaUrl as resolveMediaUrl, mediaUrlWithAuth } from "@/lib/api-client";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +39,7 @@ export function StoryAdOverlay({ ad, onClose }: StoryAdOverlayProps) {
     () => typeof document === "undefined" || document.visibilityState !== "hidden",
   );
   const [hidden, setHidden] = useState(false);
+  const [mediaFailed, setMediaFailed] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoWasPlayingWhenHidden = useRef(false);
   const impressionSent = useRef(false);
@@ -49,8 +50,10 @@ export function StoryAdOverlay({ ad, onClose }: StoryAdOverlayProps) {
   const creator = typeof ad.creator === "object" ? ad.creator : null;
   const creatorName = creator?.name || "Sponsored Partner";
   const creatorUsername = creator?.username || "sponsored";
-  const resolvedMedia = resolveMediaUrl(ad.mediaUrl) || ad.mediaUrl;
-  const resolvedThumbnail = resolveMediaUrl(ad.thumbnailUrl) || ad.thumbnailUrl;
+  const mediaPath = ad.mediaUrl || (ad.mediaKey ? `/api/v1/media/file/${ad.mediaKey}` : undefined);
+  const resolvedMedia = mediaUrlWithAuth(resolveMediaUrl(mediaPath) || mediaPath);
+  const resolvedThumbnail = mediaUrlWithAuth(resolveMediaUrl(ad.thumbnailUrl) || ad.thumbnailUrl);
+  useEffect(() => setMediaFailed(false), [ad._id, resolvedMedia]);
   const isVideo = Boolean(ad.mediaType === "video" || ad.adType.includes("video"));
 
   useEffect(() => {
@@ -128,7 +131,8 @@ export function StoryAdOverlay({ ad, onClose }: StoryAdOverlayProps) {
 
   const handleCtaClick = () => {
     if (ad._id) recordClick.mutate(ad._id);
-    if (ad.ctaUrl) window.open(ad.ctaUrl, "_blank", "noopener,noreferrer");
+    const destination = ad.ctaUrl || `${window.location.origin}/profile/${encodeURIComponent(creatorUsername)}`;
+    window.open(destination, "_blank", "noopener,noreferrer");
   };
 
   const handleHide = () => {
@@ -153,7 +157,7 @@ export function StoryAdOverlay({ ad, onClose }: StoryAdOverlayProps) {
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-slate-950 text-white">
-      {resolvedMedia ? (
+      {resolvedMedia && !mediaFailed ? (
         isVideo ? (
           <video
             ref={videoRef}
@@ -164,6 +168,7 @@ export function StoryAdOverlay({ ad, onClose }: StoryAdOverlayProps) {
             playsInline
             preload="metadata"
             onPlaying={handleVideoPlaying}
+            onError={() => setMediaFailed(true)}
             onTimeUpdate={(event) => {
               const video = event.currentTarget;
               if (pageVisible && !video.paused && Number.isFinite(video.duration) && video.duration > 0) {
@@ -179,12 +184,13 @@ export function StoryAdOverlay({ ad, onClose }: StoryAdOverlayProps) {
             alt={ad.title}
             decoding="async"
             onLoad={handleImageLoad}
+            onError={() => setMediaFailed(true)}
             className="h-full w-full object-cover"
           />
         )
       ) : (
         <div className="grid h-full w-full place-items-center bg-gradient-to-br from-indigo-950 via-slate-900 to-black p-6 text-center text-sm font-bold">
-          {ad.title}
+          <div className="space-y-2"><p>{ad.title}</p><p className="text-xs font-normal text-white/70">{mediaFailed ? "Advertisement media is temporarily unavailable" : "Sponsored advertisement"}</p></div>
         </div>
       )}
 

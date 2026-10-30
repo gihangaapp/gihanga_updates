@@ -3,6 +3,8 @@ import { Report } from "../../../../models/Report";
 import { Post } from "../../../../models/Post";
 import { Story } from "../../../../models/Story";
 import { Comment } from "../../../../models/Comment";
+import { AdComment } from "../../../../models/AdComment";
+import { Advertisement } from "../../../../models/Advertisement";
 import { User } from "../../../../models/User";
 import { Media } from "../../../../models/Media";
 import { ModerationRule } from "../../../../models/ModerationRule";
@@ -85,7 +87,13 @@ async function loadContentForReview(record: any) {
       }
       case "comment": {
         const comment = await Comment.findById(record.contentId).select("body hidden moderation createdAt");
-        return comment ? { type: "comment", comment } : null;
+        if (comment) return { type: "comment", comment };
+        // Ad comments share the platform's comment moderation policy, but are
+        // stored separately because they belong to an Advertisement, not a Post.
+        const adComment = await AdComment.findById(record.contentId)
+          .select("body hidden moderation createdAt ad")
+          .populate("ad", "title placement");
+        return adComment ? { type: "ad_comment", comment: adComment } : null;
       }
       case "avatar":
       case "media": {
@@ -217,10 +225,20 @@ async function applyStaffApproval(record: any) {
   } else if (record.contentType === "comment" && record.contentId) {
     const comment = await Comment.findById(record.contentId);
     if (comment) {
+      const wasHidden = comment.hidden;
       comment.hidden = false;
       comment.moderation = { status: "approved", record: record._id, updatedAt: new Date() };
       await comment.save();
-      await Post.findByIdAndUpdate(comment.post, { $inc: { commentsCount: 1 } });
+      if (wasHidden) await Post.findByIdAndUpdate(comment.post, { $inc: { commentsCount: 1 } });
+    } else {
+      const adComment = await AdComment.findById(record.contentId);
+      if (adComment) {
+        const wasHidden = adComment.hidden;
+        adComment.hidden = false;
+        adComment.moderation = { status: "approved", record: record._id, updatedAt: new Date() };
+        await adComment.save();
+        if (wasHidden) await Advertisement.findByIdAndUpdate(adComment.ad, { $inc: { "analytics.comments": 1 } });
+      }
     }
   } else if ((record.contentType === "avatar" || record.contentType === "media") && record.contentId) {
     await Media.updateOne({ _id: record.contentId }, { $set: { moderationStatus: "approved" } });
@@ -250,10 +268,16 @@ async function applyStaffRejection(record: any) {
       { $set: { moderation: { status: "rejected", record: record._id, updatedAt: new Date() } } },
     );
   } else if (record.contentType === "comment" && record.contentId) {
-    await Comment.updateOne(
+    const result = await Comment.updateOne(
       { _id: record.contentId },
       { $set: { hidden: true, moderation: { status: "rejected", record: record._id, updatedAt: new Date() } } },
     );
+    if (result.matchedCount === 0) {
+      await AdComment.updateOne(
+        { _id: record.contentId },
+        { $set: { hidden: true, moderation: { status: "rejected", record: record._id, updatedAt: new Date() } } },
+      );
+    }
   } else if ((record.contentType === "avatar" || record.contentType === "media") && record.contentId) {
     await Media.updateOne({ _id: record.contentId }, { $set: { moderationStatus: "rejected" } });
   }

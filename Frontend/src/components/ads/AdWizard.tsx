@@ -48,6 +48,7 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
   const [ctaText, setCtaText] = useState("Learn More");
   const [ctaUrl, setCtaUrl] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
+  const [mediaKey, setMediaKey] = useState("");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [videoDurationSeconds, setVideoDurationSeconds] = useState<number | undefined>(undefined);
   const [isUploading, setIsUploading] = useState(false);
@@ -90,6 +91,20 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
       .then((res) => {
         const absoluteUrl = resolveMediaUrl(res.url) || res.url;
         setMediaUrl(absoluteUrl);
+        setMediaKey(res.mediaId || res.key || "");
+        setThumbnailUrl(res.thumbnailUrl ? (resolveMediaUrl(res.thumbnailUrl) || res.thumbnailUrl) : "");
+        setVideoDurationSeconds(undefined);
+        if (isVideo) {
+          const probeUrl = URL.createObjectURL(file);
+          const probe = document.createElement("video");
+          probe.preload = "metadata";
+          probe.onloadedmetadata = () => {
+            if (Number.isFinite(probe.duration) && probe.duration > 0) setVideoDurationSeconds(Math.round(probe.duration));
+            URL.revokeObjectURL(probeUrl);
+          };
+          probe.onerror = () => URL.revokeObjectURL(probeUrl);
+          probe.src = probeUrl;
+        }
         toast.success("Media uploaded successfully!");
       })
       .catch((err) => {
@@ -125,6 +140,7 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
         ctaText: ctaText.trim() || "Learn More",
         ctaUrl: ctaUrl.trim() || undefined,
         mediaUrl: mediaUrl || undefined,
+        mediaKey: mediaKey || undefined,
         mediaType: adType.includes("video") ? "video" : "image",
         videoDurationSeconds,
         thumbnailUrl: thumbnailUrl || undefined,
@@ -273,6 +289,7 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                   ctaText={ctaText}
                   ctaUrl={ctaUrl}
                   mediaUrl={mediaUrl}
+                  mediaKey={mediaKey}
                   thumbnailUrl={thumbnailUrl}
                 />
               </div>
@@ -365,6 +382,7 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                   ctaText={ctaText}
                   ctaUrl={ctaUrl}
                   mediaUrl={mediaUrl}
+                  mediaKey={mediaKey}
                   thumbnailUrl={thumbnailUrl}
                 />
               </div>
@@ -559,6 +577,7 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                     ctaText={ctaText}
                     ctaUrl={ctaUrl}
                     mediaUrl={mediaUrl}
+                    mediaKey={mediaKey}
                     thumbnailUrl={thumbnailUrl}
                   />
                 </div>

@@ -52,6 +52,11 @@ export type EventType =
   | "ad_impression"
   | "ad_view"
   | "ad_click"
+  | "ad_like"
+  | "ad_unlike"
+  | "ad_reaction"
+  | "ad_comment"
+  | "ad_share"
   | "ad_hide"
   | "ad_report";
 

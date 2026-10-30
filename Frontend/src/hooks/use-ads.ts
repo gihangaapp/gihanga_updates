@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
 
 export type AdType = "image" | "video" | "story_image" | "story_video";
 export type AdPlacement = "feed" | "story";
@@ -52,6 +53,7 @@ export interface AdAnalytics {
   views: number;
   clicks: number;
   likes: number;
+  comments: number;
   shares: number;
   saves: number;
   videoStarts: number;
@@ -60,6 +62,16 @@ export interface AdAnalytics {
   ctr: number;
   completionRate: number;
   reach: number;
+}
+
+export type AdReaction = "like" | "love" | "care" | "haha" | "wow" | "sad" | "angry";
+
+export interface AdComment {
+  _id: string;
+  ad: string;
+  author: { _id: string; name: string; username: string; avatarHue?: number; avatarUrl?: string | null; isCreator?: boolean; verified?: boolean };
+  body: string;
+  createdAt: string;
 }
 
 export interface Advertisement {
@@ -87,6 +99,8 @@ export interface Advertisement {
   mediaType?: "image" | "video";
   videoDurationSeconds?: number;
   thumbnailUrl?: string;
+  commentsCount?: number;
+  viewerReaction?: AdReaction | null;
 
   campaignDurationDays: number;
   startDate?: string;
@@ -276,11 +290,14 @@ export function usePayAdWithMoney() {
 // ── Ad Delivery Hooks ────────────────────────────────────────────────────────
 
 export function useFeedAds() {
+  const { user, staffUser } = useAuth();
+  const isStaffSession = Boolean(staffUser && !user);
+  const viewerKey = user?.id || staffUser?.id || "anonymous";
   return useQuery({
-    queryKey: ["ads", "delivery", "feed"],
+    queryKey: ["ads", "delivery", "feed", viewerKey],
     queryFn: async () => {
       try {
-        const res = await api.get<{ ads: Advertisement[] }>("/ads/delivery/feed");
+        const res = await api.get<{ ads: Advertisement[] }>("/ads/delivery/feed", isStaffSession);
         return res?.ads ?? [];
       } catch (err) {
         console.error("[useFeedAds Error]:", err);
@@ -292,11 +309,14 @@ export function useFeedAds() {
 }
 
 export function useStoryAds() {
+  const { user, staffUser } = useAuth();
+  const isStaffSession = Boolean(staffUser && !user);
+  const viewerKey = user?.id || staffUser?.id || "anonymous";
   return useQuery({
-    queryKey: ["ads", "delivery", "story"],
+    queryKey: ["ads", "delivery", "story", viewerKey],
     queryFn: async () => {
       try {
-        const res = await api.get<{ ads: Advertisement[] }>("/ads/delivery/story");
+        const res = await api.get<{ ads: Advertisement[] }>("/ads/delivery/story", isStaffSession);
         return res?.ads ?? [];
       } catch (err) {
         console.error("[useStoryAds Error]:", err);
@@ -307,36 +327,131 @@ export function useStoryAds() {
   });
 }
 
-export function useRecordImpression() {
+export function useAdReaction() {
+  const queryClient = useQueryClient();
+  const { user, staffUser } = useAuth();
+  const isStaffSession = Boolean(staffUser && !user);
+  return useMutation<
+    { liked: boolean; reaction: AdReaction | null; likesCount: number },
+    Error,
+    { adId: string; reaction: AdReaction | null },
+    { previous: [readonly unknown[], Advertisement[] | undefined][] }
+  >({
+    mutationFn: ({ adId, reaction }) =>
+      api.post<{ liked: boolean; reaction: AdReaction | null; likesCount: number }>(`/ads/${adId}/reaction`, { reaction }, isStaffSession),
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ["ads", "delivery"] });
+      const previous = queryClient.getQueriesData<Advertisement[]>({ queryKey: ["ads", "delivery"] });
+      queryClient.setQueriesData<Advertisement[]>({ queryKey: ["ads", "delivery"] }, (current) =>
+        current?.map((ad) => {
+          if (ad._id !== variables.adId) return ad;
+          const hadReaction = Boolean(ad.viewerReaction);
+          const nextReaction = variables.reaction;
+          const delta = hadReaction ? (nextReaction ? 0 : -1) : (nextReaction ? 1 : 0);
+          return {
+            ...ad,
+            viewerReaction: nextReaction,
+            analytics: { ...ad.analytics, likes: Math.max(0, (ad.analytics?.likes || 0) + delta) },
+          };
+        }),
+      );
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      context?.previous.forEach(([key, data]) => queryClient.setQueryData(key, data));
+    },
+    onSuccess: (result, variables) => {
+      queryClient.setQueriesData<Advertisement[]>({ queryKey: ["ads", "delivery"] }, (current) =>
+        current?.map((ad) => ad._id === variables.adId
+          ? { ...ad, viewerReaction: result.reaction, analytics: { ...ad.analytics, likes: result.likesCount } }
+          : ad),
+      );
+      queryClient.invalidateQueries({ queryKey: ["ads", "mine"] });
+    },
+  });
+}
+
+export function useAdComments(adId: string, enabled = true) {
+  const { user, staffUser } = useAuth();
+  const isStaffSession = Boolean(staffUser && !user);
+  return useQuery({
+    queryKey: ["ads", "comments", adId],
+    queryFn: ({ signal }) => api.get<{ comments: AdComment[]; total: number }>(`/ads/${adId}/comments`, isStaffSession, signal),
+    enabled: Boolean(adId) && enabled,
+  });
+}
+
+export function useCreateAdComment(adId: string) {
+  const queryClient = useQueryClient();
+  const { user, staffUser } = useAuth();
+  const isStaffSession = Boolean(staffUser && !user);
   return useMutation({
-    mutationFn: (adId: string) => api.post(`/ads/${adId}/impression`),
+    mutationFn: (body: string) => api.post<{ comment: AdComment | null; total?: number; moderation?: { status: string }; pendingNotice?: string }>(`/ads/${adId}/comments`, { body }, isStaffSession),
+    onSuccess: (result) => {
+      if (result.comment) {
+        queryClient.setQueryData<{ comments: AdComment[]; total: number }>(["ads", "comments", adId], (current) => ({
+          comments: [result.comment!, ...(current?.comments || []).filter((comment) => comment._id !== result.comment!._id)],
+          total: result.total ?? (current?.total || 0) + 1,
+        }));
+      }
+      queryClient.invalidateQueries({ queryKey: ["ads", "comments", adId] });
+      queryClient.invalidateQueries({ queryKey: ["ads", "delivery"] });
+    },
+  });
+}
+
+export function useShareAd() {
+  const queryClient = useQueryClient();
+  const { user, staffUser } = useAuth();
+  const isStaffSession = Boolean(staffUser && !user);
+  return useMutation({
+    mutationFn: (adId: string) => api.post<{ sharesCount: number }>(`/ads/${adId}/share`, undefined, isStaffSession),
+    onSuccess: (result, adId) => {
+      queryClient.setQueriesData<Advertisement[]>({ queryKey: ["ads", "delivery"] }, (current) =>
+        current?.map((ad) => ad._id === adId ? { ...ad, analytics: { ...ad.analytics, shares: result.sharesCount } } : ad),
+      );
+    },
+  });
+}
+
+export function useRecordImpression() {
+  const { user, staffUser } = useAuth();
+  const isStaffSession = Boolean(staffUser && !user);
+  return useMutation({
+    mutationFn: (adId: string) => api.post(`/ads/${adId}/impression`, undefined, isStaffSession),
   });
 }
 
 export function useRecordClick() {
+  const { user, staffUser } = useAuth();
+  const isStaffSession = Boolean(staffUser && !user);
   return useMutation({
-    mutationFn: (adId: string) => api.post(`/ads/${adId}/click`),
+    mutationFn: (adId: string) => api.post(`/ads/${adId}/click`, undefined, isStaffSession),
   });
 }
 
 export function useRecordView() {
+  const { user, staffUser } = useAuth();
+  const isStaffSession = Boolean(staffUser && !user);
   return useMutation({
     mutationFn: ({ adId, seconds }: { adId: string; seconds: number }) =>
-      api.post(`/ads/${adId}/view`, { seconds }),
+      api.post(`/ads/${adId}/view`, { seconds }, isStaffSession),
   });
 }
 
 export function useAdFeedback() {
   const queryClient = useQueryClient();
+  const { user, staffUser } = useAuth();
+  const isStaffSession = Boolean(staffUser && !user);
   return useMutation({
     mutationFn: ({ id, action, reason }: { id: string; action: "hide" | "report"; reason?: string }) =>
-      api.post<{ success: boolean; message: string }>(`/ads/${id}/feedback`, { action, reason }),
+      api.post<{ success: boolean; message: string }>(`/ads/${id}/feedback`, { action, reason }, isStaffSession),
     onSuccess: (_data, variables) => {
       if (variables.action === "hide") {
-        queryClient.setQueryData<Advertisement[]>(["ads", "delivery", "feed"], (current) =>
+        queryClient.setQueriesData<Advertisement[]>({ queryKey: ["ads", "delivery", "feed"] }, (current) =>
           current?.filter((ad) => ad._id !== variables.id),
         );
-        queryClient.setQueryData<Advertisement[]>(["ads", "delivery", "story"], (current) =>
+        queryClient.setQueriesData<Advertisement[]>({ queryKey: ["ads", "delivery", "story"] }, (current) =>
           current?.filter((ad) => ad._id !== variables.id),
         );
       }

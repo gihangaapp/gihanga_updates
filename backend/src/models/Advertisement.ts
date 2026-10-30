@@ -42,6 +42,7 @@ export interface IAdAnalytics {
   views: number;
   clicks: number;
   likes: number;
+  comments: number;
   shares: number;
   saves: number;
   videoStarts: number;
@@ -129,6 +130,7 @@ const AdAnalyticsSchema = new Schema<IAdAnalytics>(
     views: { type: Number, default: 0 },
     clicks: { type: Number, default: 0 },
     likes: { type: Number, default: 0 },
+    comments: { type: Number, default: 0 },
     shares: { type: Number, default: 0 },
     saves: { type: Number, default: 0 },
     videoStarts: { type: Number, default: 0 },

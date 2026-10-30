@@ -281,7 +281,8 @@ export const api = {
 
 export interface UploadedMediaInfo {
   url: string;
-  key: string;
+  key?: string;
+  mediaId?: string;
   mimeType: string;
   sizeBytes: number;
   kind: string;
@@ -303,9 +304,19 @@ export interface UploadedMediaInfo {
 export function mediaUrlWithAuth(path?: string | null): string | undefined {
   const url = mediaUrl(path);
   if (!url || !url.includes("/api/v1/media/file/")) return url;
-  const token = getConsumerAccessToken();
-  if (!token) return url;
-  return `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`;
+
+  // Native img/video elements cannot attach Authorization headers. Keep both
+  // session types available: optionalAuth consumes the consumer token while
+  // the media route separately verifies the staff token for reviewer previews.
+  const consumerToken = getConsumerAccessToken();
+  const staffToken = getStaffAccessToken();
+  if (!consumerToken && !staffToken) return url;
+
+  const [base, query = ""] = url.split("?", 2);
+  const params = new URLSearchParams(query);
+  if (consumerToken) params.set("token", consumerToken);
+  if (staffToken) params.set("staffToken", staffToken);
+  return `${base}?${params.toString()}`;
 }
 
 /**

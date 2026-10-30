@@ -1,16 +1,65 @@
 import { Router, Response } from "express";
 import { Types } from "mongoose";
 import { Advertisement, AdPlacement } from "../../../models/Advertisement";
+import { AdComment } from "../../../models/AdComment";
+import { Like } from "../../../models/Like";
 import { User } from "../../../models/User";
-import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/rbac";
+import { authenticateConsumer, authenticateConsumerOrStaff, AuthenticatedRequest } from "../../../middleware/rbac";
 import { optionalAuth } from "../../../middleware/optionalAuth";
+import { verifyStaffAccessToken } from "../../../lib/jwt";
 import { UserInteraction } from "../../../models/UserInteraction";
 import { getAdConfig } from "../../../lib/adConfig";
 import { calculateAdPrice, validateAdMinutes, validateCampaignDays } from "../../../lib/adPricing";
 import { notifyStaff } from "../../../lib/staffNotify";
 import { notify } from "../../../lib/notify";
+import { moderationActive } from "../../../middleware/upload";
+import { moderateText, persistAssessment, decisionToStatus } from "../../../services/moderation/contentModerationService";
 
 const router = Router();
+
+function publicAdFilter() {
+  return {
+    status: "active",
+    paymentStatus: "paid",
+    $and: [
+      { $or: [{ paymentMethod: { $ne: "manual" } }, { manualPaymentStatus: "verified" }] },
+      { $or: [{ endDate: { $gte: new Date() } }, { endDate: { $exists: false } }] },
+    ],
+  };
+}
+
+const AD_REACTIONS = ["like", "love", "care", "haha", "wow", "sad", "angry"] as const;
+type AdReaction = (typeof AD_REACTIONS)[number];
+
+/** Ad delivery may be viewed from either a consumer session or a staff session.
+ * Normalize staff identity only for user-specific ad frequency/preferences and
+ * engagement state; this does not grant any staff permissions. */
+function optionalAdAuth(req: AuthenticatedRequest, res: Response, next: () => void) {
+  optionalAuth(req, res, () => {
+    if (req.user) return next();
+    const header = req.headers.authorization;
+    const credential = header?.startsWith("Bearer ")
+      ? header.split(" ")[1]
+      : typeof req.query?.staffToken === "string" ? req.query.staffToken : undefined;
+    if (credential) {
+      try {
+        const staff = verifyStaffAccessToken(credential);
+        req.user = {
+          userId: staff.userId,
+          username: staff.username,
+          email: staff.email,
+          role: "user",
+          isCreator: false,
+          type: "access",
+        };
+      } catch {
+        // Continue as an anonymous viewer when no valid session is supplied.
+      }
+    }
+    next();
+  });
+}
+
 
 // GET /api/v1/ads/config — Get public ad configuration and pricing rates
 router.get("/config", async (_req, res: Response) => {
@@ -154,6 +203,182 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
   }
 });
 
+// Public ad engagement is separate from organic post engagement. Only active,
+// paid campaigns can be liked, commented on, shared, or reacted to.
+router.get("/:id/engagement", optionalAdAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const ad = await Advertisement.findOne({ _id: req.params.id, ...publicAdFilter() }).select("_id analytics.likes analytics.shares").lean();
+    if (!ad) return res.status(404).json({ error: "Advertisement not found" });
+    const [commentsCount, current] = await Promise.all([
+      AdComment.countDocuments({ ad: ad._id, hidden: false }),
+      req.user?.userId ? Like.findOne({ target: ad._id, kind: "ad", user: req.user.userId }).select("reaction").lean() : null,
+    ]);
+    return res.json({
+      liked: Boolean(current),
+      reaction: (current as any)?.reaction || (current ? "like" : null),
+      likesCount: ad.analytics?.likes || 0,
+      commentsCount,
+      sharesCount: ad.analytics?.shares || 0,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to load advertisement engagement", details: error.message });
+  }
+});
+
+router.post("/:id/reaction", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const rawReaction = req.body?.reaction;
+    const reaction = rawReaction === null ? null : String(rawReaction || "like").toLowerCase();
+    if (reaction !== null && !AD_REACTIONS.includes(reaction as AdReaction)) {
+      return res.status(400).json({ error: "Unsupported advertisement reaction" });
+    }
+    const ad = await Advertisement.findOne({ _id: req.params.id, ...publicAdFilter() }).select("_id analytics.likes");
+    if (!ad) return res.status(404).json({ error: "Advertisement not found or not currently active" });
+
+    const userId = req.user!.userId;
+    const existing = await Like.findOne({ user: userId, target: ad._id, kind: "ad" });
+    let nextReaction: AdReaction | null = reaction as AdReaction | null;
+    let countDelta = 0;
+
+    if (existing && reaction === null) {
+      await Like.deleteOne({ _id: existing._id });
+      nextReaction = null;
+      countDelta = -1;
+    } else if (existing && existing.reaction === reaction) {
+      await Like.deleteOne({ _id: existing._id });
+      nextReaction = null;
+      countDelta = -1;
+    } else if (existing && reaction) {
+      existing.reaction = reaction as AdReaction;
+      await existing.save();
+    } else if (reaction) {
+      try {
+        await Like.create({ user: userId, target: ad._id, kind: "ad", reaction });
+        countDelta = 1;
+      } catch (error: any) {
+        if (error?.code !== 11000) throw error;
+        const raced = await Like.findOne({ user: userId, target: ad._id, kind: "ad" });
+        if (raced) {
+          raced.reaction = reaction as AdReaction;
+          await raced.save();
+        }
+      }
+    }
+
+    if (countDelta === 1) {
+      await Advertisement.updateOne({ _id: ad._id }, { $inc: { "analytics.likes": 1 } });
+    } else if (countDelta === -1) {
+      // Preserve legacy aggregate counts, and never let the total go negative.
+      await Advertisement.updateOne(
+        { _id: ad._id, "analytics.likes": { $gt: 0 } },
+        { $inc: { "analytics.likes": -1 } },
+      );
+    }
+    await UserInteraction.create({
+      user: userId,
+      targetKind: "ad",
+      targetId: ad._id,
+      event: nextReaction ? (nextReaction === "like" ? "ad_like" : "ad_reaction") : "ad_unlike",
+      metadata: { reaction: nextReaction },
+    });
+    const refreshed = await Advertisement.findById(ad._id).select("analytics.likes").lean();
+    const likesCount = refreshed?.analytics?.likes || 0;
+    return res.json({ liked: Boolean(nextReaction), reaction: nextReaction, likesCount });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to update advertisement reaction", details: error.message });
+  }
+});
+
+router.get("/:id/comments", optionalAdAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const ad = await Advertisement.findOne({ _id: req.params.id, ...publicAdFilter() }).select("_id").lean();
+    if (!ad) return res.status(404).json({ error: "Advertisement not found" });
+    const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 50);
+    const [comments, total] = await Promise.all([
+      AdComment.find({ ad: ad._id, hidden: false })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .populate("author", "name username avatarHue avatarUrl isCreator verified")
+        .lean(),
+      AdComment.countDocuments({ ad: ad._id, hidden: false }),
+    ]);
+    return res.json({ comments, total });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to load advertisement comments", details: error.message });
+  }
+});
+
+router.post("/:id/comments", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const body = String(req.body?.body || "").trim();
+    if (!body) return res.status(400).json({ error: "Comment cannot be empty" });
+    if (body.length > 1000) return res.status(400).json({ error: "Comment must be 1,000 characters or fewer" });
+
+    const ad = await Advertisement.findOne({ _id: req.params.id, ...publicAdFilter() }).select("_id creator title");
+    if (!ad) return res.status(404).json({ error: "Advertisement not found or not currently active" });
+
+    const shouldModerate = moderationActive();
+    const comment = await AdComment.create({
+      ad: ad._id,
+      author: req.user!.userId,
+      body,
+      hidden: shouldModerate,
+      ...(shouldModerate ? { moderation: { status: "processing", updatedAt: new Date() } } : {}),
+    });
+
+    if (shouldModerate) {
+      try {
+        const result = await moderateText({ text: body, surface: "comment" });
+        const record = await persistAssessment({
+          contentType: "comment",
+          contentId: String(comment._id),
+          authorId: req.user!.userId,
+          surface: "comment",
+        }, result);
+        comment.hidden = result.decision !== "APPROVED";
+        comment.moderation = {
+          status: decisionToStatus(result.decision) as any,
+          record: record._id,
+          userMessage: result.userMessage,
+          updatedAt: new Date(),
+        };
+        await comment.save();
+        if (result.decision === "REJECTED") {
+          return res.status(422).json({ error: result.userMessage || "This comment could not be posted.", moderation: { status: "rejected" } });
+        }
+        if (result.decision !== "APPROVED") {
+          return res.status(202).json({ comment: null, moderation: { status: decisionToStatus(result.decision) }, pendingNotice: "Your comment is awaiting review." });
+        }
+      } catch (error: any) {
+        await AdComment.deleteOne({ _id: comment._id });
+        return res.status(503).json({ error: "Comments are temporarily unavailable. Please try again." });
+      }
+    }
+
+    await Advertisement.updateOne({ _id: ad._id }, { $inc: { "analytics.comments": 1 } });
+    await UserInteraction.create({ user: req.user!.userId, targetKind: "ad", targetId: ad._id, event: "ad_comment" });
+    const populated = await comment.populate("author", "name username avatarHue avatarUrl isCreator verified");
+    return res.status(201).json({ comment: populated, total: await AdComment.countDocuments({ ad: ad._id, hidden: false }) });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to post advertisement comment", details: error.message });
+  }
+});
+
+router.post("/:id/share", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const ad = await Advertisement.findOneAndUpdate(
+      { _id: req.params.id, ...publicAdFilter() },
+      { $inc: { "analytics.shares": 1 } },
+      { new: true },
+    ).select("analytics.shares");
+    if (!ad) return res.status(404).json({ error: "Advertisement not found or not currently active" });
+    await UserInteraction.create({ user: req.user!.userId, targetKind: "ad", targetId: req.params.id, event: "ad_share" });
+    return res.json({ sharesCount: ad.analytics?.shares || 0 });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to record advertisement share", details: error.message });
+  }
+});
+
 // GET /api/v1/ads/:id — View single campaign details
 router.get("/:id", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -286,7 +511,7 @@ async function deliverAds(placement: AdPlacement, req: AuthenticatedRequest, res
     const candidates = await Advertisement.find(query)
       // Public delivery responses must never expose advertiser contact details,
       // payment references, review metadata, or internal targeting data.
-      .select("creator adType placement title caption ctaText ctaUrl mediaUrl mediaType videoDurationSeconds thumbnailUrl analytics.impressions analytics.views analytics.clicks analytics.ctr createdAt")
+      .select("creator adType placement title caption ctaText ctaUrl mediaUrl mediaKey mediaType videoDurationSeconds thumbnailUrl analytics.impressions analytics.views analytics.clicks analytics.likes analytics.comments analytics.shares analytics.ctr createdAt")
       .sort({ "analytics.impressions": 1, createdAt: 1 })
       .limit(100)
       .populate("creator", "name username avatarHue avatarUrl verified isCreator");
@@ -309,18 +534,43 @@ async function deliverAds(placement: AdPlacement, req: AuthenticatedRequest, res
       eligible = eligible.filter((ad) => !hiddenIds.has(String(ad._id)));
     }
 
-    return res.json({ ads: eligible.slice(0, placement === "feed" ? 20 : 10) });
+    const delivered = eligible.slice(0, placement === "feed" ? 20 : 10);
+    const deliveredIds = delivered.map((ad) => ad._id);
+    const [commentCounts, viewerLikes] = await Promise.all([
+      AdComment.aggregate([
+        { $match: { ad: { $in: deliveredIds }, hidden: false } },
+        { $group: { _id: "$ad", count: { $sum: 1 } } },
+      ]),
+      userId ? Like.find({ user: userId, kind: "ad", target: { $in: deliveredIds } }).select("target reaction").lean() : [],
+    ]);
+    const commentsByAd = new Map(commentCounts.map((item: any) => [String(item._id), Number(item.count)]));
+    const viewerReactionByAd = new Map(viewerLikes.map((item: any) => [String(item.target), item.reaction || "like"]));
+    return res.json({
+      ads: delivered.map((ad) => {
+        const value = typeof (ad as any).toObject === "function" ? (ad as any).toObject() : { ...ad };
+        value.analytics = {
+          ...(value.analytics || {}),
+          // Keep the campaign's aggregate total authoritative so historical
+          // aggregate-only engagement remains visible after this upgrade.
+          likes: value.analytics?.likes ?? 0,
+          comments: commentsByAd.get(String(ad._id)) ?? 0,
+        };
+        value.commentsCount = commentsByAd.get(String(ad._id)) ?? 0;
+        value.viewerReaction = viewerReactionByAd.get(String(ad._id)) ?? null;
+        return value;
+      }),
+    });
   } catch (error: any) {
     return res.status(500).json({ error: `Failed to deliver ${placement} ads`, details: error.message });
   }
 }
 
-router.get("/delivery/feed", optionalAuth, async (req: AuthenticatedRequest, res: Response) => deliverAds("feed", req, res));
-router.get("/delivery/story", optionalAuth, async (req: AuthenticatedRequest, res: Response) => deliverAds("story", req, res));
+router.get("/delivery/feed", optionalAdAuth, async (req: AuthenticatedRequest, res: Response) => deliverAds("feed", req, res));
+router.get("/delivery/story", optionalAdAuth, async (req: AuthenticatedRequest, res: Response) => deliverAds("story", req, res));
 
 // Track only eligible active paid ads. Atomic increments avoid lost updates
 // when multiple viewers interact with the same campaign concurrently.
-router.post("/:id/impression", optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
+router.post("/:id/impression", optionalAdAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const ad = await Advertisement.findOneAndUpdate(
       { _id: req.params.id, status: "active", paymentStatus: "paid", $or: [{ paymentMethod: { $ne: "manual" } }, { manualPaymentStatus: "verified" }] },
@@ -339,7 +589,7 @@ router.post("/:id/impression", optionalAuth, async (req: AuthenticatedRequest, r
   } catch { return res.status(204).end(); }
 });
 
-router.post("/:id/click", optionalAuth, async (req: AuthenticatedRequest, res: Response) => {
+router.post("/:id/click", optionalAdAuth, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const ad = await Advertisement.findOneAndUpdate(
       { _id: req.params.id, status: "active", paymentStatus: "paid", $or: [{ paymentMethod: { $ne: "manual" } }, { manualPaymentStatus: "verified" }] },
@@ -357,7 +607,7 @@ router.post("/:id/click", optionalAuth, async (req: AuthenticatedRequest, res: R
 });
 
 // User controls: hide an ad from future delivery or report its content.
-router.post("/:id/feedback", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+router.post("/:id/feedback", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const { action, reason } = req.body || {};
     if (!["hide", "report"].includes(action)) return res.status(400).json({ error: "Unsupported ad feedback action" });
@@ -380,7 +630,7 @@ router.post("/:id/feedback", authenticateConsumer, async (req: AuthenticatedRequ
 // POST /api/v1/ads/:id/view — Record authenticated, bounded view time.
 // Repeated submissions for the same user/ad inside a short window are ignored
 // to prevent retries or replayed requests from consuming a campaign quota twice.
-router.post("/:id/view", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+router.post("/:id/view", authenticateConsumerOrStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
     const requestedSeconds = Number(req.body?.seconds);
     if (!Number.isFinite(requestedSeconds) || requestedSeconds < 1 || requestedSeconds > 600) {
@@ -441,22 +691,25 @@ router.post("/:id/view", authenticateConsumer, async (req: AuthenticatedRequest,
   }
 });
 
-// POST /api/v1/ads/:id/engagement — Record engagement (like, share, save)
-router.post("/:id/engagement", async (req, res: Response) => {
-  try {
-    const { action } = req.body;
-    const ad = await Advertisement.findOne({ _id: req.params.id, status: "active", paymentStatus: "paid", $or: [{ paymentMethod: { $ne: "manual" } }, { manualPaymentStatus: "verified" }] });
-    if (!ad) return res.status(204).end();
-
-    if (action === "like") ad.analytics.likes += 1;
-    else if (action === "share") ad.analytics.shares += 1;
-    else if (action === "save") ad.analytics.saves += 1;
-
-    await ad.save();
-    return res.status(204).end();
-  } catch {
-    return res.status(204).end();
+// Backwards-compatible aggregate endpoint; callers must be authenticated.
+// New clients use /reaction and /share so every action is attributable and deduplicated.
+router.post("/:id/engagement", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+  const action = String(req.body?.action || "");
+  if (action === "share") {
+    try {
+      const ad = await Advertisement.findOneAndUpdate(
+        { _id: req.params.id, ...publicAdFilter() },
+        { $inc: { "analytics.shares": 1 } },
+        { new: true },
+      ).select("analytics.shares");
+      if (!ad) return res.status(404).json({ error: "Advertisement not found" });
+      await UserInteraction.create({ user: req.user!.userId, targetKind: "ad", targetId: req.params.id, event: "ad_share" });
+      return res.json({ sharesCount: ad.analytics?.shares || 0 });
+    } catch (error: any) {
+      return res.status(500).json({ error: "Failed to record advertisement engagement", details: error.message });
+    }
   }
+  return res.status(400).json({ error: "Use the reaction endpoint for likes and reactions" });
 });
 
 export default router;

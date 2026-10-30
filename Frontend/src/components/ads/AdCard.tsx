@@ -1,10 +1,13 @@
-import { Eye, MousePointerClick, Pause, Play, Trash2, Clock, CheckCircle2 } from "lucide-react";
+import { Eye, MousePointerClick, Pause, Play, Trash2, Clock, CheckCircle2, MonitorPlay } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AdBadge } from "./AdBadge";
 import { formatCount } from "@/lib/format";
 import { Advertisement, useUpdateAd, useDeleteAd } from "@/hooks/use-ads";
 import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AdPreview } from "./AdPreview";
 
 const STATUS_STYLE: Record<Advertisement["status"], string> = {
   draft: "bg-muted text-muted-foreground",
@@ -27,6 +30,7 @@ interface AdCardProps {
 }
 
 export function AdCard({ campaign }: AdCardProps) {
+  const [previewOpen, setPreviewOpen] = useState(false);
   const updateAd = useUpdateAd();
   const deleteAd = useDeleteAd();
   const deliveryProgress = campaign.advertisingMinutes > 0
@@ -117,6 +121,9 @@ export function AdCard({ campaign }: AdCardProps) {
       </div>
 
       <div className="mt-4 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
+        <Button size="sm" variant="outline" onClick={() => setPreviewOpen(true)}>
+          <MonitorPlay className="mr-1 size-3.5" /> Preview
+        </Button>
         {(campaign.status === "active" || campaign.status === "paused") && (
           <Button
             size="sm"
@@ -144,6 +151,27 @@ export function AdCard({ campaign }: AdCardProps) {
           </Button>
         )}
       </div>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader><DialogTitle>Advertisement Preview — {campaign.title}</DialogTitle></DialogHeader>
+          <div className="pt-2">
+            <AdPreview
+              adType={campaign.adType}
+              placement={campaign.placement}
+              title={campaign.title}
+              caption={campaign.caption}
+              ctaText={campaign.ctaText}
+              ctaUrl={campaign.ctaUrl}
+              mediaUrl={campaign.mediaUrl}
+              mediaKey={campaign.mediaKey}
+              thumbnailUrl={campaign.thumbnailUrl}
+              creatorName={typeof campaign.creator === "object" ? campaign.creator.name : undefined}
+              creatorUsername={typeof campaign.creator === "object" ? campaign.creator.username : undefined}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

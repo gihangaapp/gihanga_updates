@@ -1,15 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ExternalLink, Heart, MessageCircle, Share2, Bookmark, MoreHorizontal } from "lucide-react";
+import { ExternalLink, Heart, MessageCircle, Share2, MoreHorizontal, Smile, Loader2, ImageOff } from "lucide-react";
 import { toast } from "sonner";
 import { AdBadge } from "./AdBadge";
 import {
   Advertisement,
+  AdReaction,
   useAdFeedback,
+  useAdReaction,
+  useShareAd,
   useRecordClick,
   useRecordImpression,
   useRecordView,
 } from "@/hooks/use-ads";
-import { mediaUrl as resolveMediaUrl } from "@/lib/api-client";
+import { mediaUrl as resolveMediaUrl, mediaUrlWithAuth } from "@/lib/api-client";
+import { formatCount } from "@/lib/format";
+import { useAuth } from "@/lib/auth-context";
+import { AdCommentsDialog } from "./AdCommentsDialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +32,12 @@ export function FeedAdCard({ ad }: FeedAdCardProps) {
   const recordClick = useRecordClick();
   const recordView = useRecordView();
   const feedback = useAdFeedback();
+  const updateReaction = useAdReaction();
+  const shareAd = useShareAd();
+  const { user, staffUser } = useAuth();
+  const canInteract = Boolean(user || staffUser);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [mediaFailed, setMediaFailed] = useState(false);
   const impressionMutate = useRef(recordImpression.mutate);
   const viewMutate = useRef(recordView.mutate);
   impressionMutate.current = recordImpression.mutate;
@@ -97,7 +109,19 @@ export function FeedAdCard({ ad }: FeedAdCardProps) {
 
   function handleCtaClick() {
     if (ad._id) recordClick.mutate(ad._id);
-    if (ad.ctaUrl) window.open(ad.ctaUrl, "_blank", "noopener,noreferrer");
+    const destination = ad.ctaUrl || `${window.location.origin}/profile/${encodeURIComponent(creatorUsername)}`;
+    window.open(destination, "_blank", "noopener,noreferrer");
+  }
+
+  function runReaction(reaction: AdReaction | null) {
+    if (!canInteract) {
+      toast.info("Sign in to react to advertisements.");
+      return;
+    }
+    updateReaction.mutate(
+      { adId: ad._id, reaction },
+      { onError: (error: any) => toast.error(error.message || "Could not update your reaction") },
+    );
   }
 
   function handleFeedback(action: "hide" | "report") {
@@ -113,8 +137,11 @@ export function FeedAdCard({ ad }: FeedAdCardProps) {
   const creator = typeof ad.creator === "object" ? ad.creator : null;
   const creatorName = creator?.name || "Sponsored Partner";
   const creatorUsername = creator?.username || "sponsored";
-  const resolvedMedia = resolveMediaUrl(ad.mediaUrl) || ad.mediaUrl;
-  const resolvedThumbnail = resolveMediaUrl(ad.thumbnailUrl) || ad.thumbnailUrl;
+  const mediaPath = ad.mediaUrl || (ad.mediaKey ? `/api/v1/media/file/${ad.mediaKey}` : undefined);
+  const resolvedMedia = mediaUrlWithAuth(resolveMediaUrl(mediaPath) || mediaPath);
+  const resolvedThumbnail = mediaUrlWithAuth(resolveMediaUrl(ad.thumbnailUrl) || ad.thumbnailUrl);
+  const isVideo = ad.mediaType === "video" || ad.adType.includes("video");
+  useEffect(() => setMediaFailed(false), [ad._id, resolvedMedia]);
 
   if (hidden) return null;
 
@@ -149,15 +176,20 @@ export function FeedAdCard({ ad }: FeedAdCardProps) {
       {ad.title && <h3 className="px-4 pb-2 text-base font-bold text-foreground">{ad.title}</h3>}
       {ad.caption && <p className="px-4 pb-3 text-xs leading-relaxed text-foreground/90">{ad.caption}</p>}
 
-      {resolvedMedia && (
-        <div className="relative aspect-video w-full overflow-hidden bg-slate-950">
-          {ad.mediaType === "video" || ad.adType.includes("video") ? (
-            <video src={resolvedMedia} poster={resolvedThumbnail} controls muted playsInline preload="metadata" className="h-full w-full object-cover" />
+      <div className="relative aspect-video w-full overflow-hidden bg-slate-950">
+        {resolvedMedia && !mediaFailed ? (
+          isVideo ? (
+            <video src={resolvedMedia} poster={resolvedThumbnail} controls muted playsInline preload="metadata" onError={() => setMediaFailed(true)} className="h-full w-full object-cover" />
           ) : (
-            <img src={resolvedMedia} alt={ad.title} loading="lazy" decoding="async" className="h-full w-full object-cover" />
-          )}
-        </div>
-      )}
+            <img src={resolvedMedia} alt={ad.title} loading="lazy" decoding="async" onError={() => setMediaFailed(true)} className="h-full w-full object-cover" />
+          )
+        ) : (
+          <div className="grid h-full w-full place-items-center gap-2 text-center text-xs text-white/75">
+            <ImageOff className="size-5" />
+            <span>{mediaFailed ? "Advertisement media is temporarily unavailable" : "Advertisement media unavailable"}</span>
+          </div>
+        )}
+      </div>
 
       <div className="flex items-center justify-between border-y border-border/60 bg-muted/40 px-4 py-3">
         <div className="min-w-0 flex-1 pr-3">
@@ -169,14 +201,74 @@ export function FeedAdCard({ ad }: FeedAdCardProps) {
         </button>
       </div>
 
-      <div className="flex items-center justify-between p-3.5 text-muted-foreground">
-        <div className="flex items-center gap-5">
-          <span aria-hidden="true" className="flex items-center gap-1.5 text-xs"><Heart className="size-4" /><span>Sponsored</span></span>
-          <span aria-hidden="true"><MessageCircle className="size-4" /></span>
-          <span aria-hidden="true"><Share2 className="size-4" /></span>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/60 px-3.5 py-3 text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            aria-pressed={Boolean(ad.viewerReaction)}
+            disabled={updateReaction.isPending}
+            onClick={() => runReaction(ad.viewerReaction === "like" ? null : "like")}
+            className={`press inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors hover:bg-muted ${ad.viewerReaction ? "text-rose-500" : "text-muted-foreground"}`}
+          >
+            {updateReaction.isPending ? <Loader2 className="size-4 animate-spin" /> : <Heart className={`size-4 ${ad.viewerReaction ? "fill-current" : ""}`} />}
+            <span>{formatCount(ad.analytics?.likes ?? 0)}</span>
+          </button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className="press inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors hover:bg-muted" aria-label="Choose a reaction">
+                <Smile className="size-4" /><span>React</span>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {([
+                ["like", "👍 Like"], ["love", "❤️ Love"], ["care", "🤗 Care"],
+                ["haha", "😂 Haha"], ["wow", "😮 Wow"], ["sad", "😢 Sad"], ["angry", "😡 Angry"],
+              ] as [AdReaction, string][]).map(([reaction, label]) => (
+                <DropdownMenuItem key={reaction} onClick={() => runReaction(ad.viewerReaction === reaction ? null : reaction)}>{label}</DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <button type="button" onClick={() => setCommentsOpen(true)} className="press inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors hover:bg-muted">
+            <MessageCircle className="size-4" /><span>{formatCount(ad.commentsCount ?? ad.analytics?.comments ?? 0)}</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={shareAd.isPending}
+            onClick={async () => {
+              if (!canInteract) {
+                toast.info("Sign in to share advertisements.");
+                return;
+              }
+              const profileUrl = `${window.location.origin}/profile/${encodeURIComponent(creatorUsername)}`;
+              const shareUrl = ad.ctaUrl || profileUrl;
+              try {
+                if (navigator.share) {
+                  await navigator.share({ title: ad.title, text: ad.caption || `Check out ${creatorName} on Gihanga Updates`, url: shareUrl });
+                } else if (navigator.clipboard?.writeText) {
+                  await navigator.clipboard.writeText(shareUrl);
+                  toast.success("Advertisement link copied");
+                } else {
+                  toast.error("Sharing is not available in this browser");
+                  return;
+                }
+                shareAd.mutate(ad._id, { onError: (error: any) => toast.error(error.message || "Share could not be recorded") });
+              } catch (error: any) {
+                if (error?.name !== "AbortError") toast.error(error?.message || "Could not share this advertisement");
+              }
+            }}
+            className="press inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors hover:bg-muted disabled:opacity-50"
+          >
+            {shareAd.isPending ? <Loader2 className="size-4 animate-spin" /> : <Share2 className="size-4" />}
+            <span>Share</span>
+          </button>
         </div>
-        <span aria-hidden="true"><Bookmark className="size-4" /></span>
+        <span className="text-[10px] font-medium text-muted-foreground">Sponsored</span>
       </div>
+
+      <AdCommentsDialog adId={ad._id} adTitle={ad.title} open={commentsOpen} onOpenChange={setCommentsOpen} />
     </article>
   );
 }

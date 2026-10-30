@@ -7,6 +7,7 @@ import { uploaderFor, UploadKind } from "../../../middleware/upload";
 import { processAndStoreMedia } from "../../../services/media/mediaService";
 import { Media } from "../../../models/Media";
 import { Story } from "../../../models/Story";
+import { Advertisement } from "../../../models/Advertisement";
 import { quarantineRoot, UPLOAD_ROOT, moderationActive } from "../../../middleware/upload";
 import { isCloudinaryConfigured, signedCloudinaryDeliveryUrl, signedCloudinaryVideoThumbnailUrl } from "../../../lib/cloudinary";
 
@@ -84,18 +85,43 @@ router.get("/file/:mediaId", optionalAuth, async (req: AuthenticatedRequest, res
     const media = await Media.findById(req.params.mediaId);
     if (!media) return res.status(404).json({ error: "Media not found" });
 
-    const approved = media.moderationStatus === "approved" || media.legacyPublic === true;
+    const mediaApproved = media.moderationStatus === "approved" || media.legacyPublic === true;
+    // Advertising creative is uploaded into the same quarantine as user media.
+    // Once the campaign has passed staff review AND manual payment verification,
+    // its referenced creative is approved for public delivery without making
+    // unrelated quarantined uploads public.
+    const linkedActiveAd = await Advertisement.findOne({
+      status: "active",
+      paymentStatus: "paid",
+      $and: [
+        { $or: [{ paymentMethod: { $ne: "manual" } }, { manualPaymentStatus: "verified" }] },
+        { $or: [{ endDate: { $gte: new Date() } }, { endDate: { $exists: false } }] },
+      ],
+      $or: [
+        { mediaKey: String(media._id) },
+        { mediaUrl: { $regex: `${String(media._id)}(?:\\?.*)?$` } },
+        { thumbnailUrl: { $regex: `${String(media._id)}(?:\\?.*)?$` } },
+      ],
+    }).select("_id").lean();
+    const approved = mediaApproved || Boolean(linkedActiveAd);
     const isOwner = Boolean(req.user && media.ownerId && String(media.ownerId) === req.user.userId);
     // Staff reviewers get access through their staff token (optionalAuth only
     // decodes consumer tokens, so staff pass the Bearer token too — verified
     // below via authenticateStaff logic kept inline to avoid double parsing).
     let isReviewer = false;
     const authHeader = req.headers.authorization;
-    if (!approved && !isOwner && authHeader?.startsWith("Bearer ")) {
+    const staffCredential = authHeader?.startsWith("Bearer ")
+      ? authHeader.split(" ")[1]
+      : typeof req.query?.staffToken === "string"
+        ? req.query.staffToken
+        : typeof req.query?.token === "string" ? req.query.token : undefined;
+    if (!approved && !isOwner && staffCredential) {
       try {
-        // Lazy import to avoid circular deps at module load.
+        // Lazy import to avoid circular deps at module load. Staff tokens may
+        // also arrive in the query string for native media elements, which
+        // cannot attach an Authorization header.
         const { verifyStaffAccessToken } = await import("../../../lib/jwt");
-        const decoded = verifyStaffAccessToken(authHeader.split(" ")[1]);
+        const decoded = verifyStaffAccessToken(staffCredential);
         const { ROLE_PERMISSIONS } = await import("../../../middleware/rbac");
         const perms = ROLE_PERMISSIONS[decoded.role];
         isReviewer = Boolean(perms && perms.has("moderation.assessments.view"));
@@ -167,11 +193,53 @@ router.get("/file/:mediaId", optionalAuth, async (req: AuthenticatedRequest, res
         return res.status(404).json({ error: "Media not found" });
       }
 
+      const stat = await fs.promises.stat(resolved);
+      const fileSize = stat.size;
       res.setHeader("Content-Type", media.mimeType || "application/octet-stream");
       res.setHeader("Cache-Control", approved ? "public, max-age=3600" : "private, no-store");
-      if (media.type === "video") {
-        res.setHeader("Accept-Ranges", "bytes");
+      res.setHeader("Accept-Ranges", "bytes");
+
+      // HTML video elements commonly request byte ranges. Honour valid single
+      // ranges so local fallback videos can seek and start without downloading
+      // the entire file; images and ordinary full-file requests still get 200.
+      const rangeHeader = typeof req.headers.range === "string" ? req.headers.range : undefined;
+      if (rangeHeader) {
+        const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader.trim());
+        if (!match || (!match[1] && !match[2])) {
+          res.setHeader("Content-Range", `bytes */${fileSize}`);
+          return res.status(416).end();
+        }
+        let start: number;
+        let end: number;
+        if (!match[1]) {
+          const suffixLength = Number(match[2]);
+          if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) {
+            res.setHeader("Content-Range", `bytes */${fileSize}`);
+            return res.status(416).end();
+          }
+          start = Math.max(0, fileSize - suffixLength);
+          end = fileSize - 1;
+        } else {
+          start = Number(match[1]);
+          end = match[2] ? Number(match[2]) : fileSize - 1;
+        }
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || start >= fileSize || end < start) {
+          res.setHeader("Content-Range", `bytes */${fileSize}`);
+          return res.status(416).end();
+        }
+        end = Math.min(end, fileSize - 1);
+        res.status(206);
+        res.setHeader("Content-Range", `bytes ${start}-${end}/${fileSize}`);
+        res.setHeader("Content-Length", String(end - start + 1));
+        const partial = fs.createReadStream(resolved, { start, end });
+        partial.on("error", () => {
+          if (!res.headersSent) res.status(404).json({ error: "Media not found" });
+          else res.end();
+        });
+        return partial.pipe(res);
       }
+
+      res.setHeader("Content-Length", String(fileSize));
       const stream = fs.createReadStream(resolved);
       stream.on("error", () => {
         if (!res.headersSent) res.status(404).json({ error: "Media not found" });

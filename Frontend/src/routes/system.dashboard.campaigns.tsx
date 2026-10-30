@@ -384,7 +384,10 @@ function StaffCampaignsPage() {
                 ctaText={previewAd.ctaText}
                 ctaUrl={previewAd.ctaUrl}
                 mediaUrl={previewAd.mediaUrl}
+                mediaKey={previewAd.mediaKey}
                 thumbnailUrl={previewAd.thumbnailUrl}
+                creatorName={typeof previewAd.creator === "object" ? previewAd.creator.name : undefined}
+                creatorUsername={typeof previewAd.creator === "object" ? previewAd.creator.username : undefined}
               />
             </div>
           </DialogContent>
