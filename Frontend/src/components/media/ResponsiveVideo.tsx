@@ -64,6 +64,7 @@ export function ResponsiveVideo({
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(initialMuted);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasFrame, setHasFrame] = useState(false);
   const [hasError, setHasError] = useState(false);
   // B2 — attach the src only once near the viewport (generous root margin),
   // so far-down feed items don't hold connections/buffers; a 0.5-threshold
@@ -223,6 +224,7 @@ export function ResponsiveVideo({
         playsInline
         preload={visibleRatio > 0 ? "auto" : "metadata"}
         aria-label="Video"
+        onLoadedData={() => setHasFrame(true)}
         onWaiting={() => setIsLoading(true)}
         onCanPlay={() => setIsLoading(false)}
         onLoadedMetadata={(e) => {
@@ -232,6 +234,7 @@ export function ResponsiveVideo({
           }
         }}
         onPlaying={() => {
+          setHasFrame(true);
           setIsLoading(false);
           setIsPlaying(true);
         }}
@@ -244,6 +247,14 @@ export function ResponsiveVideo({
         }}
         className={cn("relative z-10 size-full object-contain", videoClassName)}
       />
+
+      {/* Lazy-loading shimmer — until the first frame is ready */}
+      {!hasFrame && !hasError && (
+        <div
+          className="shimmer pointer-events-none absolute inset-0 z-[15] bg-muted/80"
+          aria-hidden="true"
+        />
+      )}
 
       {/* Loading Spinner */}
       {isLoading && !hasError && nearViewport && (

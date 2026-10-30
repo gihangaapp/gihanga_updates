@@ -313,6 +313,7 @@ function HomeFeed() {
           <>
             <PostSkeleton />
             <PostSkeleton />
+            <PostSkeleton />
           </>
         ) : displayedPosts.length === 0 ? (
           <p className="py-16 text-center text-sm text-muted-foreground">

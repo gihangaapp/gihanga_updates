@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   Heart,
@@ -199,6 +199,7 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
   const imageSrc = isVideo ? thumb : mainSrc || thumb;
   const multi = (post.media?.length ?? 0) > 1 || (post.mediaUrl?.includes(",") ?? false);
   const isText = post.kind === "text" || (!mainSrc && !thumb);
+  const [mediaReady, setMediaReady] = useState(false);
 
   return (
     <Link
@@ -207,6 +208,9 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
       className="press group relative aspect-[3/4] overflow-hidden rounded-2xl border border-border/50 bg-muted shadow-soft"
       style={{ animationDelay: `${Math.min(index, 12) * 30}ms` }}
     >
+      {!isText && !mediaReady && (
+        <div className="shimmer absolute inset-0 z-[1] bg-muted" aria-hidden="true" />
+      )}
       {isText ? (
         <div className="flex size-full items-center justify-center bg-gradient-to-br from-primary/25 via-surface to-primary-soft p-4 pt-12">
           <p className="line-clamp-6 text-center text-sm font-semibold leading-snug text-foreground">
@@ -219,6 +223,8 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
           muted
           playsInline
           preload="metadata"
+          onLoadedData={() => setMediaReady(true)}
+          onError={() => setMediaReady(true)}
           className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
       ) : (
@@ -226,7 +232,9 @@ export function PostCard({ post, index = 0 }: { post: FeedPost; index?: number }
           src={imageSrc}
           alt={post.body ? post.body.slice(0, 40) : "Post media"}
           loading="lazy"
+          onLoad={() => setMediaReady(true)}
           onError={(e) => {
+            setMediaReady(true);
             const target = e.currentTarget;
             target.style.display = "none";
             target.parentElement?.classList.add(

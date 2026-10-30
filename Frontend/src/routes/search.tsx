@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { FileText, ImageIcon, Search as SearchIcon, Users, X } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import {
@@ -18,7 +18,26 @@ import {
 import { useSearch } from "@/hooks/use-search";
 import { useExplore } from "@/hooks/use-posts";
 
+const CATEGORY_IDS: PostCategory[] = ["photo", "video", "reel", "text"];
+
+/** Only desktop/pointer devices auto-open the keyboard; phones keep it closed. */
+function isDesktopPointer() {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(min-width: 1024px) and (hover: hover) and (pointer: fine)").matches
+  );
+}
+
 export const Route = createFileRoute("/search")({
+  // The query and category live in the URL so coming back from a post restores them.
+  validateSearch: (s: Record<string, unknown>): { q?: string; c?: PostCategory } => {
+    const rawQ = s["q"];
+    const rawC = s["c"] as PostCategory;
+    return {
+      ...(typeof rawQ === "string" && rawQ ? { q: rawQ } : {}),
+      ...(CATEGORY_IDS.includes(rawC) ? { c: rawC } : {}),
+    };
+  },
   head: () => ({
     meta: [
       { title: "Search — Creators & Posts | Gihanga" },
@@ -35,22 +54,41 @@ export const Route = createFileRoute("/search")({
 
 export function SearchPage() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [q, setQ] = useState("");
-  const [debounced, setDebounced] = useState("");
-  const [category, setCategory] = useState<PostCategory>("all");
+  const navigate = useNavigate();
+  const { q: urlQ = "", c: urlCategory } = Route.useSearch();
+  const [q, setQ] = useState(urlQ);
+  const [debounced, setDebounced] = useState(urlQ.trim());
+  const category: PostCategory = urlCategory ?? "all";
+  const setCategory = (next: PostCategory) =>
+    navigate({
+      to: "/search",
+      search: { ...(urlQ ? { q: urlQ } : {}), ...(next !== "all" ? { c: next } : {}) },
+      replace: true,
+    });
   const [visibleUsers, setVisibleUsers] = useState(12);
 
   const term = q.trim();
 
-  // Search input is focused and ready to type as soon as the page opens
+  // Desktop only: input is focused and ready to type as soon as the page opens
   useEffect(() => {
+    if (!isDesktopPointer()) return;
     const id = window.setTimeout(() => inputRef.current?.focus(), 50);
     return () => window.clearTimeout(id);
   }, []);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setDebounced(term), 250);
+    const timer = window.setTimeout(() => {
+      setDebounced(term);
+      if (term !== urlQ.trim()) {
+        navigate({
+          to: "/search",
+          search: { ...(term ? { q: term } : {}), ...(urlCategory ? { c: urlCategory } : {}) },
+          replace: true,
+        });
+      }
+    }, 250);
     return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [term]);
 
   const search = useSearch(debounced);
@@ -76,7 +114,6 @@ export function SearchPage() {
           <SearchIcon className="size-5 shrink-0 text-primary" />
           <input
             ref={inputRef}
-            autoFocus
             type="text"
             inputMode="search"
             enterKeyHint="search"
@@ -95,7 +132,7 @@ export function SearchPage() {
               type="button"
               onClick={() => {
                 setQ("");
-                inputRef.current?.focus();
+                if (isDesktopPointer()) inputRef.current?.focus();
               }}
               className="press mr-2 grid size-7 place-items-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
               title="Clear search"

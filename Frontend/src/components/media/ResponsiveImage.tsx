@@ -80,6 +80,11 @@ export function ResponsiveImage({
         />
       )}
 
+      {/* Lazy-loading shimmer — visible until the real image has loaded */}
+      {!isLoaded && !hasError && (
+        <div className="shimmer absolute inset-0 z-[5] bg-muted/70" aria-hidden="true" />
+      )}
+
       {/* Main Responsive Image — real srcset/sizes when served from the CDN. */}
       {hasError ? (
         // B1.6 — broken URL → neutral placeholder with the same footprint,

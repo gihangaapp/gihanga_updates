@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useCanGoBack, useRouter } from "@tanstack/react-router";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { PostCard } from "@/components/feed/PostCard";
@@ -18,16 +18,31 @@ export const Route = createFileRoute("/post/$postId")({
 function PostDetailPage() {
   const { postId } = Route.useParams();
   const { data, isLoading, isError } = useSinglePost(postId);
+  const router = useRouter();
+  const canGoBack = useCanGoBack();
 
   return (
     <AppShell>
       <div className="mx-auto w-full max-w-[620px] space-y-4 pb-12">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" asChild className="rounded-xl font-bold">
-            <Link to="/">
+          {/* Back returns to the page the user came from (Explore, Search, Trending…);
+              only when the post was opened directly does it fall back to Home. */}
+          {canGoBack ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="rounded-xl font-bold"
+              onClick={() => router.history.back()}
+            >
               <ArrowLeft className="size-4 mr-1.5" /> Back
-            </Link>
-          </Button>
+            </Button>
+          ) : (
+            <Button variant="ghost" size="sm" asChild className="rounded-xl font-bold">
+              <Link to="/">
+                <ArrowLeft className="size-4 mr-1.5" /> Back
+              </Link>
+            </Button>
+          )}
           <h1 className="font-display text-lg font-extrabold tracking-tight text-foreground">
             Post
           </h1>
