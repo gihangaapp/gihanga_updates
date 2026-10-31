@@ -70,7 +70,7 @@ router.post("/:id/remove", authenticateStaff, requirePermission("content.remove"
     if (!post) return res.status(404).json({ error: "Content not found" });
     if (post.status === "removed") return res.status(409).json({ error: "Content is already removed" });
 
-    post.removedPreviousStatus = (post.status !== "removed" ? post.status : "published") as typeof post.status;
+    post.removedPreviousStatus = post.status;
     post.status = "removed";
     post.removedAt = new Date();
     post.removedBy = new Types.ObjectId(req.staffUser!.userId);

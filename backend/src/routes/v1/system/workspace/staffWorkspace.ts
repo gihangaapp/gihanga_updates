@@ -518,7 +518,7 @@ router.post("/announcements/:id/publish", authenticateStaff, requirePermission("
     let batch: Array<{ _id: Types.ObjectId }> = [];
     const flushBatch = async () => {
       if (!batch.length) return;
-      const operations = batch.map((user) => ({ updateOne: { filter: { recipient: user._id, announcementId: announcement._id }, update: { $setOnInsert: { recipient: user._id, announcementId: announcement._id, kind: "system" as const, actor: req.staffUser!.userId, text: `${announcement.title}: ${announcement.message}`, read: false } }, upsert: true } }));
+      const operations = batch.map((user) => ({ updateOne: { filter: { recipient: user._id, announcementId: announcement._id }, update: { $setOnInsert: { recipient: user._id, announcementId: announcement._id, kind: "system" as const, actor: new Types.ObjectId(req.staffUser!.userId), text: `${announcement.title}: ${announcement.message}`, read: false } as any }, upsert: true } }));
       const result = await Notification.bulkWrite(operations, { ordered: false });
       delivered += result.upsertedCount;
       batch = [];
