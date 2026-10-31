@@ -55,6 +55,8 @@ import { GAvatar } from "@/components/common/GAvatar";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
+import { RwandaPhoneInput } from "@/components/ui/rwanda-phone-input";
+import { normalizeRwandaPhone } from "@/lib/rwanda-phone";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useTheme } from "@/hooks/use-theme";
@@ -989,10 +991,11 @@ function AccountSection({
   const handleSaveAccountInfo = async () => {
     setIsSaving(true);
     try {
+      const normalizedPhone = phone.trim() ? normalizeRwandaPhone(phone) : "";
       await onSave({
         name: displayName.trim(),
         username: username.trim().toLowerCase(),
-        phone: phone.trim(),
+        phone: normalizedPhone,
         dob,
         gender,
       });
@@ -1083,10 +1086,10 @@ function AccountSection({
                   : "Unverified"}
               </span>
             </div>
-            <Input
+            <RwandaPhoneInput
               value={phone}
-              placeholder="+250 788 000 000"
-              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+250 788 123 456"
+              onValueChange={setPhone}
               className="h-10 rounded-xl font-mono text-xs"
             />
           </div>

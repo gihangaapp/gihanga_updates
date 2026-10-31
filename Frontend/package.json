@@ -12,8 +12,9 @@
     "format": "prettier --write .",
     "test:quality": "tsx --test tests/live-quality.test.ts",
     "test:gradient": "tsx --test tests/gradient.test.ts",
-    "test": "npm run test:quality && npm run test:gradient && npm run test:reel",
-    "test:reel": "tsx --test tests/reel-scroll.test.ts"
+    "test": "npm run test:quality && npm run test:gradient && npm run test:reel && npm run test:phone-rwf",
+    "test:reel": "tsx --test tests/reel-scroll.test.ts",
+    "test:phone-rwf": "tsx --test tests/rwanda-phone.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

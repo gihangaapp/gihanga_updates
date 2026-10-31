@@ -12,12 +12,13 @@
     "lint": "eslint src test",
     "test:payment": "tsx --test test/payment-regression.test.ts",
     "test:live": "tsx --test test/live-regression.test.ts test/idempotency.test.ts",
-    "test": "tsx --test test/payment-regression.test.ts test/live-regression.test.ts test/idempotency.test.ts test/achievements.test.ts test/moderation-policy.test.ts test/moderation-config.test.ts test/moderation-text.test.ts test/moderation-video.test.ts test/moderation-sanitize.test.ts test/moderation-vision.test.ts",
+    "test": "tsx --test test/payment-regression.test.ts test/live-regression.test.ts test/idempotency.test.ts test/achievements.test.ts test/moderation-policy.test.ts test/moderation-config.test.ts test/moderation-text.test.ts test/moderation-video.test.ts test/moderation-sanitize.test.ts test/moderation-vision.test.ts test/rwanda-phone-rwf.test.ts",
     "migrate:post-media": "tsx src/scripts/migrate-post-media-meta.ts",
     "seed:achievements": "tsx src/scripts/seed-achievements.ts",
     "test:achievements": "tsx --test test/achievements.test.ts",
     "test:moderation": "tsx --test test/moderation-policy.test.ts test/moderation-config.test.ts test/moderation-text.test.ts test/moderation-video.test.ts test/moderation-sanitize.test.ts test/moderation-vision.test.ts",
-    "migrate:moderation": "tsx src/scripts/migrate-moderation-backfill.ts"
+    "migrate:moderation": "tsx src/scripts/migrate-moderation-backfill.ts",
+    "test:phone-rwf": "tsx --test test/rwanda-phone-rwf.test.ts"
   },
   "dependencies": {
     "@google-cloud/vision": "^4.3.3",

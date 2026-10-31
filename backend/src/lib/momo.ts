@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { toRwandaMsisdn } from "./phone";
 
 type MomoProduct = "collection" | "disbursement";
 
@@ -9,8 +10,50 @@ interface MomoProductConfig {
 }
 
 const BASE_URL = process.env.MTN_BASE_URL || process.env.MOMO_BASE_URL || "https://sandbox.momodeveloper.mtn.com";
-const TARGET_ENVIRONMENT = process.env.MTN_TARGET_ENVIRONMENT || process.env.MOMO_ENVIRONMENT || "sandbox";
-const CURRENCY = process.env.MTN_CURRENCY || process.env.MOMO_CURRENCY || (TARGET_ENVIRONMENT === "sandbox" ? "EUR" : "RWF");
+const TARGET_ENVIRONMENT = (process.env.MTN_TARGET_ENVIRONMENT || process.env.MOMO_ENVIRONMENT || "sandbox").toLowerCase();
+const CURRENCY = (process.env.MTN_CURRENCY || process.env.MOMO_CURRENCY || (TARGET_ENVIRONMENT === "sandbox" ? "EUR" : "RWF")).toUpperCase();
+
+export interface MomoProviderQuote {
+  amount: number;
+  currency: "EUR" | "RWF";
+  sandboxRwfPerEur?: number;
+}
+
+/**
+ * Wallet amounts are always RWF. MTN sandbox only accepts EUR, so sandbox
+ * requests use an explicit TEST-ONLY mapping configured with
+ * MTN_SANDBOX_RWF_PER_EUR. This is not an exchange rate and must never be
+ * used to value real money. Rwanda production requests use RWF unchanged.
+ */
+export function getMomoProviderQuote(walletAmountRwf: number): MomoProviderQuote {
+  if (!Number.isSafeInteger(walletAmountRwf) || walletAmountRwf <= 0) {
+    throw new Error("Wallet amount must be a positive whole number of RWF");
+  }
+
+  if (TARGET_ENVIRONMENT === "sandbox") {
+    if (CURRENCY !== "EUR") throw new Error("MTN sandbox requires MTN_CURRENCY=EUR");
+    const sandboxRwfPerEur = Number(process.env.MTN_SANDBOX_RWF_PER_EUR);
+    if (!Number.isFinite(sandboxRwfPerEur) || sandboxRwfPerEur <= 0) {
+      throw new Error("Set MTN_SANDBOX_RWF_PER_EUR to an explicit sandbox-only test mapping (RWF per EUR)");
+    }
+    const amount = Math.round((walletAmountRwf / sandboxRwfPerEur) * 100) / 100;
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error("This RWF amount is too small for the configured MTN sandbox test mapping");
+    }
+    return { amount, currency: "EUR", sandboxRwfPerEur };
+  }
+
+  if (TARGET_ENVIRONMENT === "mtnrwanda") {
+    if (CURRENCY !== "RWF") throw new Error("MTN Rwanda production must use MTN_CURRENCY=RWF");
+    const configuredBaseUrl = process.env.MTN_BASE_URL || process.env.MOMO_BASE_URL;
+    if (!configuredBaseUrl || /sandbox/i.test(configuredBaseUrl)) {
+      throw new Error("Set MTN_BASE_URL to the production endpoint supplied by MTN before enabling production payments");
+    }
+    return { amount: walletAmountRwf, currency: "RWF" };
+  }
+
+  throw new Error("Unsupported MTN target environment. Use sandbox for testing or mtnrwanda for an authorized Rwanda production integration.");
+}
 
 function productConfig(product: MomoProduct): MomoProductConfig | null {
   const prefix = product === "collection" ? "MTN_COLLECTION" : "MTN_DISBURSEMENT";
@@ -88,11 +131,7 @@ async function getAccessToken(product: MomoProduct): Promise<string> {
 }
 
 export function normalizePhone(phone: string) {
-  const digits = String(phone || "").replace(/[^\d]/g, "");
-  if (!/^2507\d{8}$/.test(digits) && !/^07\d{8}$/.test(digits)) {
-    throw new Error("Enter a valid Rwanda MTN phone number");
-  }
-  return digits.startsWith("07") ? `250${digits.slice(1)}` : digits;
+  return toRwandaMsisdn(phone);
 }
 
 export async function requestToPay(input: { amount: number; phone: string; externalId: string; payerMessage: string; referenceId?: string; callbackUrl?: string }): Promise<{ referenceId: string }> {
@@ -100,6 +139,7 @@ export async function requestToPay(input: { amount: number; phone: string; exter
   if (!config) throw new Error("MTN MoMo Collections credentials are not configured");
   const referenceId = input.referenceId || crypto.randomUUID();
   const callbackUrl = input.callbackUrl || getMomoCallbackUrl(referenceId);
+  const quote = getMomoProviderQuote(input.amount);
   const token = await getAccessToken("collection");
   const res = await fetch(`${BASE_URL}/collection/v1_0/requesttopay`, {
     method: "POST",
@@ -112,8 +152,8 @@ export async function requestToPay(input: { amount: number; phone: string; exter
       ...(callbackUrl ? { "X-Callback-Url": callbackUrl } : {}),
     },
     body: JSON.stringify({
-      amount: String(input.amount),
-      currency: CURRENCY,
+      amount: String(quote.amount),
+      currency: quote.currency,
       externalId: input.externalId,
       payer: { partyIdType: "MSISDN", partyId: normalizePhone(input.phone) },
       payerMessage: input.payerMessage.slice(0, 160),
@@ -140,6 +180,7 @@ export async function transfer(input: { amount: number; phone: string; externalI
   if (!config) throw new Error("MTN MoMo Disbursements credentials are not configured");
   const referenceId = input.referenceId || crypto.randomUUID();
   const callbackUrl = input.callbackUrl || getMomoCallbackUrl(referenceId);
+  const quote = getMomoProviderQuote(input.amount);
   const token = await getAccessToken("disbursement");
   const res = await fetch(`${BASE_URL}/disbursement/v1_0/transfer`, {
     method: "POST",
@@ -152,8 +193,8 @@ export async function transfer(input: { amount: number; phone: string; externalI
       ...(callbackUrl ? { "X-Callback-Url": callbackUrl } : {}),
     },
     body: JSON.stringify({
-      amount: String(input.amount),
-      currency: CURRENCY,
+      amount: String(quote.amount),
+      currency: quote.currency,
       externalId: input.externalId,
       payee: { partyIdType: "MSISDN", partyId: normalizePhone(input.phone) },
       payerMessage: input.payerMessage.slice(0, 160),

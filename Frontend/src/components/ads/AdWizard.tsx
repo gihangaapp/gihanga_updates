@@ -14,6 +14,8 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { RwandaPhoneInput } from "@/components/ui/rwanda-phone-input";
+import { normalizeRwandaPhone } from "@/lib/rwanda-phone";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AdPreview } from "./AdPreview";
 import {
@@ -136,8 +138,10 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
       toast.error("Enter the contact name and a valid email address");
       return;
     }
-    if (!/^[+0-9().\s-]{7,32}$/.test(contactPhone.trim())) {
-      toast.error("Enter a valid contact phone number");
+    let normalizedContactPhone: string;
+    try { normalizedContactPhone = normalizeRwandaPhone(contactPhone); }
+    catch {
+      toast.error("Enter a valid Rwanda number, for example +250 788 123 456");
       return;
     }
 
@@ -158,7 +162,7 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
         advertisingMinutes,
         contactName: contactName.trim(),
         contactEmail: contactEmail.trim(),
-        contactPhone: contactPhone.trim(),
+        contactPhone: normalizedContactPhone,
         targeting: {
           interests: targetInterests.split(",").map((interest) => interest.trim()).filter(Boolean),
         },
@@ -526,7 +530,7 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-muted-foreground">Phone / WhatsApp number *</label>
-                    <Input type="tel" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} placeholder="+250..." />
+                    <RwandaPhoneInput value={contactPhone} onValueChange={setContactPhone} placeholder="+250 788 123 456" />
                   </div>
                   <p className="text-[10px] leading-relaxed text-muted-foreground">
                     These details are shared with authorized advertising administrators for campaign payment follow-up. Moderators can review the ad creative but cannot view your payment contact details.

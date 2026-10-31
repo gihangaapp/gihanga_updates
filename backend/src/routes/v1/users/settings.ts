@@ -10,6 +10,7 @@ import { Bookmark } from "../../../models/Bookmark";
 import { Comment } from "../../../models/Comment";
 import { Block } from "../../../models/Block";
 import { Wallet } from "../../../models/Wallet";
+import { normalizeRwandaPhone } from "../../../lib/phone";
 
 const router = Router();
 
@@ -130,6 +131,12 @@ router.patch("/", authenticateConsumer, async (req: AuthenticatedRequest, res: R
     delete updates.user;
     delete updates._id;
 
+    // Normalize the Rwanda phone once so both User and UserSettings store E.164.
+    if (updates.phone !== undefined) {
+      try { updates.phone = updates.phone ? normalizeRwandaPhone(updates.phone) : ""; }
+      catch { return res.status(400).json({ error: "Enter a valid Rwanda phone number in the format +250 7XX XXX XXX" }); }
+    }
+
     // Synchronize User profile fields if provided
     const userDoc = await User.findById(userId);
     if (userDoc) {
@@ -164,7 +171,7 @@ router.patch("/", authenticateConsumer, async (req: AuthenticatedRequest, res: R
       }
 
       if (updates.phone !== undefined) {
-        userDoc.mtnMomoNumber = updates.phone.trim();
+        userDoc.mtnMomoNumber = updates.phone;
         userChanged = true;
       }
 

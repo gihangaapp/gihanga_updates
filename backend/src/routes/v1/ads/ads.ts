@@ -14,6 +14,7 @@ import { notifyStaff } from "../../../lib/staffNotify";
 import { notify } from "../../../lib/notify";
 import { moderationActive } from "../../../middleware/upload";
 import { moderateText, persistAssessment, decisionToStatus } from "../../../services/moderation/contentModerationService";
+import { normalizeRwandaPhone } from "../../../lib/phone";
 
 const router = Router();
 
@@ -123,10 +124,9 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
     if (!/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+/i.test(String(contactEmail || "").trim())) {
       return res.status(400).json({ error: "Enter a valid contact email address" });
     }
-    const normalizedPhone = String(contactPhone || "").trim();
-    if (!/^[+0-9().\s-]{7,32}$/.test(normalizedPhone)) {
-      return res.status(400).json({ error: "Enter a valid contact phone number" });
-    }
+    let normalizedPhone: string;
+    try { normalizedPhone = normalizeRwandaPhone(contactPhone); }
+    catch { return res.status(400).json({ error: "Enter a valid Rwanda contact phone number in the format +250 7XX XXX XXX" }); }
     const normalizedEmail = String(contactEmail).trim().toLowerCase();
     const destination = String(ctaUrl || "").trim();
     if (destination) {

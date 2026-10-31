@@ -13,6 +13,8 @@ import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { RwandaPhoneInput } from "@/components/ui/rwanda-phone-input";
+import { normalizeRwandaPhone } from "@/lib/rwanda-phone";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatCount, timeAgo } from "@/lib/format";
 import {
@@ -61,6 +63,9 @@ const KIND_META: Record<string, { icon: typeof WalletIcon; tone: string }> = {
 
 function TransactionRow({ tx }: { tx: WalletTransaction }) {
   const meta = KIND_META[tx.kind] ?? KIND_META["fee"]!;
+  const isPointsEntry = ["gift", "bonus", "live_like", "live_comment", "live_reaction", "ad_points_payment", "ad_points_refund"].includes(tx.kind)
+    || (tx.kind === "fee" && !/^Bought .* Kingdom Points$/i.test(tx.label));
+  const unit = isPointsEntry ? "pts" : "RWF";
   return (
     <li className="flex items-center gap-3 border-b border-border py-3 last:border-0">
       <span className={cn("grid size-9 shrink-0 place-items-center rounded-full", meta.tone)}>
@@ -79,8 +84,8 @@ function TransactionRow({ tx }: { tx: WalletTransaction }) {
           tx.amount >= 0 ? "text-success" : "text-foreground",
         )}
       >
-        {tx.amount >= 0 ? "+" : ""}
-        {formatCount(Math.abs(tx.amount))}
+        {tx.amount >= 0 ? "+" : "−"}
+        {formatCount(Math.abs(tx.amount))} {unit}
       </span>
     </li>
   );
@@ -113,8 +118,15 @@ function DepositWithdrawDialog({
     }
 
     const mutation = mode === "deposit" ? deposit : withdraw;
+    let normalizedPhone: string;
+    try { normalizedPhone = normalizeRwandaPhone(phone); }
+    catch {
+      toast.error("Enter a valid Rwanda number, for example +250 788 123 456");
+      return;
+    }
+
     mutation.mutate(
-      { amount: numericAmount, phoneNumber: phone.trim() },
+      { amount: numericAmount, phoneNumber: normalizedPhone },
       {
         onSuccess: (data) => {
           toast.success(mode === "deposit" ? "Deposit requested" : "Withdrawal requested", {
@@ -153,10 +165,10 @@ function DepositWithdrawDialog({
             <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">
               MTN Mobile Money number
             </label>
-            <Input
+            <RwandaPhoneInput
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+250 78 000 0000"
+              onValueChange={setPhone}
+              placeholder="+250 788 123 456"
             />
           </div>
           <Button variant="brand" size="lg" onClick={submit} disabled={busy}>

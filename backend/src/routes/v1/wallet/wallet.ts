@@ -7,12 +7,30 @@ import { getPointsToCashRate } from "../../../lib/rewards";
 import { Transaction } from "../../../models/Transaction";
 import { Wallet } from "../../../models/Wallet";
 import { User } from "../../../models/User";
-import { requestToPay, transfer, isMomoConfigured, getRequestToPayStatus, getTransferStatus, normalizePhone, getMomoCurrency, getMomoCallbackUrl } from "../../../lib/momo";
+import { requestToPay, transfer, isMomoConfigured, getRequestToPayStatus, getTransferStatus, normalizePhone, getMomoProviderQuote, getMomoCallbackUrl } from "../../../lib/momo";
 import { settleMomoTransaction } from "../../../lib/paymentSettlement";
 import { notify } from "../../../lib/notify";
 import { notifyStaff } from "../../../lib/staffNotify";
 
 const router = Router();
+
+function providerMatchesWalletTransaction(
+  tx: { metadata?: unknown },
+  provider: { amount?: string; currency?: string },
+): boolean {
+  const metadata = tx.metadata && typeof tx.metadata === "object"
+    ? tx.metadata as Record<string, unknown>
+    : {};
+  const expectedAmount = Number(metadata.momoProviderAmount);
+  const expectedCurrency = String(metadata.momoProviderCurrency || "").toUpperCase();
+  const actualAmount = Number(provider.amount);
+  const actualCurrency = String(provider.currency || "").toUpperCase();
+  return Number.isFinite(expectedAmount)
+    && Number.isFinite(actualAmount)
+    && Math.abs(expectedAmount - actualAmount) < 0.000001
+    && Boolean(expectedCurrency)
+    && actualCurrency === expectedCurrency;
+}
 
 // GET /api/v1/wallet/me
 router.get("/me", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
@@ -76,6 +94,14 @@ router.post("/deposit", authenticateConsumer, async (req: AuthenticatedRequest, 
 
     // Record the attempt as pending immediately — this is the row an admin sees in the
     // payments queue and the one the MoMo callback (or manual approval) will complete.
+    let providerQuote: ReturnType<typeof getMomoProviderQuote> | null = null;
+    if (isMomoConfigured("collection")) {
+      try { providerQuote = getMomoProviderQuote(numericAmount); }
+      catch (quoteError: any) {
+        return res.status(503).json({ error: quoteError.message || "MTN currency configuration is incomplete" });
+      }
+    }
+
     const tx = await Transaction.create({
       wallet: wallet._id,
       user: req.user!.userId,
@@ -84,11 +110,19 @@ router.post("/deposit", authenticateConsumer, async (req: AuthenticatedRequest, 
       label: "MTN MoMo wallet deposit",
       status: "pending",
       provider: "MTN_MOMO",
-      currency: getMomoCurrency(),
+      currency: "RWF",
       customerPhone: normalizedPhone,
+      metadata: {
+        walletCurrency: "RWF",
+        ...(providerQuote ? {
+          momoProviderAmount: providerQuote.amount,
+          momoProviderCurrency: providerQuote.currency,
+          ...(providerQuote.sandboxRwfPerEur ? { sandboxRwfPerEur: providerQuote.sandboxRwfPerEur } : {}),
+        } : {}),
+      },
       ...(idempotencyKey ? { idempotencyKey } : {}),
     });
-    await notifyStaff("payments", `New deposit request: ${numericAmount} pending review`, { transactionId: String(tx._id) });
+    await notifyStaff("payments", `New deposit request: ${numericAmount.toLocaleString()} RWF pending review`, { transactionId: String(tx._id) });
 
     if (isMomoConfigured("collection")) {
       try {
@@ -145,6 +179,14 @@ router.post("/withdraw", authenticateConsumer, async (req: AuthenticatedRequest,
     let normalizedPhone: string;
     try { normalizedPhone = normalizePhone(phoneNumber); } catch { return res.status(400).json({ error: "Enter a valid Rwanda MTN phone number" }); }
 
+    let providerQuote: ReturnType<typeof getMomoProviderQuote> | null = null;
+    if (isMomoConfigured("disbursement")) {
+      try { providerQuote = getMomoProviderQuote(numericAmount); }
+      catch (quoteError: any) {
+        return res.status(503).json({ error: quoteError.message || "MTN currency configuration is incomplete" });
+      }
+    }
+
     const wallet = await Wallet.findOne({ user: req.user!.userId });
     if (!wallet) return res.status(404).json({ error: "Wallet not found" });
     if (wallet.frozen) return res.status(403).json({ error: "Your wallet is frozen — contact support" });
@@ -168,11 +210,19 @@ router.post("/withdraw", authenticateConsumer, async (req: AuthenticatedRequest,
       label: "MTN MoMo wallet withdrawal",
       status: "pending",
       provider: "MTN_MOMO",
-      currency: getMomoCurrency(),
+      currency: "RWF",
       customerPhone: normalizedPhone,
+      metadata: {
+        walletCurrency: "RWF",
+        ...(providerQuote ? {
+          momoProviderAmount: providerQuote.amount,
+          momoProviderCurrency: providerQuote.currency,
+          ...(providerQuote.sandboxRwfPerEur ? { sandboxRwfPerEur: providerQuote.sandboxRwfPerEur } : {}),
+        } : {}),
+      },
       ...(idempotencyKey ? { idempotencyKey } : {}),
     });
-    await notifyStaff("payments", `New withdrawal request: ${numericAmount} pending review`, { transactionId: String(tx._id) });
+    await notifyStaff("payments", `New withdrawal request: ${numericAmount.toLocaleString()} RWF pending review`, { transactionId: String(tx._id) });
 
     if (isMomoConfigured("disbursement")) {
       try {
@@ -221,6 +271,9 @@ router.get("/momo/status/:transactionId", authenticateConsumer, async (req: Auth
     if (!tx) return res.status(404).json({ error: "Payment transaction not found" });
     if (!tx.momoReferenceId) return res.json({ transaction: tx, status: tx.status });
     const provider = tx.kind === "payout" ? await getTransferStatus(tx.momoReferenceId) : await getRequestToPayStatus(tx.momoReferenceId);
+    if (provider.status === "SUCCESSFUL" && !providerMatchesWalletTransaction(tx, provider)) {
+      return res.status(409).json({ error: "MTN payment amount or currency did not match the expected RWF wallet transaction. No wallet balance was changed." });
+    }
     if (provider.status === "SUCCESSFUL" || provider.status === "FAILED") await settleMomoTransaction(String(tx._id), provider.status, provider.reason);
     const latest = await Transaction.findById(tx._id);
     return res.json({ transaction: latest, status: latest?.status || tx.status });
@@ -273,13 +326,17 @@ const momoCallbackHandler = async (req: Request, res: Response) => {
       return res.status(502).json({ error: "MTN returned an unrecognized payment status" });
     }
 
+    if (provider.status === "SUCCESSFUL" && !providerMatchesWalletTransaction(tx, provider)) {
+      return res.status(409).json({ error: "MTN payment amount or currency did not match the expected RWF wallet transaction; no wallet change was applied" });
+    }
+
     const settled = await settleMomoTransaction(String(tx._id), provider.status, provider.reason);
     if (settled.applied) {
       await notify({
         recipient: String(tx.user),
         kind: "payment",
         text: provider.status === "SUCCESSFUL"
-          ? (tx.kind === "deposit" ? `Your deposit of ${Math.abs(tx.amount)} was successful` : `Your withdrawal of ${Math.abs(tx.amount)} was completed`)
+          ? (tx.kind === "deposit" ? `Your deposit of ${Math.abs(tx.amount).toLocaleString()} RWF was successful` : `Your withdrawal of ${Math.abs(tx.amount).toLocaleString()} RWF was completed`)
           : `Your ${tx.kind} could not be completed`,
       });
     }
@@ -321,7 +378,7 @@ router.post("/convert-points", authenticateConsumer, async (req: AuthenticatedRe
       userId: req.user!.userId,
       kind: "earning",
       amount: cashAmount,
-      label: `Points conversion (${numericPoints} pts @ ${rate}/unit)`,
+      label: `Points conversion (${numericPoints} pts @ ${rate} points/RWF)`,
       toBalance: "available",
     });
 
