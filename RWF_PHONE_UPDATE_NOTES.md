@@ -35,7 +35,7 @@ These formats are accepted and normalized to E.164 before sending:
 - `0788123456`
 - `788123456`
 
-The display format is `+250 788 123 456`; MTN receives the MSISDN as `250788123456`.
+The display format is `+250 788 123 456`; MTN receives the MSISDN as `250788123456`. The shared input preserves the caret position while typing and editing within the number.
 
 ## Validation performed
 

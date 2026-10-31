@@ -1,3 +1,7 @@
+## Currency handling: wallet RWF vs MTN sandbox EUR
+
+Gihanga wallet balances, deposits, withdrawals, and transaction history are denominated in **RWF**. MTN sandbox accepts **EUR**, so the backend converts only the provider request using `MTN_SANDBOX_RWF_PER_EUR`. This variable is a deliberately configured test mapping, not a market FX rate. The sandbox status response amount and currency must match the saved provider quote before the wallet can be credited. For an authorized Rwanda production integration, use `MTN_TARGET_ENVIRONMENT=mtnrwanda` and `MTN_CURRENCY=RWF`, and remove `MTN_SANDBOX_RWF_PER_EUR`. Production credentials and go-live approval are supplied through MTN onboarding.
+
 # MTN MoMo Sandbox Testing Guide
 
 ## Preconditions
