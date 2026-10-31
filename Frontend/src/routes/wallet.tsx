@@ -306,10 +306,21 @@ function WalletPage() {
               </Button>
             </div>
 
-            {(!data?.momo.depositConfigured || !data?.momo.withdrawConfigured) && (
+            {!data?.momo.depositConfigured && (
               <p className="rounded-2xl bg-muted px-4 py-3 text-xs text-muted-foreground">
-                MTN MoMo isn't fully connected on this server yet, so deposits/withdrawals are held
-                as pending transactions for admin review instead of an instant phone prompt.
+                MTN MoMo Collections is not configured yet. Deposits will remain pending for admin
+                review instead of sending an instant phone prompt.
+              </p>
+            )}
+            {data?.momo.depositConfigured && !data?.momo.withdrawConfigured && (
+              <p className="rounded-2xl bg-muted px-4 py-3 text-xs text-muted-foreground">
+                MTN MoMo deposits are connected. Withdrawals are not configured yet and remain
+                unavailable for automatic payout.
+              </p>
+            )}
+            {data?.momo.depositConfigured && data?.momo.withdrawConfigured && (
+              <p className="rounded-2xl bg-muted px-4 py-3 text-xs text-muted-foreground">
+                MTN MoMo Collections and Disbursements are connected.
               </p>
             )}
 

@@ -10,6 +10,12 @@ Run MongoDB, start the backend with `backend/.env`, and start the frontend. For 
 
 Use a test account that owns the wallet under test. Never use real customer credentials or real production phone numbers in the sandbox.
 
+## Sandbox test MSISDN override
+
+The wallet UI and database continue to accept/store Rwanda phone numbers in canonical form. To use the synthetic MTN sandbox fixture that was already confirmed successful in this project's direct Collection test, set `MTN_SANDBOX_TEST_MSISDN=46733123499` on the Render backend while `MTN_TARGET_ENVIRONMENT=sandbox`. The override affects only the MSISDN sent to MTN Collections in sandbox; it does not replace the saved Rwanda contact number. The code ignores this override outside sandbox. Remove it before any authorized production configuration.
+
+The sandbox fixture is not a real customer number and does not represent a real wallet. Keep testing in the MTN sandbox only.
+
 ## Internal flow under test
 
 1. The customer submits an amount and Rwanda MTN number to `POST /api/v1/wallet/deposit`.

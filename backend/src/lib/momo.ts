@@ -134,6 +134,26 @@ export function normalizePhone(phone: string) {
   return toRwandaMsisdn(phone);
 }
 
+/**
+ * Sandbox-only fixture override. The wallet still validates and stores the
+ * user's Rwanda-format MSISDN, but MTN receives its synthetic sandbox test
+ * MSISDN so the known sandbox outcomes can be exercised end-to-end.
+ * This setting is ignored outside sandbox and must never be used for live funds.
+ */
+function getCollectionPayerMsisdn(phone: string): string {
+  if (TARGET_ENVIRONMENT === "sandbox") {
+    const configuredFixture = String(process.env.MTN_SANDBOX_TEST_MSISDN || "").trim();
+    if (configuredFixture) {
+      const digits = configuredFixture.replace(/\D/g, "");
+      if (!/^\d{8,15}$/.test(digits)) {
+        throw new Error("MTN_SANDBOX_TEST_MSISDN must contain 8 to 15 digits");
+      }
+      return digits;
+    }
+  }
+  return normalizePhone(phone);
+}
+
 export async function requestToPay(input: { amount: number; phone: string; externalId: string; payerMessage: string; referenceId?: string; callbackUrl?: string }): Promise<{ referenceId: string }> {
   const config = productConfig("collection");
   if (!config) throw new Error("MTN MoMo Collections credentials are not configured");
@@ -155,7 +175,7 @@ export async function requestToPay(input: { amount: number; phone: string; exter
       amount: String(quote.amount),
       currency: quote.currency,
       externalId: input.externalId,
-      payer: { partyIdType: "MSISDN", partyId: normalizePhone(input.phone) },
+      payer: { partyIdType: "MSISDN", partyId: getCollectionPayerMsisdn(input.phone) },
       payerMessage: input.payerMessage.slice(0, 160),
       payeeNote: "Gihanga Updates wallet deposit",
     }),

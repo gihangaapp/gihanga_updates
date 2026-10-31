@@ -148,3 +148,9 @@ See `VERIFYING.md` for the full matrix and how to run it (including the 2-minute
 - `npm run test:payment` **passes on case-sensitive filesystems** (the test referenced `../../Frontend/` — fixed to `frontend/`).
 - New scripts: backend `npm run test:live`, `npm run test` (44 tests), `migrate:post-media`; frontend `npm run test:quality`, `test:gradient`, `test` (23 tests).
 - **Missing `src/assets/` images restored** — the ZIP shipped an empty assets folder while `landing.tsx`/`Logo.tsx` imported three images, so **the project could not build at all**; branded placeholders ship now (replace with real art freely).
+
+## Sandbox wallet test preparation
+
+- Added `MTN_SANDBOX_TEST_MSISDN` as an optional Collections-only sandbox fixture override. Rwanda-format user phone values remain validated and stored; the synthetic fixture is sent to MTN only when `MTN_TARGET_ENVIRONMENT=sandbox`.
+- Corrected the wallet connection notice so a configured Collections product is clearly distinguished from Disbursements, which may not yet be configured.
+- Added sandbox test guidance. The fixture override must be removed before any authorized production setup.
