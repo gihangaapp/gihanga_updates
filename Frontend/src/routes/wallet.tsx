@@ -8,6 +8,7 @@ import {
   Gift,
   Smartphone,
   Wallet as WalletIcon,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/layout/AppShell";
@@ -66,26 +67,55 @@ function TransactionRow({ tx }: { tx: WalletTransaction }) {
   const isPointsEntry = ["gift", "bonus", "live_like", "live_comment", "live_reaction", "ad_points_payment", "ad_points_refund"].includes(tx.kind)
     || (tx.kind === "fee" && !/^Bought .* Kingdom Points$/i.test(tx.label));
   const unit = isPointsEntry ? "pts" : "RWF";
+
+  // Amount direction alone is not proof of a successful payment. Deposits are
+  // stored as positive ledger amounts even while pending or after a provider
+  // failure, so only completed transactions may display a +/- cash movement.
+  const isPending = tx.status === "pending" || tx.status === "created";
+  const isFailed = tx.status === "failed";
+  const isInactive = tx.status === "cancelled" || tx.status === "expired";
+  const StatusIcon = isPending ? Clock : isFailed || isInactive ? XCircle : meta.icon;
+  const iconTone = isPending
+    ? "text-amber-500 bg-amber-500/10"
+    : isFailed
+      ? "text-danger bg-danger/10"
+      : isInactive
+        ? "text-muted-foreground bg-muted"
+        : meta.tone;
+  const statusText = isPending
+    ? (tx.status === "created" ? "Processing" : "Pending")
+    : isFailed
+      ? "Failed — no money added"
+      : tx.status === "cancelled"
+        ? "Cancelled"
+        : tx.status === "expired"
+          ? "Expired"
+          : timeAgo(tx.createdAt);
+  const amountPrefix = tx.status !== "completed" ? "" : tx.amount >= 0 ? "+" : "−";
+  const amountTone = isFailed
+    ? "text-danger"
+    : isPending || isInactive
+      ? "text-muted-foreground"
+      : tx.amount >= 0
+        ? "text-success"
+        : "text-foreground";
+
   return (
     <li className="flex items-center gap-3 border-b border-border py-3 last:border-0">
-      <span className={cn("grid size-9 shrink-0 place-items-center rounded-full", meta.tone)}>
-        <meta.icon className="size-4" />
+      <span className={cn("grid size-9 shrink-0 place-items-center rounded-full", iconTone)}>
+        <StatusIcon className="size-4" />
       </span>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold">{tx.label}</p>
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          {tx.status === "pending" && <Clock className="size-3" />}
-          {tx.status === "pending" ? "Pending" : timeAgo(tx.createdAt)}
+        <p className={cn(
+          "flex items-center gap-1.5 text-xs",
+          isFailed ? "text-danger" : isPending ? "text-amber-600" : "text-muted-foreground",
+        )}>
+          {statusText}
         </p>
       </div>
-      <span
-        className={cn(
-          "shrink-0 text-sm font-bold tabular-nums",
-          tx.amount >= 0 ? "text-success" : "text-foreground",
-        )}
-      >
-        {tx.amount >= 0 ? "+" : "−"}
-        {formatCount(Math.abs(tx.amount))} {unit}
+      <span className={cn("shrink-0 text-sm font-bold tabular-nums", amountTone)}>
+        {amountPrefix}{formatCount(Math.abs(tx.amount))} {unit}
       </span>
     </li>
   );

@@ -16,6 +16,8 @@ export interface WalletTransaction {
   amount: number;
   label: string;
   status: "created" | "pending" | "completed" | "failed" | "cancelled" | "expired";
+  failureReason?: string;
+  momoReason?: string;
   momoReferenceId?: string;
   momoStatus?: string;
   provider?: "MTN_MOMO";
