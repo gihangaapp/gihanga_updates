@@ -62,7 +62,7 @@ router.get("/", authenticateStaff, requirePermission("content.view"), async (req
 // POST /api/v1/system/content/:id/remove — soft-remove content and preserve evidence/history.
 router.post("/:id/remove", authenticateStaff, requirePermission("content.remove"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ error: "Invalid content ID" });
+    if (!Types.ObjectId.isValid(String(req.params.id))) return res.status(400).json({ error: "Invalid content ID" });
     const reason = String(req.body?.reason || "").trim().slice(0, 500);
     if (reason.length < 3) return res.status(400).json({ error: "A removal reason of at least 3 characters is required" });
 
@@ -70,7 +70,7 @@ router.post("/:id/remove", authenticateStaff, requirePermission("content.remove"
     if (!post) return res.status(404).json({ error: "Content not found" });
     if (post.status === "removed") return res.status(409).json({ error: "Content is already removed" });
 
-    post.removedPreviousStatus = post.status === "removed" ? "published" : post.status;
+    post.removedPreviousStatus = (post.status !== "removed" ? post.status : "published") as typeof post.status;
     post.status = "removed";
     post.removedAt = new Date();
     post.removedBy = new Types.ObjectId(req.staffUser!.userId);
@@ -96,7 +96,7 @@ router.post("/:id/remove", authenticateStaff, requirePermission("content.remove"
 // POST /api/v1/system/content/:id/restore — restore the exact previous lifecycle state.
 router.post("/:id/restore", authenticateStaff, requirePermission("content.restore"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ error: "Invalid content ID" });
+    if (!Types.ObjectId.isValid(String(req.params.id))) return res.status(400).json({ error: "Invalid content ID" });
     const post = await Post.findById(req.params.id);
     if (!post) return res.status(404).json({ error: "Content not found" });
     if (post.status !== "removed") return res.status(409).json({ error: "Only removed content can be restored" });

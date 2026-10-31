@@ -289,7 +289,7 @@ router.post("/promote", authenticateStaff, async (req: AuthenticatedRequest, res
 // across role boundaries is deliberately impossible.
 router.patch("/:id/permissions", authenticateStaff, requirePermission("staff.permissions.manage"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ error: "Invalid staff ID" });
+    if (!Types.ObjectId.isValid(String(req.params.id))) return res.status(400).json({ error: "Invalid staff ID" });
     if (!Array.isArray(req.body?.permissions) || req.body.permissions.length < 1 || req.body.permissions.length > 100) {
       return res.status(400).json({ error: "permissions must be a non-empty array containing no more than 100 entries" });
     }
@@ -305,7 +305,7 @@ router.patch("/:id/permissions", authenticateStaff, requirePermission("staff.per
     const defaultPermissions = Array.from(defaultRolePermissions).sort();
     const normalizedPermissions = requested.sort();
     const isDefault = defaultPermissions.length === normalizedPermissions.length && defaultPermissions.every((permission, index) => permission === normalizedPermissions[index]);
-    target.staffPermissions = isDefault ? undefined : normalizedPermissions;
+    target.staffPermissions = isDefault ? undefined : normalizedPermissions as string[];
     await target.save();
     const effective = Array.from(getEffectiveStaffPermissions(target.role as Exclude<UserRole, "user">, target.staffPermissions));
     await logAudit({ actor: req.staffUser!.userId, actorUsername: req.staffUser!.username, action: "staff.permissions.updated", targetUser: target._id, meta: { role: target.role, permissionsCount: effective.length, resetToRoleDefaults: isDefault } });

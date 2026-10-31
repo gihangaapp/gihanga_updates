@@ -4,7 +4,7 @@ import { Post } from "../../../../models/Post";
 import { Transaction } from "../../../../models/Transaction";
 import { UserInteraction } from "../../../../models/UserInteraction";
 import { UserSettings } from "../../../../models/UserSettings";
-import { authenticateStaff, requirePermission, getEffectiveStaffPermissions } from "../../../../middleware/rbac";
+import { authenticateStaff, requirePermission, getEffectiveStaffPermissions, type AuthenticatedRequest } from "../../../../middleware/rbac";
 
 const router = Router();
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -57,7 +57,7 @@ async function retentionForCohort(days: number, returnDay: number, now: Date) {
 }
 
 // GET /api/v1/system/growth?days=7|30|90 — platform analytics for Admin/Super Admin.
-router.get("/", authenticateStaff, requirePermission("analytics.view"), async (req, res: Response) => {
+router.get("/", authenticateStaff, requirePermission("analytics.view"), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const requestedDays = Number(req.query.days ?? 30);
     if (!Number.isInteger(requestedDays) || !ALLOWED_RANGES.has(requestedDays)) {

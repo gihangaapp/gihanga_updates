@@ -59,7 +59,7 @@ router.get("/mine", authenticateConsumer, async (req: AuthenticatedRequest, res:
 
 router.post("/:id/reply", authenticateConsumer, replyLimiter, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ error: "Invalid ticket ID" });
+    if (!Types.ObjectId.isValid(String(req.params.id))) return res.status(400).json({ error: "Invalid ticket ID" });
     const body = clean(req.body?.message, 4000);
     if (body.length < 2) return res.status(400).json({ error: "Reply must contain at least 2 characters" });
     const ticket = await SupportTicket.findOne({ _id: req.params.id, user: req.user!.userId });

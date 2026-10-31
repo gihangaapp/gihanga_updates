@@ -259,7 +259,7 @@ router.get("/creators", authenticateStaff, async (req: AuthenticatedRequest, res
     const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 25));
     const query: any = { isCreator: true, role: "user" };
     if (q) { const regex = safeRegex(q); query.$or = [{ username: regex }, { name: regex }]; }
-    const sortBy = sort === "newest" ? { createdAt: -1 as const } : sort === "posts" ? { postsCount: -1 as const } : { followersCount: -1 as const };
+    const sortBy: Record<string, 1 | -1> = sort === "newest" ? { createdAt: -1 } : sort === "posts" ? { postsCount: -1 } : { followersCount: -1 };
     const [baseCreators, total] = await Promise.all([User.find(query).select("name username avatarUrl avatarHue verified status followersCount followingCount postsCount createdAt").sort(sortBy).skip((page - 1) * limit).limit(limit).lean(), User.countDocuments(query)]);
     const creatorIds = baseCreators.map((creator) => creator._id);
     const since30d = new Date(Date.now() - 30 * DAY_MS);
@@ -302,7 +302,7 @@ router.get("/users", authenticateStaff, requirePermission("users.intelligence.vi
 
 router.get("/users/:id", authenticateStaff, requirePermission("users.intelligence.view"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ error: "Invalid user ID" });
+    if (!Types.ObjectId.isValid(String(req.params.id))) return res.status(400).json({ error: "Invalid user ID" });
     const user = await User.findById(req.params.id).select(SAFE_USER_FIELDS).lean();
     if (!user) return res.status(404).json({ error: "User not found" });
     const since = new Date(Date.now() - 90 * DAY_MS);
@@ -457,7 +457,7 @@ router.get("/support", authenticateStaff, requirePermission("support.view"), asy
 
 router.patch("/support/:id", authenticateStaff, requirePermission("support.manage"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ error: "Invalid ticket ID" });
+    if (!Types.ObjectId.isValid(String(req.params.id))) return res.status(400).json({ error: "Invalid ticket ID" });
     const ticket = await SupportTicket.findById(req.params.id);
     if (!ticket) return res.status(404).json({ error: "Ticket not found" });
     const { status, priority, assignedTo, reply, staffNote } = req.body || {};
@@ -508,7 +508,7 @@ router.post("/announcements", authenticateStaff, requirePermission("announcement
 
 router.post("/announcements/:id/publish", authenticateStaff, requirePermission("announcements.publish"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ error: "Invalid announcement ID" });
+    if (!Types.ObjectId.isValid(String(req.params.id))) return res.status(400).json({ error: "Invalid announcement ID" });
     const announcement = await Announcement.findOneAndUpdate({ _id: req.params.id, status: "draft" }, { $set: { status: "publishing", publishedBy: req.staffUser!.userId, publishedAt: new Date() } }, { new: true });
     if (!announcement) return res.status(409).json({ error: "Announcement is not an available draft" });
     let delivered = 0;
@@ -518,7 +518,7 @@ router.post("/announcements/:id/publish", authenticateStaff, requirePermission("
     let batch: Array<{ _id: Types.ObjectId }> = [];
     const flushBatch = async () => {
       if (!batch.length) return;
-      const operations = batch.map((user) => ({ updateOne: { filter: { recipient: user._id, announcementId: announcement._id }, update: { $setOnInsert: { recipient: user._id, announcementId: announcement._id, kind: "system", actor: req.staffUser!.userId, text: `${announcement.title}: ${announcement.message}`, read: false } }, upsert: true } }));
+      const operations = batch.map((user) => ({ updateOne: { filter: { recipient: user._id, announcementId: announcement._id }, update: { $setOnInsert: { recipient: user._id, announcementId: announcement._id, kind: "system" as const, actor: req.staffUser!.userId, text: `${announcement.title}: ${announcement.message}`, read: false } }, upsert: true } }));
       const result = await Notification.bulkWrite(operations, { ordered: false });
       delivered += result.upsertedCount;
       batch = [];
@@ -556,7 +556,7 @@ router.get("/verification", authenticateStaff, requirePermission("verification.v
 
 router.post("/verification/:id/decision", authenticateStaff, requirePermission("verification.review"), async (req: AuthenticatedRequest, res: Response) => {
   try {
-    if (!Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ error: "Invalid request ID" });
+    if (!Types.ObjectId.isValid(String(req.params.id))) return res.status(400).json({ error: "Invalid request ID" });
     const action = String(req.body?.action || "");
     const note = cleanQuery(req.body?.note, 1000);
     if (!["approve", "reject"].includes(action)) return res.status(400).json({ error: "Action must be approve or reject" });

@@ -83,7 +83,7 @@ async function startServer() {
         if (isStaff) {
           const decoded = verifyStaffAccessToken(token);
           const staffAccount = await User.findById(decoded.userId).select("role status staffPermissions").lean();
-          if (!staffAccount || staffAccount.status !== "active" || staffAccount.role !== decoded.role || staffAccount.role === "user") {
+          if (!staffAccount || staffAccount.status !== "active" || staffAccount.role !== decoded.role || (staffAccount.role as string) === "user") {
             socket.disconnect(true);
             return;
           }
