@@ -154,3 +154,11 @@ See `VERIFYING.md` for the full matrix and how to run it (including the 2-minute
 - Added `MTN_SANDBOX_TEST_MSISDN` as an optional Collections-only sandbox fixture override. Rwanda-format user phone values remain validated and stored; the synthetic fixture is sent to MTN only when `MTN_TARGET_ENVIRONMENT=sandbox`.
 - Corrected the wallet connection notice so a configured Collections product is clearly distinguished from Disbursements, which may not yet be configured.
 - Added sandbox test guidance. The fixture override must be removed before any authorized production setup.
+
+## 2026-10-31 — MTN MoMo deposit 502 fix
+
+- Corrected Collections/Disbursements token request format: no request body and `X-Target-Environment` header included.
+- Improved safe provider response diagnostics for HTML gateway pages and API errors.
+- Improved frontend handling of HTML responses from proxies/gateways.
+- Added regression test command `npm run test:momo-token`.
+- Documented sandbox callback URL scheme and post-deploy test procedure.

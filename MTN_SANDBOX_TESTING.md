@@ -65,3 +65,10 @@ Before declaring the sandbox integration ready, confirm that the transaction rec
 
 [1]: https://momodeveloper.mtn.com/api-documentation/testing "MTN MoMo Sandbox Testing"
 [2]: https://momodeveloper.mtn.com/api-documentation/callback "MTN MoMo Callback Documentation"
+
+
+### Token endpoint request requirements (important)
+
+For `POST /collection/token/`, use Basic Auth plus `Ocp-Apim-Subscription-Key` and `X-Target-Environment: sandbox`. Send **no request body** and do not set a form `Content-Type`. A body such as `grant_type=client_credentials` is not part of this MTN token endpoint and can trigger a gateway rejection. The backend implementation follows this shape and converts HTML gateway pages into readable diagnostics.
+
+For sandbox callbacks, MTN Rwanda's callback guidance specifies an `http://` callback URL and a host matching the API User's registered `providerCallbackHost`; production callbacks use HTTPS.

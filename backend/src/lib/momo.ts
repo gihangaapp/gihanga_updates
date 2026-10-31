@@ -9,7 +9,7 @@ interface MomoProductConfig {
   apiKey: string;
 }
 
-const BASE_URL = process.env.MTN_BASE_URL || process.env.MOMO_BASE_URL || "https://sandbox.momodeveloper.mtn.com";
+const BASE_URL = (process.env.MTN_BASE_URL || process.env.MOMO_BASE_URL || "https://sandbox.momodeveloper.mtn.com").replace(/\/+$/, "");
 const TARGET_ENVIRONMENT = (process.env.MTN_TARGET_ENVIRONMENT || process.env.MOMO_ENVIRONMENT || "sandbox").toLowerCase();
 const CURRENCY = (process.env.MTN_CURRENCY || process.env.MOMO_CURRENCY || (TARGET_ENVIRONMENT === "sandbox" ? "EUR" : "RWF")).toUpperCase();
 
@@ -107,26 +107,71 @@ export function getMomoCallbackUrl(referenceId: string): string | undefined {
   return `${base}/${encodeURIComponent(referenceId)}`;
 }
 
-function safeProviderError(operation: string, status?: number) {
-  return new Error(`${operation} failed${status ? ` (${status})` : ""}`);
+/**
+ * MTN's gateway sometimes returns an HTML "Request Rejected" page instead
+ * of JSON. Never call response.json() blindly: that produces the misleading
+ * "Unexpected token '<'" error seen by the wallet client. Convert provider
+ * failures into short, readable diagnostics without exposing credentials.
+ */
+function providerBodyMessage(raw: string): string {
+  const cleaned = raw
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/(?:Ocp-Apim-Subscription-Key|Authorization|api[_ -]?key|access[_ -]?token)\s*[:=]\s*[^\s,;]+/gi, "[redacted]")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned.slice(0, 280);
+}
+
+async function readProviderJson<T>(operation: string, res: Response): Promise<T> {
+  const raw = await res.text();
+  if (!res.ok) {
+    const message = providerBodyMessage(raw);
+    throw new Error(`${operation} failed (HTTP ${res.status})${message ? `: ${message}` : ""}`);
+  }
+
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    const message = providerBodyMessage(raw);
+    throw new Error(
+      `${operation} returned a non-JSON response (HTTP ${res.status})${message ? `: ${message}` : ""}`,
+    );
+  }
+}
+
+function safeProviderError(operation: string, status: number, raw = "") {
+  const message = providerBodyMessage(raw);
+  return new Error(`${operation} failed (HTTP ${status})${message ? `: ${message}` : ""}`);
 }
 
 async function getAccessToken(product: MomoProduct): Promise<string> {
   const config = productConfig(product);
   if (!config) throw new Error(`MTN MoMo ${product} credentials are not configured`);
   const basicAuth = Buffer.from(`${config.apiUser}:${config.apiKey}`).toString("base64");
+
+  // IMPORTANT: MTN's /{product}/token/ endpoint does not accept a request
+  // body. Sending grant_type=client_credentials (or a Content-Type for it)
+  // can make the API gateway return an HTML Request Rejected page. The
+  // current sandbox token flow also requires X-Target-Environment.
   const res = await fetch(`${BASE_URL}/${product}/token/`, {
     method: "POST",
     headers: {
       Authorization: `Basic ${basicAuth}`,
       "Ocp-Apim-Subscription-Key": config.subscriptionKey,
-      "Content-Type": "application/x-www-form-urlencoded",
+      "X-Target-Environment": TARGET_ENVIRONMENT,
+      Accept: "application/json",
     },
-    body: "grant_type=client_credentials",
   });
-  if (!res.ok) throw safeProviderError(`MTN ${product} token request`, res.status);
-  const data = (await res.json()) as { access_token?: string };
-  if (!data.access_token) throw safeProviderError(`MTN ${product} token response`);
+  const data = await readProviderJson<{ access_token?: string }>(`MTN ${product} token request`, res);
+  if (!data.access_token) throw new Error(`MTN ${product} token response did not contain access_token`);
   return data.access_token;
 }
 
@@ -180,7 +225,10 @@ export async function requestToPay(input: { amount: number; phone: string; exter
       payeeNote: "Gihanga Updates wallet deposit",
     }),
   });
-  if (res.status !== 202) throw safeProviderError("MTN RequestToPay", res.status);
+  if (res.status !== 202) {
+    const raw = await res.text();
+    throw safeProviderError("MTN RequestToPay", res.status, raw);
+  }
   return { referenceId };
 }
 
@@ -191,8 +239,7 @@ export async function getRequestToPayStatus(referenceId: string) {
   const res = await fetch(`${BASE_URL}/collection/v1_0/requesttopay/${encodeURIComponent(referenceId)}`, {
     headers: { Authorization: `Bearer ${token}`, "X-Target-Environment": TARGET_ENVIRONMENT, "Ocp-Apim-Subscription-Key": config.subscriptionKey },
   });
-  if (!res.ok) throw safeProviderError("MTN RequestToPay status check", res.status);
-  return (await res.json()) as { status: "PENDING" | "SUCCESSFUL" | "FAILED"; reason?: string; amount?: string; currency?: string };
+  return readProviderJson<{ status: "PENDING" | "SUCCESSFUL" | "FAILED"; reason?: string; amount?: string; currency?: string }>("MTN RequestToPay status check", res);
 }
 
 export async function transfer(input: { amount: number; phone: string; externalId: string; payerMessage: string; referenceId?: string; callbackUrl?: string }): Promise<{ referenceId: string }> {
@@ -221,7 +268,10 @@ export async function transfer(input: { amount: number; phone: string; externalI
       payeeNote: "Gihanga Updates wallet withdrawal",
     }),
   });
-  if (res.status !== 202) throw safeProviderError("MTN Transfer", res.status);
+  if (res.status !== 202) {
+    const raw = await res.text();
+    throw safeProviderError("MTN Transfer", res.status, raw);
+  }
   return { referenceId };
 }
 
@@ -232,6 +282,5 @@ export async function getTransferStatus(referenceId: string) {
   const res = await fetch(`${BASE_URL}/disbursement/v1_0/transfer/${encodeURIComponent(referenceId)}`, {
     headers: { Authorization: `Bearer ${token}`, "X-Target-Environment": TARGET_ENVIRONMENT, "Ocp-Apim-Subscription-Key": config.subscriptionKey },
   });
-  if (!res.ok) throw safeProviderError("MTN Transfer status check", res.status);
-  return (await res.json()) as { status: "PENDING" | "SUCCESSFUL" | "FAILED"; reason?: string; amount?: string; currency?: string };
+  return readProviderJson<{ status: "PENDING" | "SUCCESSFUL" | "FAILED"; reason?: string; amount?: string; currency?: string }>("MTN Transfer status check", res);
 }

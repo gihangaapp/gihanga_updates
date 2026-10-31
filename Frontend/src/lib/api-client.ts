@@ -170,7 +170,20 @@ async function apiFetch<T>(
     try {
       data = JSON.parse(text);
     } catch {
-      data = { message: text };
+      // Render/MTN gateways can return HTML for upstream failures. Do not
+      // surface raw markup or a JSON parser exception in the user-facing toast.
+      const plainText = text
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&nbsp;/gi, " ")
+        .replace(/&amp;/gi, "&")
+        .replace(/&lt;/gi, "<")
+        .replace(/&gt;/gi, ">")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 280);
+      data = { message: plainText || `Server returned a non-JSON response (HTTP ${response.status})` };
     }
   }
 
