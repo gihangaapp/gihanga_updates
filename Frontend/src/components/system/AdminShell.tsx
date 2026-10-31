@@ -12,6 +12,18 @@ import {
   ChevronRight,
   Circle,
   Crown,
+  FileText,
+  Flag,
+  Megaphone,
+  Server,
+  ShieldAlert,
+  UserRound,
+  UserCog,
+  Hash,
+  ClipboardCheck,
+  BookOpen,
+  Gauge,
+  CircleHelp,
   History,
   LayoutDashboard,
   LogOut,
@@ -21,7 +33,6 @@ import {
   Search,
   Settings,
   Shield,
-  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Sun,
@@ -65,121 +76,63 @@ export interface AdminNavSection {
 export const adminNavSections: AdminNavSection[] = [
   {
     label: "Overview",
+    items: [{ to: "/system/dashboard/operations", label: "Operations Overview", icon: LayoutDashboard, permissions: ["operations.view"] }],
+  },
+  {
+    label: "Users & Creators",
     items: [
-      {
-        to: "/system/dashboard",
-        label: "Dashboard",
-        icon: LayoutDashboard,
-        permissions: ["moderation.queue.view", "accounts.view"],
-      },
+      { to: "/system/dashboard/user-intelligence", label: "User Intelligence", icon: UserRound, permissions: ["users.intelligence.view"] },
+      { to: "/system/dashboard/accounts", label: "User Management", icon: Users, permissions: ["accounts.view"] },
+      { to: "/system/dashboard/creator-intelligence", label: "Creator Intelligence", icon: Award, permissions: ["creator.analytics.view"] },
+      { to: "/system/dashboard/creators", label: "Creator Management", icon: UserCog, permissions: ["creators.view"] },
+      { to: "/system/dashboard/staff", label: "Staff & Permissions", icon: ShieldCheck, permissions: ["staff.view"] },
     ],
   },
   {
-    label: "Trust & Safety",
+    label: "Content & Community",
     items: [
-      {
-        to: "/system/dashboard/moderation",
-        label: "Moderation Queue",
-        icon: ShieldAlert,
-        permissions: ["moderation.queue.view"],
-        badgeKey: "pendingReports",
-      },
-      {
-        to: "/system/dashboard/live",
-        label: "Live Oversight",
-        icon: Radio,
-        permissions: ["live.forceEnd"],
-        badgeKey: "liveNow",
-      },
-      {
-        to: "/system/dashboard/accounts",
-        label: "User Accounts",
-        icon: Users,
-        permissions: ["accounts.view"],
-      },
+      { to: "/system/dashboard/content", label: "Content Management", icon: Archive, permissions: ["content.view"] },
+      { to: "/system/dashboard/moderation", label: "Report Inbox", icon: ShieldAlert, permissions: ["moderation.queue.view"], badgeKey: "pendingReports" },
+      { to: "/system/dashboard/post-review", label: "Post Review", icon: FileText, permissions: ["moderation.content.view"] },
+      { to: "/system/dashboard/comment-review", label: "Comment Review", icon: Flag, permissions: ["moderation.content.view"] },
+      { to: "/system/dashboard/story-review", label: "Story Review", icon: Radio, permissions: ["moderation.content.view"] },
+      { to: "/system/dashboard/live", label: "Live Management & Safety", icon: Radio, permissions: ["live.forceEnd"], badgeKey: "liveNow" },
+      { to: "/system/dashboard/user-investigations", label: "User Investigations", icon: Users, permissions: ["moderation.investigations.view"] },
+      { to: "/system/dashboard/appeals", label: "Appeals", icon: ClipboardCheck, permissions: ["moderation.appeals.view"] },
+      { to: "/system/dashboard/enforcement", label: "Enforcement History", icon: ShieldAlert, permissions: ["moderation.enforcement.view"] },
+      { to: "/system/dashboard/guidelines", label: "Moderation Guidelines", icon: BookOpen, permissions: ["moderation.rules.view"] },
+      { to: "/system/dashboard/my-performance", label: "My Performance", icon: Gauge, permissions: ["moderation.stats.view"] },
     ],
   },
   {
-    label: "Content Operations",
+    label: "Operations & Support",
     items: [
-      {
-        to: "/system/dashboard/content",
-        label: "Content Management",
-        icon: Archive,
-        permissions: ["content.view"],
-      },
+      { to: "/system/dashboard/support", label: "Support Center", icon: CircleHelp, permissions: ["support.view"] },
+      { to: "/system/dashboard/verification", label: "Verification Center", icon: ShieldCheck, permissions: ["verification.view"] },
+      { to: "/system/dashboard/approvals", label: "Approval & Escalation", icon: ClipboardCheck, permissions: ["approvals.view"] },
+      { to: "/system/dashboard/announcements", label: "Notifications & Announcements", icon: Megaphone, permissions: ["announcements.view"] },
+      { to: "/system/dashboard/trending", label: "Trending & Discovery", icon: Hash, permissions: ["trending.view"] },
     ],
   },
   {
-    label: "Finance",
+    label: "Analytics & Finance",
     items: [
-      {
-        to: "/system/dashboard/payments",
-        label: "Payments Queue",
-        icon: Wallet,
-        permissions: ["payments.view"],
-        badgeKey: "pendingPayments",
-      },
-      {
-        to: "/system/dashboard/campaigns",
-        label: "Ad Campaigns",
-        icon: Target,
-        permissions: ["ads.view"],
-        badgeKey: "pendingCampaigns",
-      },
-      {
-        to: "/system/dashboard/rewards",
-        label: "Reward Config",
-        icon: Award,
-        permissions: ["rewards.view"],
-      },
-      {
-        to: "/system/dashboard/achievements",
-        label: "Achievement Badges",
-        icon: Sparkles,
-        permissions: ["achievements.view"],
-      },
+      { to: "/system/dashboard/growth", label: "Growth Intelligence", icon: TrendingUp, permissions: ["analytics.view"] },
+      { to: "/system/dashboard/payments", label: "Monetization & Finance", icon: Wallet, permissions: ["payments.view"] },
+      { to: "/system/dashboard/campaigns", label: "Ad Campaigns", icon: Target, permissions: ["ads.view"], badgeKey: "pendingCampaigns" },
+      { to: "/system/dashboard/rewards", label: "Rewards & Points", icon: Award, permissions: ["rewards.view"] },
+      { to: "/system/dashboard/achievements", label: "Achievement Badges", icon: Sparkles, permissions: ["achievements.view"] },
     ],
   },
   {
-    label: "Platform",
+    label: "Security & Platform",
     items: [
-      {
-        to: "/system/dashboard/growth",
-        label: "Platform Growth",
-        icon: TrendingUp,
-        permissions: ["analytics.view"],
-      },
-      {
-        to: "/system/dashboard/staff",
-        label: "Staff Management",
-        icon: ShieldCheck,
-        permissions: ["staff.view"],
-      },
-      {
-        to: "/system/dashboard/activity",
-        label: "Staff Activity",
-        icon: Activity,
-        permissions: ["audit.viewAll"],
-      },
-      {
-        to: "/system/dashboard/settings",
-        label: "Platform Settings",
-        icon: Settings,
-        permissions: ["settings.view"],
-      },
-      {
-        to: "/system/dashboard/ad-settings",
-        label: "Ad Settings & Rates",
-        icon: Sparkles,
-        permissions: ["settings.view"],
-      },
-      {
-        to: "/system/dashboard/audit",
-        label: "Audit Log",
-        icon: History,
-        permissions: ["audit.viewOwn", "audit.viewAll"],
-      },
+      { to: "/system/dashboard/security", label: "Security & Risk", icon: ShieldAlert, permissions: ["security.view"] },
+      { to: "/system/dashboard/system-control", label: "System Control & Health", icon: Server, permissions: ["system.health.view"] },
+      { to: "/system/dashboard/activity", label: "Staff Activity", icon: Activity, permissions: ["audit.viewAll"] },
+      { to: "/system/dashboard/audit", label: "Audit & Activity History", icon: History, permissions: ["audit.viewOwn", "audit.viewAll"] },
+      { to: "/system/dashboard/settings", label: "Platform Settings", icon: Settings, permissions: ["settings.view"] },
+      { to: "/system/dashboard/ad-settings", label: "Ad Settings & Rates", icon: Sparkles, permissions: ["settings.view"] },
     ],
   },
 ];
@@ -248,10 +201,14 @@ export function AdminSidebar({
       adminNavSections
         .map((section) => ({
           ...section,
-          items: section.items.filter((item) => hasAnyPermission(staffUser, item.permissions)),
+          items: section.items
+            .filter((item) => hasAnyPermission(staffUser, item.permissions))
+            .map((item) => item.to === "/system/dashboard/operations"
+              ? { ...item, label: role === "superadmin" ? "Command Center" : role === "moderator" ? "Moderation Overview" : "Operations Overview" }
+              : item),
         }))
         .filter((section) => section.items.length > 0),
-    [staffUser],
+    [staffUser, role],
   );
 
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -431,7 +388,7 @@ export function AdminSidebar({
       </nav>
 
       {/* ── Register Administrator Action ────────────────────────────────── */}
-      {(staffUser?.role === "superadmin" || staffUser?.role === "admin") && (
+      {(staffUser?.role === "superadmin") && (
         <div className="px-2.5 pt-1 pb-2">
           <Link
             to="/system/register"
@@ -486,7 +443,7 @@ export function AdminSidebar({
 
 /* ── Topbar ───────────────────────────────────────────────────────────────── */
 
-function pageTitleFor(pathname: string): string {
+function pageTitleFor(pathname: string, role?: string): string {
   const item = [...ALL_NAV_ITEMS]
     .sort((a, b) => b.to.length - a.to.length)
     .find(
@@ -494,6 +451,9 @@ function pageTitleFor(pathname: string): string {
         (i.to === "/system/dashboard" && (pathname === "/system/dashboard" || pathname === "/system/dashboard/")) ||
         (i.to !== "/system/dashboard" && pathname.startsWith(i.to)),
     );
+  if (pathname.startsWith("/system/dashboard/operations")) {
+    return role === "superadmin" ? "Command Center" : role === "moderator" ? "Moderation Overview" : "Operations Overview";
+  }
   return item?.label ?? "Dashboard";
 }
 
@@ -741,7 +701,8 @@ export function AdminTopBar({
   const { theme, toggle } = useTheme();
   const online = useOnlineDot();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const title = pageTitleFor(pathname);
+  const { staffUser } = useAuth();
+  const title = pageTitleFor(pathname, staffUser?.role);
 
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur-md sm:px-6">

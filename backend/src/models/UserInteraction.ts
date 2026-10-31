@@ -104,5 +104,8 @@ const UserInteractionSchema = new Schema<IUserInteraction>(
 UserInteractionSchema.index({ user: 1, createdAt: -1 });
 UserInteractionSchema.index({ targetId: 1, createdAt: -1 });
 UserInteractionSchema.index({ user: 1, targetId: 1 });
+UserInteractionSchema.index({ createdAt: -1, event: 1, user: 1 });
+UserInteractionSchema.index({ user: 1, sessionId: 1, createdAt: 1 });
+UserInteractionSchema.index({ creatorId: 1, event: 1, createdAt: -1 });
 
 export const UserInteraction = model<IUserInteraction>("UserInteraction", UserInteractionSchema);

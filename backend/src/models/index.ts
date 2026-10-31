@@ -27,3 +27,8 @@ export * from "./NegativeFeedback";
 export * from "./RecommendationConfig";
 export * from "./Media";
 export * from "./Achievement";
+export * from "./PlatformEvent";
+export * from "./SupportTicket";
+export * from "./VerificationRequest";
+export * from "./Announcement";
+export * from "./AnnouncementDelivery";

@@ -4,13 +4,15 @@ import { motion } from "motion/react";
 import { ArrowRight, ShieldCheck, ShieldMinus, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { ROLE_LABEL } from "@/lib/permissions";
+import { ROLE_LABEL, STAFF_PERMISSION_GROUPS, getAssignableRolePermissions, getDefaultRolePermissions, permissionLabel, type Permission } from "@/lib/permissions";
 import { useAuth } from "@/lib/auth-context";
 import {
   useStaffList,
   usePromoteStaff,
   useCreateStaff,
   useDemoteStaff,
+  useUpdateStaffPermissions,
+  type StaffMember,
 } from "@/hooks/use-staff-management";
 import {
   AdminPageHeader,
@@ -44,6 +46,9 @@ function StaffManagementPage() {
   const promote = usePromoteStaff();
   const createStaff = useCreateStaff();
   const demote = useDemoteStaff();
+  const updatePermissions = useUpdateStaffPermissions();
+  const [permissionTarget, setPermissionTarget] = useState<StaffMember | null>(null);
+  const [permissionDraft, setPermissionDraft] = useState<Permission[]>([]);
   const [identifier, setIdentifier] = useState("");
   const [role, setRole] = useState<"moderator" | "admin">("moderator");
   const [newStaff, setNewStaff] = useState({
@@ -167,23 +172,27 @@ function StaffManagementPage() {
                   </AdminTd>
                   <AdminTd className="text-right">
                     {s.role !== "superadmin" ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="border-border text-foreground/90 hover:bg-danger/10 hover:text-danger"
-                        onClick={() =>
-                          demote.mutate(s._id, {
-                            onSuccess: () =>
-                              toast.success(`Removed staff access for @${s.username}`),
-                            onError: (err: any) =>
-                              toast.error(err.message || "Couldn't demote"),
-                          })
-                        }
-                      >
-                        <ShieldMinus className="size-3.5" /> Remove access
-                      </Button>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button size="sm" variant="outline" className="border-primary/30 text-primary" onClick={() => {
+                          setPermissionTarget(s);
+                          setPermissionDraft((s.permissions || getDefaultRolePermissions(s.role)) as Permission[]);
+                        }}>Permissions</Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-border text-foreground/90 hover:bg-danger/10 hover:text-danger"
+                          onClick={() =>
+                            demote.mutate(s._id, {
+                              onSuccess: () => { toast.success(`Removed staff access for @${s.username}`); setPermissionTarget((current) => current?._id === s._id ? null : current); },
+                              onError: (err: any) => toast.error(err.message || "Couldn't demote"),
+                            })
+                          }
+                        >
+                          <ShieldMinus className="size-3.5" /> Remove access
+                        </Button>
+                      </div>
                     ) : (
-                      <span className="text-xs text-muted-foreground">Protected</span>
+                      <span className="text-xs text-muted-foreground">Owner protected</span>
                     )}
                   </AdminTd>
                 </motion.tr>
@@ -342,6 +351,42 @@ function StaffManagementPage() {
           )}
         </div>
       </div>
+
+      {staffUser?.role === "superadmin" && permissionTarget && (
+        <AdminCard className="p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <AdminCardHeader title={`Permission set · @${permissionTarget.username}`} subtitle={`Role ceiling: ${ROLE_LABEL[permissionTarget.role]}. You may remove or restore capabilities within this role, but cannot grant higher-role permissions.`} />
+              <p className="mt-2 text-xs text-muted-foreground">{permissionTarget.permissionsCustomized ? "A custom permission allowlist is active." : "This staff member currently uses the standard role permissions."} Selected: {permissionDraft.length} of {getAssignableRolePermissions(permissionTarget.role).length} assignable.</p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setPermissionTarget(null)}>Close</Button>
+          </div>
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            {STAFF_PERMISSION_GROUPS.map((group) => {
+              const available = group.permissions.filter((permission) => getAssignableRolePermissions(permissionTarget.role).includes(permission));
+              if (!available.length) return null;
+              return <section key={group.label} className="rounded-xl border border-border p-3">
+                <h3 className="mb-3 text-xs font-extrabold uppercase tracking-wide text-muted-foreground">{group.label}</h3>
+                <div className="space-y-2">{available.map((permission) => <label key={permission} className="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-1.5 text-xs hover:bg-muted/50">
+                  <input type="checkbox" checked={permissionDraft.includes(permission)} onChange={(event) => setPermissionDraft((current) => event.target.checked ? Array.from(new Set([...current, permission])) : current.filter((value) => value !== permission))} className="mt-0.5 size-4 accent-primary" />
+                  <span className="min-w-0"><span className="block font-semibold text-foreground">{permissionLabel(permission)}</span><span className="text-[10px] text-muted-foreground">{permission}</span></span>
+                </label>)}</div>
+              </section>;
+            })}
+          </div>
+          <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+            <Button variant="outline" className="border-border" onClick={() => setPermissionDraft(getDefaultRolePermissions(permissionTarget.role))}>Reset role defaults</Button>
+            <Button variant="brand" disabled={updatePermissions.isPending || permissionDraft.length === 0} onClick={async () => {
+              try {
+                await updatePermissions.mutateAsync({ id: permissionTarget._id, permissions: permissionDraft });
+                toast.success(`Permissions updated for @${permissionTarget.username}`);
+                setPermissionTarget(null);
+              } catch (error) { toast.error(error instanceof Error ? error.message : "Could not update staff permissions"); }
+            }}>{updatePermissions.isPending ? "Saving…" : "Save permissions"}</Button>
+          </div>
+          <p className="mt-3 text-[11px] text-muted-foreground">For security, an empty permission set is not saved. The backend validates every permission and applies the new allowlist immediately; the staff member may need to refresh their session to update navigation.</p>
+        </AdminCard>
+      )}
     </div>
   );
 }

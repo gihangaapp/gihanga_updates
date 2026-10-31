@@ -1,16 +1,17 @@
 import { Router, Response } from "express";
+import { Types } from "mongoose";
 import { timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { User, UserRole } from "../../../../models/User";
 import { Setting } from "../../../../models/Setting";
 import { AuditLog } from "../../../../models/AuditLog";
-import { authenticateStaff, requirePermission, ROLE_PERMISSIONS, AuthenticatedRequest } from "../../../../middleware/rbac";
+import { authenticateStaff, requirePermission, ROLE_PERMISSIONS, ROLE_PERMISSION_CEILINGS, getEffectiveStaffPermissions, type AuthenticatedRequest, type Permission } from "../../../../middleware/rbac";
 import { signStaffTokens, verifyStaffAccessToken } from "../../../../lib/jwt";
 import { logAudit } from "../../../../utils/auditLogger";
 import { notify } from "../../../../lib/notify";
 
 const router = Router();
-const STAFF_FIELDS = "name username email role status createdAt";
+const STAFF_FIELDS = "name username email role status staffPermissions createdAt";
 
 // Public, non-sensitive flag used by the registration screen to show the
 // one-time bootstrap form only before the first Super Admin has been created.
@@ -128,12 +129,12 @@ router.post("/create", async (req: AuthenticatedRequest, res: Response) => {
       } catch {
         return res.status(401).json({ error: "Invalid or expired staff token" });
       }
-      const creator = await User.findById(decoded.userId).select("role status username");
+      const creator = await User.findById(decoded.userId).select("role status username staffPermissions");
       if (!creator || creator.role !== decoded.role || creator.status !== "active") {
         return res.status(401).json({ error: "Staff account is inactive or no longer authorized" });
       }
       const creatorRole = creator.role as Exclude<UserRole, "user">;
-      if (!ROLE_PERMISSIONS[creatorRole]?.has("staff.create")) {
+      if (!getEffectiveStaffPermissions(creatorRole, creator.staffPermissions).has("staff.create")) {
         return res.status(403).json({ error: "Only an authorized Super Admin can create staff accounts" });
       }
       if (role === "superadmin") {
@@ -231,7 +232,12 @@ router.post("/create", async (req: AuthenticatedRequest, res: Response) => {
 // GET /api/v1/system/staff — every non-"user" account
 router.get("/", authenticateStaff, requirePermission("staff.view"), async (_req, res: Response) => {
   try {
-    const staff = await User.find({ role: { $ne: "user" } }).select(STAFF_FIELDS).sort({ role: -1, createdAt: -1 });
+    const records = await User.find({ role: { $ne: "user" } }).select(STAFF_FIELDS).sort({ role: -1, createdAt: -1 }).lean();
+    const staff = records.map((member: any) => ({
+      ...member,
+      permissions: Array.from(getEffectiveStaffPermissions(member.role, member.staffPermissions)),
+      permissionsCustomized: member.role !== "superadmin" && Array.isArray(member.staffPermissions),
+    }));
     return res.json({ staff });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to load staff list", details: error.message });
@@ -250,7 +256,7 @@ router.post("/promote", authenticateStaff, async (req: AuthenticatedRequest, res
     // today, but kept as separate named permissions so a future relaxation (e.g. letting
     // admins promote moderators) is a one-line change in rbac.ts, not a rewrite here.
     const requiredPermission = role === "admin" ? "staff.promote.admin" : "staff.promote.moderator";
-    const permissions = req.staffUser ? ROLE_PERMISSIONS[req.staffUser.role] : null;
+    const permissions = req.staffUser ? new Set(req.staffUser.permissions || Array.from(ROLE_PERMISSIONS[req.staffUser.role] || [])) : null;
     if (!permissions?.has(requiredPermission as any)) {
       return res.status(403).json({ error: "Forbidden: insufficient permissions", requiredPermission });
     }
@@ -261,6 +267,7 @@ router.post("/promote", authenticateStaff, async (req: AuthenticatedRequest, res
     if (target.role === "superadmin") return res.status(400).json({ error: "Can't change a Super Admin's role here" });
 
     target.role = role;
+    target.staffPermissions = undefined;
     await target.save();
 
     await logAudit({
@@ -277,6 +284,38 @@ router.post("/promote", authenticateStaff, async (req: AuthenticatedRequest, res
   }
 });
 
+// PATCH /api/v1/system/staff/:id/permissions — Superadmin may restrict or restore
+// permissions within the target Admin/Moderator role ceiling; privilege escalation
+// across role boundaries is deliberately impossible.
+router.patch("/:id/permissions", authenticateStaff, requirePermission("staff.permissions.manage"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ error: "Invalid staff ID" });
+    if (!Array.isArray(req.body?.permissions) || req.body.permissions.length < 1 || req.body.permissions.length > 100) {
+      return res.status(400).json({ error: "permissions must be a non-empty array containing no more than 100 entries" });
+    }
+    const target = await User.findById(req.params.id).select("name username role status staffPermissions");
+    if (!target || target.role === "user") return res.status(404).json({ error: "Staff account not found" });
+    if (target.role === "superadmin") return res.status(400).json({ error: "Super Admin permissions cannot be customized" });
+    const rolePermissions = ROLE_PERMISSION_CEILINGS[target.role as Exclude<UserRole, "user">];
+    const defaultRolePermissions = ROLE_PERMISSIONS[target.role as Exclude<UserRole, "user">];
+    const requested = Array.from(new Set(req.body.permissions.filter((value: unknown): value is string => typeof value === "string")));
+    if (requested.length !== req.body.permissions.length || requested.some((permission) => !rolePermissions.has(permission as Permission))) {
+      return res.status(400).json({ error: "One or more permissions are not available to this staff role" });
+    }
+    const defaultPermissions = Array.from(defaultRolePermissions).sort();
+    const normalizedPermissions = requested.sort();
+    const isDefault = defaultPermissions.length === normalizedPermissions.length && defaultPermissions.every((permission, index) => permission === normalizedPermissions[index]);
+    target.staffPermissions = isDefault ? undefined : normalizedPermissions;
+    await target.save();
+    const effective = Array.from(getEffectiveStaffPermissions(target.role as Exclude<UserRole, "user">, target.staffPermissions));
+    await logAudit({ actor: req.staffUser!.userId, actorUsername: req.staffUser!.username, action: "staff.permissions.updated", targetUser: target._id, meta: { role: target.role, permissionsCount: effective.length, resetToRoleDefaults: isDefault } });
+    await notify({ recipient: String(target._id), kind: "system", text: "Your Gihanga Updates staff permissions were updated by Superadmin. Sign in again to refresh your dashboard access." });
+    return res.json({ staff: { id: target._id, name: target.name, username: target.username, role: target.role, permissions: effective, permissionsCustomized: !isDefault } });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to update staff permissions", details: error.message });
+  }
+});
+
 // POST /api/v1/system/staff/:id/demote — back to a regular "user" role
 router.post("/:id/demote", authenticateStaff, requirePermission("staff.demote"), async (req: AuthenticatedRequest, res: Response) => {
   try {
@@ -287,6 +326,7 @@ router.post("/:id/demote", authenticateStaff, requirePermission("staff.demote"),
 
     const previousRole = target.role;
     target.role = "user";
+    target.staffPermissions = undefined;
     await target.save();
 
     await logAudit({

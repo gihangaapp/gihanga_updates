@@ -9,6 +9,7 @@ import { assessStory } from "../../../services/moderation/contentModerationServi
 import { cancelJobsForContent } from "../../../services/moderation/moderationQueue";
 import { purgeStoryMedia } from "../../../lib/storySweeper";
 import { deleteCloudinaryAsset, isCloudinaryConfigured } from "../../../lib/cloudinary";
+import { recordPlatformActivity } from "../../../services/platformActivity";
 
 const router = Router();
 const AUTHOR_FIELDS = "name username avatarHue avatarUrl isCreator verified";
@@ -34,6 +35,8 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
       expiresAt: new Date(Date.now() + STORY_LIFETIME_MS),
       moderation: moderationActive() ? { status: "processing", updatedAt: new Date() } : undefined,
     });
+
+    void recordPlatformActivity({ type: "content.story.submitted", category: "content", summary: "A story was submitted for publishing", actor: req.user!.userId, actorRole: "user", targetUser: req.user!.userId, targetId: String(story._id), visibility: "all_staff", requiredAnyPermissions: ["content.view", "moderation.content.view"], metadata: { mediaType: story.mediaType } });
 
     if (!moderationActive()) {
       const populated = await story.populate("author", AUTHOR_FIELDS);

@@ -13,6 +13,7 @@ import { createLiveKitToken, getLiveKitUrl, isLiveKitConfigured, computeLiveKitT
 import { applyLedgerEntry, debitWalletAtomic } from "../../../lib/wallet";
 import { notify } from "../../../lib/notify";
 import { notifyStaff } from "../../../lib/staffNotify";
+import { recordPlatformActivity } from "../../../services/platformActivity";
 import { clearLiveViewers } from "../../../lib/redis";
 import { endStream } from "../../../services/liveStreamService";
 import { getPaidInteractionDefaults, isStaffRole, PAID_INTERACTION_BOUNDS } from "../../../lib/paidInteractions";
@@ -158,6 +159,7 @@ router.post("/start", authenticateConsumerOrStaff, async (req: AuthenticatedRequ
     });
 
     await user.updateOne({ isLive: true });
+    void recordPlatformActivity({ type: "live.session.started", category: "live", summary: `${user.name} started a live stream`, actor: req.user!.userId, actorRole: user.role, targetUser: req.user!.userId, targetId: String(stream._id), visibility: "all_staff", requiredAnyPermissions: ["live.forceEnd"], metadata: { title: stream.title } });
 
     const followers = await Follow.find({ following: user._id }).select("follower").limit(2000);
     await Promise.all(

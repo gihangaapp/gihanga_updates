@@ -1,6 +1,6 @@
-import { Request, Response, NextFunction } from "express";
-import { User, UserRole } from "../models/User";
-import { verifyConsumerAccessToken, verifyStaffAccessToken, ConsumerTokenPayload, StaffTokenPayload } from "../lib/jwt";
+import { type Request, type Response, type NextFunction } from "express";
+import { User, type UserRole } from "../models/User";
+import { verifyConsumerAccessToken, verifyStaffAccessToken, type ConsumerTokenPayload, type StaffTokenPayload } from "../lib/jwt";
 
 export type Permission =
   | "moderation.queue.view"
@@ -28,6 +28,7 @@ export type Permission =
   | "staff.demote"
   | "staff.view"
   | "staff.create"
+  | "staff.permissions.manage"
   | "content.view"
   | "content.remove"
   | "content.restore"
@@ -53,7 +54,27 @@ export type Permission =
   | "danger.liveEnd"
   | "danger.featureDisable"
   | "achievements.view"
-  | "achievements.edit";
+  | "achievements.edit"
+  | "operations.view"
+  | "operations.activity.view"
+  | "creators.view"
+  | "creator.analytics.view"
+  | "support.view"
+  | "support.manage"
+  | "verification.view"
+  | "verification.review"
+  | "announcements.view"
+  | "announcements.create"
+  | "announcements.publish"
+  | "security.view"
+  | "system.health.view"
+  | "system.control"
+  | "trending.view"
+  | "approvals.view"
+  | "moderation.content.view"
+  | "moderation.investigations.view"
+  | "moderation.enforcement.view"
+  | "users.intelligence.view";
 
 const MODERATOR_PERMISSIONS: Set<Permission> = new Set([
   "moderation.queue.view",
@@ -67,6 +88,11 @@ const MODERATOR_PERMISSIONS: Set<Permission> = new Set([
   "live.forceEnd",
   "audit.viewOwn",
   "accounts.view",
+  "operations.view",
+  "operations.activity.view",
+  "moderation.content.view",
+  "moderation.investigations.view",
+  "moderation.enforcement.view",
 ]);
 
 const ADMIN_PERMISSIONS: Set<Permission> = new Set([
@@ -83,39 +109,54 @@ const ADMIN_PERMISSIONS: Set<Permission> = new Set([
   "content.view",
   "content.remove",
   "content.restore",
-  "payments.view",
-  "payments.approve",
-  "ads.view",
-  "ads.approve",
-  "ads.payment.verify",
-  "ads.manage",
-  "ads.remove",
-  "wallet.freeze",
-  "wallet.unfreeze",
   "analytics.view",
-  "analytics.revenue",
-  "rewards.view",
   "achievements.view",
+  "operations.view",
+  "operations.activity.view",
+  "creators.view",
+  "creator.analytics.view",
+  "support.view",
+  "support.manage",
+  "verification.view",
+  "verification.review",
+  "announcements.view",
+  "announcements.create",
+  "trending.view",
+  "approvals.view",
+  "moderation.investigations.view",
+  "moderation.enforcement.view",
+]);
+
+// These capabilities are within an Admin's assignment ceiling, but are not
+// granted by default. Superadmin may explicitly assign them per staff member.
+const ADMIN_OPTIONAL_PERMISSIONS: Set<Permission> = new Set([
+  "payments.view", "payments.approve", "wallet.freeze", "wallet.unfreeze",
+  "ads.view", "ads.approve", "ads.payment.verify", "ads.manage", "ads.remove",
+  "analytics.revenue", "rewards.view", "settings.view", "settings.featureFlags",
+  "settings.categories", "settings.momo.view", "settings.momo.edit",
+  "security.view", "system.health.view", "system.control",
+]);
+
+const ADMIN_PERMISSION_CEILING: Set<Permission> = new Set([
+  ...ADMIN_PERMISSIONS,
+  ...ADMIN_OPTIONAL_PERMISSIONS,
 ]);
 
 const SUPERADMIN_PERMISSIONS: Set<Permission> = new Set([
-  ...ADMIN_PERMISSIONS,
+  ...ADMIN_PERMISSION_CEILING,
   "staff.promote.moderator",
   "staff.promote.admin",
   "staff.demote",
   "staff.view",
   "staff.create",
+  "staff.permissions.manage",
   "rewards.edit",
-  "settings.view",
-  "settings.featureFlags",
-  "settings.categories",
-  "settings.momo.view",
-  "settings.momo.edit",
   "danger.walletFreeze",
   "danger.liveEnd",
   "danger.featureDisable",
-  "achievements.view",
   "achievements.edit",
+  "announcements.publish",
+  "users.intelligence.view",
 ]);
 
 export const ROLE_PERMISSIONS: Record<Exclude<UserRole, "user">, Set<Permission>> = {
@@ -123,6 +164,23 @@ export const ROLE_PERMISSIONS: Record<Exclude<UserRole, "user">, Set<Permission>
   admin: ADMIN_PERMISSIONS,
   superadmin: SUPERADMIN_PERMISSIONS,
 };
+
+export const ROLE_PERMISSION_CEILINGS: Record<Exclude<UserRole, "user">, Set<Permission>> = {
+  moderator: MODERATOR_PERMISSIONS,
+  admin: ADMIN_PERMISSION_CEILING,
+  superadmin: SUPERADMIN_PERMISSIONS,
+};
+
+export function getEffectiveStaffPermissions(role: Exclude<UserRole, "user">, overrides?: unknown): Set<Permission> {
+  const defaults = ROLE_PERMISSIONS[role] || new Set<Permission>();
+  // Superadmins always retain owner access. Admin overrides may add explicitly
+  // assigned optional capabilities, but only within the Admin role ceiling.
+  if (role === "superadmin" || !Array.isArray(overrides)) return new Set(defaults);
+  const ceiling = ROLE_PERMISSION_CEILINGS[role] || defaults;
+  return new Set(overrides.filter((permission): permission is Permission =>
+    typeof permission === "string" && ceiling.has(permission as Permission),
+  ));
+}
 
 export interface AuthenticatedRequest extends Request {
   user?: ConsumerTokenPayload;
@@ -157,7 +215,7 @@ export async function authenticateStaff(req: AuthenticatedRequest, res: Response
     // Re-check the live account on every staff API request. This immediately
     // revokes access after demotion, suspension, deletion, or role changes;
     // a still-valid JWT must never preserve old staff privileges.
-    const account = await User.findById(decoded.userId).select("role status username email");
+    const account = await User.findById(decoded.userId).select("role status username email staffPermissions");
     if (!account || account.role === "user" || account.status !== "active") {
       return res.status(401).json({ error: "Staff account is inactive or no longer authorized" });
     }
@@ -169,6 +227,7 @@ export async function authenticateStaff(req: AuthenticatedRequest, res: Response
       role: account.role as Exclude<UserRole, "user">,
       username: account.username,
       email: account.email,
+      permissions: Array.from(getEffectiveStaffPermissions(account.role as Exclude<UserRole, "user">, account.staffPermissions)),
     };
     return next();
   } catch (error) {
@@ -199,7 +258,7 @@ export async function authenticateConsumerOrStaff(req: AuthenticatedRequest, res
   }
   try {
     const staffDecoded = verifyStaffAccessToken(token);
-    const account = await User.findById(staffDecoded.userId).select("role status username email");
+    const account = await User.findById(staffDecoded.userId).select("role status username email staffPermissions");
     if (!account || account.role === "user" || account.status !== "active" || account.role !== staffDecoded.role) {
       return res.status(401).json({ error: "Staff account is inactive or no longer authorized" });
     }
@@ -208,6 +267,7 @@ export async function authenticateConsumerOrStaff(req: AuthenticatedRequest, res
       role: account.role as Exclude<UserRole, "user">,
       username: account.username,
       email: account.email,
+      permissions: Array.from(getEffectiveStaffPermissions(account.role as Exclude<UserRole, "user">, account.staffPermissions)),
     };
     // Normalize into the same shape authenticateConsumer produces, so every
     // downstream handler (live.ts, etc.) works unmodified regardless of
@@ -232,7 +292,9 @@ export function requirePermission(permission: Permission) {
       return res.status(401).json({ error: "Staff authentication required" });
     }
 
-    const permissions = ROLE_PERMISSIONS[req.staffUser.role];
+    const permissions = Array.isArray(req.staffUser.permissions)
+      ? new Set(req.staffUser.permissions as Permission[])
+      : ROLE_PERMISSIONS[req.staffUser.role];
     if (!permissions || !permissions.has(permission)) {
       return res.status(403).json({
         error: "Forbidden: insufficient permissions",

@@ -20,6 +20,7 @@ import { assessPost } from "../../../services/moderation/contentModerationServic
 import { cancelJobsForContent, retryFailedJob } from "../../../services/moderation/moderationQueue";
 import { decisionToStatus } from "../../../services/moderation/contentModerationService";
 import { logInteractionEvent } from "../../../services/recommendation/eventTracker";
+import { recordPlatformActivity } from "../../../services/platformActivity";
 
 const router = Router();
 
@@ -242,6 +243,7 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
         : { status: "approved", updatedAt: new Date() },
     });
     createdPostId = String(post._id);
+    void recordPlatformActivity({ type: "content.post.submitted", category: "content", summary: `A ${post.kind} was submitted for publishing`, actor: req.user!.userId, actorRole: "user", targetUser: req.user!.userId, targetId: String(post._id), visibility: "all_staff", requiredAnyPermissions: ["content.view", "moderation.content.view"], metadata: { kind: post.kind, status: post.status, tagCount: cleanTags.length } });
 
     // Remember the post for idempotent replays (del+setnx works on both the
     // in-memory shim and real ioredis — neither exposes plain SET).

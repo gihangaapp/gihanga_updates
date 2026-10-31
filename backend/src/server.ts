@@ -6,6 +6,8 @@ import { Server as SocketIOServer } from "socket.io";
 import { createApp } from "./app";
 import { connectDB } from "./config/db";
 import { verifyConsumerAccessToken, verifyStaffAccessToken } from "./lib/jwt";
+import { User, type UserRole } from "./models/User";
+import { getEffectiveStaffPermissions } from "./middleware/rbac";
 import { setIO } from "./lib/socket";
 import { attachLiveHandlers } from "./lib/liveSignaling";
 import { startLiveSweeper } from "./lib/liveSweeper";
@@ -61,7 +63,7 @@ async function startServer() {
   });
   setIO(io);
 
-  io.on("connection", (socket) => {
+  io.on("connection", async (socket) => {
     // The client connects with `auth: { token: accessToken, isStaff?: boolean } }`.
     // Consumer sockets join a private `user:<id>` room so notify() can reach exactly
     // that user; staff sockets with a moderation permission join `staff:moderators`
@@ -80,10 +82,32 @@ async function startServer() {
       try {
         if (isStaff) {
           const decoded = verifyStaffAccessToken(token);
-          socket.join(`staff:${decoded.userId}`);
-          if (decoded.role === "moderator" || decoded.role === "admin" || decoded.role === "superadmin") {
-            socket.join("staff:moderators");
+          const staffAccount = await User.findById(decoded.userId).select("role status staffPermissions").lean();
+          if (!staffAccount || staffAccount.status !== "active" || staffAccount.role !== decoded.role || staffAccount.role === "user") {
+            socket.disconnect(true);
+            return;
           }
+          socket.join(`staff:${decoded.userId}`);
+          // Activity stream rooms combine staff visibility and a live permission.
+          // This prevents a custom-restricted Admin from receiving events merely
+          // because their base role belongs to the Admin audience.
+          const effectivePermissions = getEffectiveStaffPermissions(staffAccount.role as Exclude<UserRole, "user">, staffAccount.staffPermissions);
+          const visibilityScopes = staffAccount.role === "superadmin"
+            ? ["all_staff", "admins", "superadmins"]
+            : staffAccount.role === "admin"
+              ? ["all_staff", "admins"]
+              : ["all_staff"];
+          for (const permission of effectivePermissions) {
+            for (const visibility of visibilityScopes) {
+              socket.join(`staff:activity:${visibility}:${permission}`);
+            }
+          }
+          // Legacy room for live-safety alerts is permission-gated too: a staff
+          // member with a customized permission set must not receive moderation
+          // payloads merely because of their base role.
+          if (effectivePermissions.has("moderation.queue.view")) socket.join("staff:moderators");
+          if ((staffAccount.role === "admin" || staffAccount.role === "superadmin") && effectivePermissions.has("audit.viewAll")) socket.join("staff:admins");
+          if (staffAccount.role === "superadmin") socket.join("staff:superadmins");
           userId = decoded.userId;
           socket.join(`user:${decoded.userId}`);
         } else {
@@ -92,8 +116,8 @@ async function startServer() {
           socket.join(`user:${decoded.userId}`);
         }
       } catch {
-        // invalid/expired token — socket stays connected but won't receive
-        // user-scoped events until it reconnects with a fresh one
+        // Invalid or expired credentials cannot subscribe to private staff/user rooms.
+        if (isStaff) { socket.disconnect(true); return; }
       }
     }
 

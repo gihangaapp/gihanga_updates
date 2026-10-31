@@ -15,6 +15,7 @@ export interface StaffTokenPayload {
   username: string;
   email: string;
   role: Exclude<UserRole, "user">; // "moderator" | "admin" | "superadmin"
+  permissions?: string[];
   type: "access" | "refresh";
 }
 

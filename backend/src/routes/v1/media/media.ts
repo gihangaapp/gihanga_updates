@@ -7,6 +7,7 @@ import { uploaderFor, UploadKind } from "../../../middleware/upload";
 import { processAndStoreMedia } from "../../../services/media/mediaService";
 import { Media } from "../../../models/Media";
 import { Story } from "../../../models/Story";
+import { User } from "../../../models/User";
 import { Advertisement } from "../../../models/Advertisement";
 import { quarantineRoot, UPLOAD_ROOT, moderationActive } from "../../../middleware/upload";
 import { isCloudinaryConfigured, signedCloudinaryDeliveryUrl, signedCloudinaryVideoThumbnailUrl } from "../../../lib/cloudinary";
@@ -122,9 +123,12 @@ router.get("/file/:mediaId", optionalAuth, async (req: AuthenticatedRequest, res
         // cannot attach an Authorization header.
         const { verifyStaffAccessToken } = await import("../../../lib/jwt");
         const decoded = verifyStaffAccessToken(staffCredential);
-        const { ROLE_PERMISSIONS } = await import("../../../middleware/rbac");
-        const perms = ROLE_PERMISSIONS[decoded.role];
-        isReviewer = Boolean(perms && perms.has("moderation.assessments.view"));
+        const { getEffectiveStaffPermissions } = await import("../../../middleware/rbac");
+        const staff = await User.findById(decoded.userId).select("role status staffPermissions").lean();
+        const perms = staff && staff.role === decoded.role && staff.status === "active"
+          ? getEffectiveStaffPermissions(decoded.role, staff.staffPermissions)
+          : new Set();
+        isReviewer = Boolean(perms.has("moderation.assessments.view"));
       } catch {
         isReviewer = false;
       }

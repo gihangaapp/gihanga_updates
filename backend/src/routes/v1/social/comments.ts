@@ -9,6 +9,7 @@ import { getIO } from "../../../lib/socket";
 import { moderationActive } from "../../../middleware/upload";
 import { assessComment } from "../../../services/moderation/contentModerationService";
 import { logInteractionEvent } from "../../../services/recommendation/eventTracker";
+import { recordPlatformActivity } from "../../../services/platformActivity";
 
 const router = Router();
 const AUTHOR_FIELDS = "name username avatarHue avatarUrl isCreator verified";
@@ -105,6 +106,7 @@ router.post("/post/:postId", authenticateConsumer, async (req: AuthenticatedRequ
         body: body.trim(),
         parent: parentComment?._id,
       });
+      void recordPlatformActivity({ type: "community.comment.submitted", category: "community", summary: "A comment was submitted", actor: req.user!.userId, actorRole: "user", targetUser: req.user!.userId, targetId: String(comment._id), visibility: "all_staff", requiredAnyPermissions: ["content.view", "moderation.content.view"], metadata: { postId: String(post._id), moderation: "not_required" } });
 
       await Post.findByIdAndUpdate(post._id, { $inc: { commentsCount: 1 } });
       if (parentComment) {
@@ -144,6 +146,7 @@ router.post("/post/:postId", authenticateConsumer, async (req: AuthenticatedRequ
       hidden: true,
       moderation: { status: "processing", updatedAt: new Date() },
     });
+    void recordPlatformActivity({ type: "community.comment.submitted", category: "community", summary: "A comment was submitted for moderation", actor: req.user!.userId, actorRole: "user", targetUser: req.user!.userId, targetId: String(comment._id), visibility: "all_staff", requiredAnyPermissions: ["content.view", "moderation.content.view"], metadata: { postId: String(post._id), moderation: "processing" } });
 
     const result = await assessComment(String(comment._id), req.user!.userId, body.trim()).catch((err) => {
       console.error("[Moderation] assessComment failed:", err instanceof Error ? err.message : err);

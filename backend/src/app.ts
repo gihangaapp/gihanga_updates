@@ -41,6 +41,9 @@ import achievementsRoutes from "./routes/v1/achievements/achievements";
 import staffAchievementsRoutes from "./routes/v1/system/achievements/staffAchievements";
 import staffContentRoutes from "./routes/v1/system/content/staffContent";
 import consumerModerationRoutes from "./routes/v1/moderation/consumerModeration";
+import staffWorkspaceRoutes from "./routes/v1/system/workspace/staffWorkspace";
+import supportRoutes from "./routes/v1/support/support";
+import verificationRoutes from "./routes/v1/verification/verification";
 
 export function createApp(): Express {
   const app = express();
@@ -150,6 +153,9 @@ export function createApp(): Express {
   app.use("/api/v1/system/achievements", staffAchievementsRoutes);
   app.use("/api/v1/system/content", staffContentRoutes);
   app.use("/api/v1/moderation", consumerModerationRoutes);
+  app.use("/api/v1/system/workspace", staffWorkspaceRoutes);
+  app.use("/api/v1/support", supportRoutes);
+  app.use("/api/v1/verification", verificationRoutes);
 
   // 404 Handler
   app.use((_req: Request, res: Response) => {

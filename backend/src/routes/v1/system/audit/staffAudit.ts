@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import { AuditLog } from "../../../../models/AuditLog";
-import { authenticateStaff, requirePermission, ROLE_PERMISSIONS, AuthenticatedRequest } from "../../../../middleware/rbac";
+import { authenticateStaff, getEffectiveStaffPermissions, AuthenticatedRequest } from "../../../../middleware/rbac";
 
 const router = Router();
 
@@ -8,7 +8,7 @@ const router = Router();
 // Supports filtering by action, actor, and date range.
 router.get("/", authenticateStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const permissions = ROLE_PERMISSIONS[req.staffUser!.role];
+    const permissions = getEffectiveStaffPermissions(req.staffUser!.role, req.staffUser!.permissions);
     const canViewAll = permissions.has("audit.viewAll");
     if (!canViewAll && !permissions.has("audit.viewOwn")) {
       return res.status(403).json({ error: "Forbidden: insufficient permissions" });

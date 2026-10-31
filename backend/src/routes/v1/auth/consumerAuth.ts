@@ -9,6 +9,7 @@ import { sendEmail } from "../../../lib/mailer";
 import { notify } from "../../../lib/notify";
 import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/rbac";
 import { maybeAwardDailyLogin, maybeAwardReferral } from "../../../lib/rewards";
+import { recordPlatformActivity } from "../../../services/platformActivity";
 
 const router = Router();
 
@@ -133,6 +134,8 @@ router.post("/register", async (req: Request, res: Response) => {
       referralCode: cleanUsername,
       referredBy: referrer?._id,
     });
+
+    void recordPlatformActivity({ type: "user.registered", category: "users", summary: `@${user.username} joined Gihanga Updates`, actor: String(user._id), actorRole: "user", targetUser: String(user._id), targetId: String(user._id), visibility: "all_staff", requiredAnyPermissions: ["accounts.view"] });
 
     // If initial creators/users were selected to follow
     if (Array.isArray(followingUsernames) && followingUsernames.length > 0) {

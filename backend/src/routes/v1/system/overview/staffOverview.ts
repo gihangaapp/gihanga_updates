@@ -5,14 +5,14 @@ import { Report } from "../../../../models/Report";
 import { Transaction } from "../../../../models/Transaction";
 import { LiveStream } from "../../../../models/LiveStream";
 import { Advertisement } from "../../../../models/Advertisement";
-import { authenticateStaff, ROLE_PERMISSIONS, AuthenticatedRequest } from "../../../../middleware/rbac";
+import { authenticateStaff, getEffectiveStaffPermissions, AuthenticatedRequest } from "../../../../middleware/rbac";
 
 const router = Router();
 
 // GET /api/v1/system/overview — a permission-aware snapshot for the dashboard home
 router.get("/", authenticateStaff, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const permissions = ROLE_PERMISSIONS[req.staffUser!.role];
+    const permissions = getEffectiveStaffPermissions(req.staffUser!.role, req.staffUser!.permissions);
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const stats: Record<string, number> = {};
 

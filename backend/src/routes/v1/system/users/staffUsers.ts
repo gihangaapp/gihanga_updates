@@ -102,6 +102,24 @@ router.post("/:id/make-creator", authenticateStaff, requirePermission("accounts.
   }
 });
 
+
+// POST /api/v1/system/users/:id/remove-creator — revoke creator status without deleting account/content.
+router.post("/:id/remove-creator", authenticateStaff, requirePermission("accounts.makeCreator"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const reason = typeof req.body?.reason === "string" ? req.body.reason.trim().slice(0, 500) : "";
+    if (reason.length < 5) return res.status(400).json({ error: "A reason of at least 5 characters is required" });
+    const user = await User.findOne({ _id: req.params.id, role: "user" });
+    if (!user) return res.status(404).json({ error: "User account not found" });
+    if (!user.isCreator) return res.status(409).json({ error: "This account is not currently a creator" });
+    user.isCreator = false;
+    await user.save();
+    await logAndNotify(req.staffUser!.userId, "accounts.removeCreator", String(user._id), { reason }, `Your Creator status was removed: ${reason}`);
+    return res.json({ user: { _id: user._id, name: user.name, username: user.username, email: user.email, role: user.role, isCreator: user.isCreator, status: user.status } });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to remove creator status", details: error.message });
+  }
+});
+
 // POST /api/v1/system/users/:id/grant-points — admin bonus points
 router.post("/:id/grant-points", authenticateStaff, requirePermission("accounts.grantPoints"), async (req: AuthenticatedRequest, res: Response) => {
   try {

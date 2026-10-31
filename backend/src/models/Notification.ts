@@ -19,6 +19,7 @@ export interface INotification extends Document {
   text: string;
   relatedPost?: Types.ObjectId;
   relatedLive?: Types.ObjectId;
+  announcementId?: Types.ObjectId;
   read: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -36,11 +37,13 @@ const NotificationSchema = new Schema<INotification>(
     text: { type: String, required: true },
     relatedPost: { type: Schema.Types.ObjectId, ref: "Post" },
     relatedLive: { type: Schema.Types.ObjectId, ref: "LiveStream" },
+    announcementId: { type: Schema.Types.ObjectId, ref: "Announcement" },
     read: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
 
 NotificationSchema.index({ recipient: 1, read: 1, createdAt: -1 });
+NotificationSchema.index({ recipient: 1, announcementId: 1 }, { unique: true, partialFilterExpression: { announcementId: { $exists: true } } });
 
 export const Notification = model<INotification>("Notification", NotificationSchema);

@@ -13,6 +13,7 @@ import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/
 import { rateLimitHits } from "../../../lib/redis";
 import { notifyStaff } from "../../../lib/staffNotify";
 import { logAudit } from "../../../utils/auditLogger";
+import { recordPlatformActivity } from "../../../services/platformActivity";
 
 const router = Router();
 
@@ -146,6 +147,8 @@ router.post(
         reportsCount: distinctReporters + 1,
         status: "pending",
       });
+
+      void recordPlatformActivity({ type: "moderation.report.submitted", category: "moderation", summary: `A ${reason.toLowerCase()} report was submitted`, actor: req.user!.userId, actorRole: "user", targetUser: ownerId, targetId: String(report._id), visibility: "all_staff", requiredAnyPermissions: ["moderation.queue.view"], metadata: { targetType, severity: report.severity, status: report.status } });
 
       if (["Nudity", "Violence"].includes(reason)) {
         // Serious categories alert staff immediately.

@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import { User, UserRole } from "../../../../models/User";
 import { signStaffTokens, verifyStaffRefreshToken } from "../../../../lib/jwt";
-import { authenticateStaff, AuthenticatedRequest, ROLE_PERMISSIONS } from "../../../../middleware/rbac";
+import { authenticateStaff, AuthenticatedRequest, getEffectiveStaffPermissions } from "../../../../middleware/rbac";
 import { logAudit } from "../../../../utils/auditLogger";
 
 const router = Router();
@@ -54,7 +54,7 @@ router.post("/login", async (req: Request, res: Response) => {
     });
 
     // Get permission list for frontend shell initialization
-    const permissions = Array.from(ROLE_PERMISSIONS[staffRole] || []);
+    const permissions = Array.from(getEffectiveStaffPermissions(staffRole, user.staffPermissions));
 
     return res.json({
       message: "Staff authentication successful",
@@ -126,7 +126,7 @@ router.get("/me", authenticateStaff, async (req: AuthenticatedRequest, res: Resp
     }
 
     const staffRole = user.role as Exclude<UserRole, "user">;
-    const permissions = Array.from(ROLE_PERMISSIONS[staffRole] || []);
+    const permissions = Array.from(getEffectiveStaffPermissions(staffRole, user.staffPermissions));
 
     return res.json({
       user: {

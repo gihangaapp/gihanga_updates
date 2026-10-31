@@ -1,23 +1,23 @@
 import { Router, Response } from "express";
 import { Advertisement } from "../../../../models/Advertisement";
 import { AuditLog } from "../../../../models/AuditLog";
-import { authenticateStaff, requirePermission, AuthenticatedRequest } from "../../../../middleware/rbac";
+import { authenticateStaff, requirePermission, getEffectiveStaffPermissions, AuthenticatedRequest } from "../../../../middleware/rbac";
 import { notify } from "../../../../lib/notify";
 import { refundAdPoints } from "../../../../lib/adPoints";
 import { applyLedgerEntry } from "../../../../lib/wallet";
 
 const router = Router();
 
-function serializeStaffCampaign(campaign: any, role: string) {
+function serializeStaffCampaign(campaign: any, req: AuthenticatedRequest) {
   const value = typeof campaign?.toObject === "function" ? campaign.toObject() : { ...campaign };
-  // Contact and manual payment reference are financial-contact data.
-  // Moderators can review/approve creative but only admins can access these fields.
-  if (role === "moderator") {
-    delete value.manualPaymentContact;
-    delete value.manualPaymentReference;
-    delete value.manualPaymentVerifiedBy;
-    if (value.creator && typeof value.creator === "object") delete value.creator.email;
+  const permissions = getEffectiveStaffPermissions(req.staffUser!.role, req.staffUser!.permissions);
+  // Ads reviewers may inspect creative without receiving advertiser contact,
+  // payment references or financial values unless their live permission set
+  // explicitly grants finance visibility.
+  if (!permissions.has("payments.view")) {
+    for (const field of ["manualPaymentContact", "manualPaymentReference", "manualPaymentVerifiedBy", "manualPaymentVerifiedAt", "totalRwfCost", "totalGpCost", "paymentMethod", "paymentStatus", "manualPaymentStatus", "paidAt"]) delete value[field];
   }
+  if (!permissions.has("accounts.view") && value.creator && typeof value.creator === "object") delete value.creator.email;
   return value;
 }
 
@@ -37,7 +37,7 @@ router.get("/", authenticateStaff, requirePermission("ads.view"), async (req: Au
       .limit(200)
       .populate("creator", "name username email avatarHue avatarUrl isCreator verified");
 
-    return res.json({ campaigns: campaigns.map((campaign) => serializeStaffCampaign(campaign, req.staffUser!.role)) });
+    return res.json({ campaigns: campaigns.map((campaign) => serializeStaffCampaign(campaign, req)) });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to load campaigns", details: error.message });
   }
@@ -123,7 +123,8 @@ router.get("/analytics/summary", authenticateStaff, requirePermission("ads.view"
     };
     // Moderators can review creative and see delivery counts, but aggregate
     // revenue/payment totals are only exposed to Admin and Super Admin.
-    if (req.staffUser!.role === "moderator") {
+    const permissions = getEffectiveStaffPermissions(req.staffUser!.role, req.staffUser!.permissions);
+    if (!permissions.has("payments.view") || !permissions.has("analytics.revenue")) {
       delete summary.totalRwfRevenue;
       delete summary.manualPaymentRevenue;
       delete summary.totalPointsSpent;
@@ -143,7 +144,7 @@ router.get("/:id", authenticateStaff, requirePermission("ads.view"), async (req:
     );
     if (!campaign) return res.status(404).json({ error: "Campaign not found" });
 
-    return res.json({ campaign: serializeStaffCampaign(campaign, req.staffUser!.role) });
+    return res.json({ campaign: serializeStaffCampaign(campaign, req) });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to fetch campaign details", details: error.message });
   }
@@ -196,7 +197,7 @@ router.post("/:id/approve", authenticateStaff, requirePermission("ads.approve"),
         : `Your ad campaign "${campaign.title}" was approved and is now active!`,
     });
 
-    return res.json({ campaign: serializeStaffCampaign(campaign, req.staffUser!.role) });
+    return res.json({ campaign: serializeStaffCampaign(campaign, req) });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to approve campaign", details: error.message });
   }
@@ -205,6 +206,7 @@ router.post("/:id/approve", authenticateStaff, requirePermission("ads.approve"),
 // Manual payment confirmation is restricted to Admin and Super Admin.
 router.post("/:id/confirm-manual-payment", authenticateStaff, requirePermission("ads.payment.verify"), async (req: AuthenticatedRequest, res: Response) => {
   try {
+    if (!getEffectiveStaffPermissions(req.staffUser!.role, req.staffUser!.permissions).has("payments.approve")) return res.status(403).json({ error: "Payment approval permission is required" });
     const now = new Date();
     const reference = String(req.body?.reference || "").trim().slice(0, 120) || undefined;
     const filter = {
@@ -253,7 +255,7 @@ router.post("/:id/confirm-manual-payment", authenticateStaff, requirePermission(
       text: `Manual payment for your campaign "${campaign.title}" has been confirmed. Your advertisement is now active on Gihanga Updates.`,
     });
 
-    return res.json({ campaign: serializeStaffCampaign(campaign, req.staffUser!.role), message: "Manual payment verified and campaign activated" });
+    return res.json({ campaign: serializeStaffCampaign(campaign, req), message: "Manual payment verified and campaign activated" });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to verify manual payment", details: error.message });
   }
@@ -264,8 +266,11 @@ router.post("/:id/reject", authenticateStaff, requirePermission("ads.approve"), 
   try {
     const { reason, autoRefund } = req.body;
     if (!reason?.trim()) return res.status(400).json({ error: "Rejection reason is required" });
-    if (autoRefund && !["admin", "superadmin"].includes(req.staffUser!.role)) {
-      return res.status(403).json({ error: "Only administrators can initiate legacy ad refunds" });
+    if (autoRefund) {
+      const permissions = getEffectiveStaffPermissions(req.staffUser!.role, req.staffUser!.permissions);
+      if (!permissions.has("ads.manage") || !permissions.has("payments.approve")) {
+        return res.status(403).json({ error: "Ad refunds require explicit ad-management and payment-approval permissions" });
+      }
     }
 
     const campaign = await Advertisement.findById(req.params.id);
@@ -311,7 +316,7 @@ router.post("/:id/reject", authenticateStaff, requirePermission("ads.approve"), 
       }
     }
 
-    return res.json({ campaign: serializeStaffCampaign(campaign, req.staffUser!.role) });
+    return res.json({ campaign: serializeStaffCampaign(campaign, req) });
   } catch (error: any) {
     return res.status(500).json({ error: "Failed to reject campaign", details: error.message });
   }
@@ -395,7 +400,7 @@ router.delete("/:id", authenticateStaff, requirePermission("ads.remove"), async 
     const campaign = await Advertisement.findById(req.params.id);
     if (!campaign) return res.status(404).json({ error: "Campaign not found" });
     if (campaign.status === "cancelled") {
-      return res.json({ success: true, campaign: serializeStaffCampaign(campaign, req.staffUser!.role), message: "Campaign was already removed" });
+      return res.json({ success: true, campaign: serializeStaffCampaign(campaign, req), message: "Campaign was already removed" });
     }
 
     const previousStatus = campaign.status;
@@ -427,7 +432,7 @@ router.delete("/:id", authenticateStaff, requirePermission("ads.remove"), async 
 
     return res.json({
       success: true,
-      campaign: serializeStaffCampaign(campaign, req.staffUser!.role),
+      campaign: serializeStaffCampaign(campaign, req),
       message: "Advertisement removed from public delivery",
     });
   } catch (error: any) {
@@ -459,6 +464,7 @@ router.post("/:id/refund", authenticateStaff, requirePermission("ads.manage"), a
 
       return res.json({ success: true, message: `${result.pointsReturned} Gihanga Points refunded`, campaign });
     } else if (campaign.paymentMethod === "real_money") {
+      if (!getEffectiveStaffPermissions(req.staffUser!.role, req.staffUser!.permissions).has("payments.approve")) return res.status(403).json({ error: "Payment approval permission is required for cash refunds" });
       await applyLedgerEntry({
         userId: String(campaign.creator),
         kind: "ad_refund",

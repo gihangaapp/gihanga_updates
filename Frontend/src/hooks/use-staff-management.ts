@@ -9,6 +9,8 @@ export interface StaffMember {
   role: "moderator" | "admin" | "superadmin";
   status: string;
   createdAt: string;
+  permissions?: string[];
+  permissionsCustomized?: boolean;
 }
 
 
@@ -56,6 +58,19 @@ export function useCreateStaff() {
       }>("/system/staff/create", input, true),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["staff", "list"] });
+    },
+  });
+}
+
+
+export function useUpdateStaffPermissions() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, permissions }: { id: string; permissions: string[] }) =>
+      api.patch(`/system/staff/${id}/permissions`, { permissions }, true),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["staff", "list"] });
+      await queryClient.invalidateQueries({ queryKey: ["staff", "overview"] });
     },
   });
 }

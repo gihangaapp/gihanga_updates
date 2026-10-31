@@ -13,6 +13,7 @@ export interface IUser extends Document {
   coverUrl?: string;
   bio: string;
   role: UserRole;
+  staffPermissions?: string[];
   isCreator: boolean;
   verified: boolean;
   status: AccountStatus;
@@ -61,6 +62,7 @@ const UserSchema = new Schema<IUser>(
       enum: ["user", "moderator", "admin", "superadmin"],
       default: "user",
     },
+    staffPermissions: { type: [String], default: undefined },
     isCreator: { type: Boolean, default: false },
     verified: { type: Boolean, default: false },
 
