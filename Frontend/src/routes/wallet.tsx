@@ -101,7 +101,7 @@ function DepositWithdrawDialog({
   onOpenChange: (v: boolean) => void;
 }) {
   const [amount, setAmount] = useState("");
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState("+250 7");
   const deposit = useDeposit();
   const withdraw = useWithdraw();
   const busy = mode === "deposit" ? deposit.isPending : withdraw.isPending;
@@ -134,7 +134,7 @@ function DepositWithdrawDialog({
           });
           onOpenChange(false);
           setAmount("");
-          setPhone("");
+          setPhone("+250 7");
         },
         onError: (err: any) => toast.error(err.message || "Request failed"),
       },
@@ -168,7 +168,7 @@ function DepositWithdrawDialog({
             <RwandaPhoneInput
               value={phone}
               onValueChange={setPhone}
-              placeholder="+250 788 123 456"
+              placeholder="+250 7XX XXX XXX"
             />
           </div>
           <Button variant="brand" size="lg" onClick={submit} disabled={busy}>
@@ -177,7 +177,7 @@ function DepositWithdrawDialog({
           </Button>
           <p className="text-xs text-muted-foreground">
             {mode === "deposit"
-              ? "You'll get a prompt on your phone to approve the payment."
+              ? "The request will remain pending while MTN processes it. Your RWF balance changes only after the payment status is verified."
               : "Funds are held until MTN confirms the transfer."}
           </p>
         </div>

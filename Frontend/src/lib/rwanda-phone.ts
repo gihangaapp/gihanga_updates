@@ -1,6 +1,24 @@
 /** Rwanda phone helpers. Display: +250 7XX XXX XXX; submit/store: +2507XXXXXXXX. */
-export function normalizeRwandaPhone(input: string): string {
+const RWANDA_PREFIX = "+250 7";
+
+function subscriberDigits(input: string): string {
   let digits = String(input ?? "").replace(/\D/g, "");
+  if (digits.startsWith("2507")) return digits.slice(4);
+  if (digits.startsWith("250")) {
+    digits = digits.slice(3);
+    if (digits.startsWith("7")) digits = digits.slice(1);
+    return digits;
+  }
+  if (digits.startsWith("07")) return digits.slice(2);
+  if (digits.startsWith("7")) return digits.slice(1);
+  // When typing after the fixed prefix, the browser may provide only the
+  // subscriber portion (for example after select-all and paste).
+  return digits.replace(/^0?7?/, "");
+}
+
+export function normalizeRwandaPhone(input: string): string {
+  const raw = String(input ?? "").trim();
+  let digits = raw.replace(/\D/g, "");
   if (digits.startsWith("250")) digits = digits.slice(3);
   else if (digits.startsWith("0")) digits = digits.slice(1);
   if (!/^7\d{8}$/.test(digits)) {
@@ -9,23 +27,14 @@ export function normalizeRwandaPhone(input: string): string {
   return `+250${digits}`;
 }
 
+/** Always returns a visible, protected +250 7 prefix, even for an empty value. */
 export function formatRwandaPhoneInput(input: string): string {
-  const raw = String(input ?? "").trim();
-  if (!raw) return "";
-  let digits = raw.replace(/\D/g, "");
-
-  // Preserve a country prefix while the user is typing it character by character.
-  if (raw.startsWith("+") && (digits === "2" || digits === "25")) return `+${digits}`;
-  if (!digits) return raw === "+" ? "+" : "";
-
-  if (digits.startsWith("250")) digits = digits.slice(3);
-  else if (digits.startsWith("0")) {
-    if (digits === "0") return "0";
-    digits = digits.slice(1);
-  }
-
-  digits = digits.slice(0, 9);
-  if (!digits) return "+250";
-  const groups = [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6, 9)].filter(Boolean);
-  return `+250 ${groups.join(" ")}`;
+  const digits = subscriberDigits(input).slice(0, 8);
+  if (!digits) return RWANDA_PREFIX;
+  const firstGroup = digits.slice(0, 2);
+  const middleGroup = digits.slice(2, 5);
+  const finalGroup = digits.slice(5, 8);
+  return `${RWANDA_PREFIX}${firstGroup}${middleGroup ? ` ${middleGroup}` : ""}${finalGroup ? ` ${finalGroup}` : ""}`;
 }
+
+export const RWANDA_PHONE_PREFIX = RWANDA_PREFIX;

@@ -1,3 +1,13 @@
+# Changelog
+
+## MTN Pending Status and Protected Rwanda Phone Prefix
+
+- Added periodic backend polling of pending MTN Collection/Disbursement transactions as a fallback for MTN's one-shot callback delivery.
+- Added active client polling while recent MTN transactions remain pending.
+- Kept settlement idempotent and provider-verified; mismatched amount/currency is held for review without wallet credit.
+- Added diagnostic logs for callback and status verification failures.
+- Rwanda phone input now always starts with a protected `+250 7` prefix and formats only the remaining subscriber digits.
+
 ## 2026-10-30 — MTN callback routing
 
 - Added Vercel external rewrites for the base MoMo callback path and its per-transaction reference path.

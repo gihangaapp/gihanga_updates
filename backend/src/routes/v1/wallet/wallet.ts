@@ -271,13 +271,15 @@ router.get("/momo/status/:transactionId", authenticateConsumer, async (req: Auth
     if (!tx) return res.status(404).json({ error: "Payment transaction not found" });
     if (!tx.momoReferenceId) return res.json({ transaction: tx, status: tx.status });
     const provider = tx.kind === "payout" ? await getTransferStatus(tx.momoReferenceId) : await getRequestToPayStatus(tx.momoReferenceId);
+    console.info(`[MoMoStatus] Transaction ${String(tx._id)} provider status: ${provider.status}.`);
     if (provider.status === "SUCCESSFUL" && !providerMatchesWalletTransaction(tx, provider)) {
       return res.status(409).json({ error: "MTN payment amount or currency did not match the expected RWF wallet transaction. No wallet balance was changed." });
     }
     if (provider.status === "SUCCESSFUL" || provider.status === "FAILED") await settleMomoTransaction(String(tx._id), provider.status, provider.reason);
     const latest = await Transaction.findById(tx._id);
     return res.json({ transaction: latest, status: latest?.status || tx.status });
-  } catch {
+  } catch (error) {
+    console.error(`[MoMoStatus] Status verification failed for transaction ${String(req.params.transactionId)}:`, error instanceof Error ? error.message : "unknown provider error");
     return res.status(502).json({ error: "Payment status is temporarily unavailable. Please try again." });
   }
 });
@@ -341,9 +343,9 @@ const momoCallbackHandler = async (req: Request, res: Response) => {
       });
     }
     return res.status(200).json({ ok: true, status: provider.status, duplicate: !settled.applied });
-  } catch {
-    // MTN's callback is one-shot in this API. A non-2xx response is visible in
-    // logs; the authenticated status endpoint/reconciler can still verify it.
+  } catch (error) {
+    // MTN's callback is one-shot; the status reconciler is the fallback.
+    console.error("[MoMoCallback] Verification failed:", error instanceof Error ? error.message : "unknown provider error");
     return res.status(502).json({ error: "Callback status verification failed; no wallet change was applied" });
   }
 };

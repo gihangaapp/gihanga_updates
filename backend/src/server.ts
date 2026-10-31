@@ -11,6 +11,7 @@ import { attachLiveHandlers } from "./lib/liveSignaling";
 import { startLiveSweeper } from "./lib/liveSweeper";
 import { startAchievementSweeper } from "./lib/achievementSweeper";
 import { startStorySweeper } from "./lib/storySweeper";
+import { startMomoReconciliationSweeper } from "./lib/momoReconciliation";
 import { verifyMailer } from "./lib/mailer";
 import { ensureDefaultAchievementDefinitions } from "./services/achievementService";
 import {
@@ -115,6 +116,8 @@ async function startServer() {
     // Stories are 24-hour content — purge expired stories AND their
     // Cloudinary-hosted media (see lib/storySweeper.ts).
     startStorySweeper();
+    // MTN sends each callback only once; poll pending transactions as a reliable fallback.
+    startMomoReconciliationSweeper();
 
     // Content-safety pipeline: bounded in-process queue for async moderation
     // jobs (video frame sampling, deferred image batches). Recovers jobs that

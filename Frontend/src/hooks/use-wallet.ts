@@ -18,6 +18,7 @@ export interface WalletTransaction {
   status: "created" | "pending" | "completed" | "failed" | "cancelled" | "expired";
   momoReferenceId?: string;
   momoStatus?: string;
+  provider?: "MTN_MOMO";
   createdAt: string;
 }
 
@@ -30,15 +31,40 @@ export function useWallet() {
         pointsToCashRate: number;
         momo: { depositConfigured: boolean; withdrawConfigured: boolean };
       }>("/wallet/me"),
-    refetchInterval: 20_000,
+    refetchInterval: 8_000,
   });
 }
 
 export function useWalletTransactions() {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: ["wallet", "transactions"],
-    queryFn: () => api.get<{ transactions: WalletTransaction[] }>("/wallet/transactions"),
-    refetchInterval: 20_000,
+    queryFn: async () => {
+      let result = await api.get<{ transactions: WalletTransaction[] }>("/wallet/transactions");
+      const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+      const pendingMomo = result.transactions
+        .filter((tx) => tx.provider === "MTN_MOMO" && tx.status === "pending" && Boolean(tx.momoReferenceId) && new Date(tx.createdAt).getTime() >= cutoff)
+        .slice(0, 5);
+
+      if (pendingMomo.length > 0) {
+        const checks = await Promise.allSettled(
+          pendingMomo.map((tx) => api.get(`/wallet/momo/status/${encodeURIComponent(tx._id)}`)),
+        );
+        if (checks.some((check) => check.status === "fulfilled")) {
+          result = await api.get<{ transactions: WalletTransaction[] }>("/wallet/transactions");
+          await queryClient.invalidateQueries({ queryKey: ["wallet", "me"] });
+        }
+      }
+      return result;
+    },
+    refetchInterval: (query) => {
+      const transactions = query.state.data?.transactions ?? [];
+      const hasRecentPendingMomo = transactions.some((tx) =>
+        tx.provider === "MTN_MOMO" && tx.status === "pending" && Boolean(tx.momoReferenceId)
+        && new Date(tx.createdAt).getTime() >= Date.now() - 24 * 60 * 60 * 1000,
+      );
+      return hasRecentPendingMomo ? 5_000 : 20_000;
+    },
   });
 }
 
