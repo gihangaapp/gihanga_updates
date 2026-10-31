@@ -40,6 +40,7 @@ export function StoryAdOverlay({ ad, onClose }: StoryAdOverlayProps) {
   );
   const [hidden, setHidden] = useState(false);
   const [mediaFailed, setMediaFailed] = useState(false);
+  const [avatarFailed, setAvatarFailed] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const videoWasPlayingWhenHidden = useRef(false);
   const impressionSent = useRef(false);
@@ -50,10 +51,11 @@ export function StoryAdOverlay({ ad, onClose }: StoryAdOverlayProps) {
   const creator = typeof ad.creator === "object" ? ad.creator : null;
   const creatorName = creator?.name || "Sponsored Partner";
   const creatorUsername = creator?.username || "sponsored";
+  const creatorAvatar = mediaUrlWithAuth(resolveMediaUrl(creator?.avatarUrl) || creator?.avatarUrl);
   const mediaPath = ad.mediaUrl || (ad.mediaKey ? `/api/v1/media/file/${ad.mediaKey}` : undefined);
   const resolvedMedia = mediaUrlWithAuth(resolveMediaUrl(mediaPath) || mediaPath);
   const resolvedThumbnail = mediaUrlWithAuth(resolveMediaUrl(ad.thumbnailUrl) || ad.thumbnailUrl);
-  useEffect(() => setMediaFailed(false), [ad._id, resolvedMedia]);
+  useEffect(() => { setMediaFailed(false); setAvatarFailed(false); }, [ad._id, resolvedMedia, creatorAvatar]);
   const isVideo = Boolean(ad.mediaType === "video" || ad.adType.includes("video"));
 
   useEffect(() => {
@@ -202,7 +204,7 @@ export function StoryAdOverlay({ ad, onClose }: StoryAdOverlayProps) {
       <div className="absolute inset-x-0 top-0 z-20 bg-gradient-to-b from-black/80 via-black/40 to-transparent p-4 pt-7">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2.5">
-            <div className="grid size-9 shrink-0 place-items-center rounded-full bg-indigo-600 text-xs font-bold text-white shadow-md">{creatorName[0]?.toUpperCase()}</div>
+            <div className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-full bg-indigo-600 text-xs font-bold text-white shadow-md">{creatorAvatar && !avatarFailed ? <img src={creatorAvatar} alt={creatorName} onError={() => setAvatarFailed(true)} className="size-full object-cover" /> : creatorName[0]?.toUpperCase()}</div>
             <div className="min-w-0">
               <p className="truncate text-xs font-bold leading-tight">{creatorName}</p>
               <p className="truncate text-[10px] text-white/70">@{creatorUsername}</p>

@@ -35,6 +35,7 @@ export type Permission =
   | "ads.approve"
   | "ads.payment.verify"
   | "ads.manage"
+  | "ads.remove"
   | "analytics.view"
   | "analytics.revenue"
   | "rewards.view"
@@ -64,6 +65,7 @@ const MODERATOR_PERMISSIONS: Set<Permission> = new Set([
   "accounts.view",
   "ads.view",
   "ads.approve",
+  "ads.remove",
 ]);
 
 const ADMIN_PERMISSIONS: Set<Permission> = new Set([

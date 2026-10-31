@@ -33,6 +33,7 @@ export type Permission =
   | "ads.approve"
   | "ads.payment.verify"
   | "ads.manage"
+  | "ads.remove"
   | "analytics.view"
   | "analytics.revenue"
   | "rewards.view"
@@ -59,6 +60,7 @@ const MODERATOR_PERMISSIONS: Set<Permission> = new Set([
   "accounts.view",
   "ads.view",
   "ads.approve",
+  "ads.remove",
 ]);
 
 const ADMIN_PERMISSIONS: Set<Permission> = new Set([
@@ -111,12 +113,12 @@ const DEFAULT_ROLE_PERMISSIONS: Record<string, Set<Permission>> = {
  *  or falls back to the role matrix. */
 export function hasPermission(staffUser: UserProfile | null, permission: Permission): boolean {
   if (!staffUser) return false;
-  if (Array.isArray(staffUser.permissions) && staffUser.permissions.length > 0) {
-    return staffUser.permissions.includes(permission);
-  }
-  // Fallback to role default if permissions array is not set on object
+  // The backend enforces the current role matrix. Also consult that same
+  // matrix in the UI so a staff profile cached before a permission rollout
+  // does not hide a newly granted action until the next sign-in.
   const rolePerms = DEFAULT_ROLE_PERMISSIONS[staffUser.role];
-  return Boolean(rolePerms?.has(permission));
+  if (rolePerms?.has(permission)) return true;
+  return Array.isArray(staffUser.permissions) && staffUser.permissions.includes(permission);
 }
 
 export function hasAnyPermission(

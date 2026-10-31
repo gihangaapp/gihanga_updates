@@ -325,10 +325,12 @@ function HomeFeed() {
         ) : (
           <>
             {displayedPosts.map((p, i) => {
-              // Inject a sponsored ad every 4th post if ads are available
-              const adIndex = Math.floor(i / 4) % (feedAds.length || 1);
-              const showAd = (i + 1) % 4 === 0 && feedAds.length > 0 && feedAds[adIndex];
-              const currentAd = feedAds[adIndex];
+              // Insert one sponsored placement after every six organic posts. Each
+              // campaign is used once per fetched batch; server-side frequency
+              // caps prevent an individual ad from being over-delivered.
+              const adIndex = Math.floor((i + 1) / 6) - 1;
+              const showAd = (i + 1) % 6 === 0 && adIndex >= 0 && adIndex < feedAds.length;
+              const currentAd = showAd ? feedAds[adIndex] : undefined;
 
               return (
                 <React.Fragment key={p._id}>

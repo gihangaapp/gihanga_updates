@@ -386,6 +386,55 @@ router.post("/:id/disable", authenticateStaff, requirePermission("ads.manage"), 
   }
 });
 
+
+// DELETE /api/v1/system/ads/:id — remove a campaign from public delivery.
+// This is an audited soft removal: retain payment and moderation history, but
+// make the campaign ineligible for Feed, Stories and Reels immediately.
+router.delete("/:id", authenticateStaff, requirePermission("ads.remove"), async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const campaign = await Advertisement.findById(req.params.id);
+    if (!campaign) return res.status(404).json({ error: "Campaign not found" });
+    if (campaign.status === "cancelled") {
+      return res.json({ success: true, campaign: serializeStaffCampaign(campaign, req.staffUser!.role), message: "Campaign was already removed" });
+    }
+
+    const previousStatus = campaign.status;
+    campaign.status = "cancelled";
+    campaign.disabledBy = req.staffUser!.userId as any;
+    campaign.pausedBy = undefined;
+    await campaign.save();
+
+    await AuditLog.create({
+      actor: req.staffUser!.userId,
+      actorUsername: req.staffUser!.username,
+      action: "ads.remove",
+      targetId: String(campaign._id),
+      meta: { title: campaign.title, previousStatus },
+    });
+
+    // Notification delivery is best-effort: the audited removal and public
+    // delivery stop must remain successful even if the notification provider
+    // is temporarily unavailable.
+    try {
+      await notify({
+        recipient: String(campaign.creator),
+        kind: "system",
+        text: `Your advertisement campaign "${campaign.title}" was removed from public delivery by the Gihanga Updates moderation team. Contact support if you need more information.`,
+      });
+    } catch (notificationError) {
+      console.warn("[Ads] Campaign was removed but advertiser notification failed:", notificationError);
+    }
+
+    return res.json({
+      success: true,
+      campaign: serializeStaffCampaign(campaign, req.staffUser!.role),
+      message: "Advertisement removed from public delivery",
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Failed to remove advertisement", details: error.message });
+  }
+});
+
 // POST /api/v1/system/ads/:id/refund — Process a refund (points or money) for a campaign
 router.post("/:id/refund", authenticateStaff, requirePermission("ads.manage"), async (req: AuthenticatedRequest, res: Response) => {
   try {

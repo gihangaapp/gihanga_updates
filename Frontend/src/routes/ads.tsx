@@ -13,7 +13,7 @@ export const Route = createFileRoute("/ads")({
   head: () => ({
     meta: [
       { title: "Ad Center — Gihanga Updates" },
-      { name: "description", content: "Create and manage sponsored campaigns, arrange manual payment with our team, and track advertising performance across Feed and Stories." },
+      { name: "description", content: "Create and manage sponsored campaigns, arrange manual payment with our team, and track advertising performance across Feed, Reels and Stories." },
       { property: "og:title", content: "Ad Center — Gihanga Updates" },
       { property: "og:description", content: "Create and manage promotional advertising campaigns on Gihanga Updates." },
       { property: "og:type", content: "website" },
@@ -48,7 +48,7 @@ function AdsPage() {
             <h1 className="flex items-center gap-2 font-display text-2xl font-extrabold tracking-tight text-foreground">
               <Sparkles className="size-6 text-amber-500" /> Advertising Center
             </h1>
-            <p className="text-sm text-muted-foreground">Promote your content, products, or brand across Gihanga Updates Feed and Stories.</p>
+            <p className="text-sm text-muted-foreground">Promote your content, products, or brand across Gihanga Updates Feed, Reels and Stories.</p>
           </div>
           <Button variant="brand" size="lg" onClick={() => setWizardOpen(true)}>
             <Plus className="mr-1.5 size-5" /> Create Campaign
@@ -105,7 +105,7 @@ function AdsPage() {
           <div className="surface-card flex flex-col items-center gap-3 border-dashed py-16 text-center">
             <Layers className="size-10 text-muted-foreground/60" />
             <p className="text-base font-bold text-foreground">No campaigns found</p>
-            <p className="max-w-md text-xs text-muted-foreground">Launch an advertisement to reach users in Feed and Stories. Campaigns are reviewed before payment is arranged.</p>
+            <p className="max-w-md text-xs text-muted-foreground">Launch an advertisement to reach users in Feed, Reels and Stories. Campaigns are reviewed before payment is arranged.</p>
             <Button variant="brand" size="sm" onClick={() => setWizardOpen(true)}><Plus className="mr-1 size-4" /> Launch Campaign</Button>
           </div>
         ) : (

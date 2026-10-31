@@ -98,7 +98,7 @@ router.get("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Res
     const campaigns = await Advertisement.find({
       creator: req.user!.userId,
       _legacySystem: { $ne: true },
-    }).sort({ createdAt: -1 });
+    }).sort({ createdAt: -1 }).populate("creator", "name username avatarHue avatarUrl isCreator verified");
 
     return res.json({ campaigns });
   } catch (error: any) {
@@ -140,10 +140,10 @@ router.post("/", authenticateConsumer, async (req: AuthenticatedRequest, res: Re
     if (!["image", "video", "story_image", "story_video"].includes(adType)) {
       return res.status(400).json({ error: "Invalid advertisement type" });
     }
-    if (!["feed", "story"].includes(placement)) {
+    if (!["feed", "story", "reels"].includes(placement)) {
       return res.status(400).json({ error: "Invalid placement" });
     }
-    if ((placement === "feed" && String(adType).startsWith("story_")) || (placement === "story" && !String(adType).startsWith("story_"))) {
+    if ((placement === "story" && !String(adType).startsWith("story_")) || (placement !== "story" && String(adType).startsWith("story_"))) {
       return res.status(400).json({ error: "Advertisement type does not match the selected placement" });
     }
 
@@ -534,7 +534,8 @@ async function deliverAds(placement: AdPlacement, req: AuthenticatedRequest, res
       eligible = eligible.filter((ad) => !hiddenIds.has(String(ad._id)));
     }
 
-    const delivered = eligible.slice(0, placement === "feed" ? 20 : 10);
+    const deliveryLimit = placement === "feed" ? 20 : placement === "story" ? 10 : 12;
+    const delivered = eligible.slice(0, deliveryLimit);
     const deliveredIds = delivered.map((ad) => ad._id);
     const [commentCounts, viewerLikes] = await Promise.all([
       AdComment.aggregate([
@@ -567,6 +568,7 @@ async function deliverAds(placement: AdPlacement, req: AuthenticatedRequest, res
 
 router.get("/delivery/feed", optionalAdAuth, async (req: AuthenticatedRequest, res: Response) => deliverAds("feed", req, res));
 router.get("/delivery/story", optionalAdAuth, async (req: AuthenticatedRequest, res: Response) => deliverAds("story", req, res));
+router.get("/delivery/reels", optionalAdAuth, async (req: AuthenticatedRequest, res: Response) => deliverAds("reels", req, res));
 
 // Track only eligible active paid ads. Atomic increments avoid lost updates
 // when multiple viewers interact with the same campaign concurrently.

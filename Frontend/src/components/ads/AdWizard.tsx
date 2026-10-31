@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   Upload,
   Loader2,
+  Play,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -49,6 +50,7 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
   const [ctaUrl, setCtaUrl] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaKey, setMediaKey] = useState("");
+  const [uploadedMediaType, setUploadedMediaType] = useState<"image" | "video">("image");
   const [thumbnailUrl, setThumbnailUrl] = useState("");
   const [videoDurationSeconds, setVideoDurationSeconds] = useState<number | undefined>(undefined);
   const [isUploading, setIsUploading] = useState(false);
@@ -76,8 +78,16 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const isVideo = file.type.startsWith("video/");
+    const isVideo = file.type.toLowerCase().startsWith("video/") || /\.(mp4|m4v|mov|webm|avi|mkv|3gp)$/i.test(file.name);
     const kind = isVideo ? "videos" : "photos";
+    // Clear the previous creative while this replacement is uploading. This
+    // prevents Step 2 from trying to decode an old image as a newly selected
+    // video (or vice versa) when the user switches placement immediately.
+    setMediaUrl("");
+    setMediaKey("");
+    setThumbnailUrl("");
+    setVideoDurationSeconds(undefined);
+    setUploadedMediaType(isVideo ? "video" : "image");
 
     if (isVideo) {
       setAdType(placement === "story" ? "story_video" : "video");
@@ -291,6 +301,10 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                   mediaUrl={mediaUrl}
                   mediaKey={mediaKey}
                   thumbnailUrl={thumbnailUrl}
+                  creatorName={user?.name}
+                  creatorUsername={user?.username}
+                  creatorAvatarUrl={user?.avatarUrl || undefined}
+                  creatorAvatarHue={user?.avatarHue}
                 />
               </div>
             </div>
@@ -303,69 +317,18 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                 2. Select Where Your Ad Will Appear
               </h3>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                {/* Feed Placement */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPlacement("feed");
-                    setAdType(
-                      mediaUrl?.includes(".mp4") || mediaUrl?.includes(".mov") ? "video" : "image",
-                    );
-                  }}
-                  className={cn(
-                    "flex flex-col gap-3 rounded-2xl border p-5 text-left transition-all",
-                    placement === "feed"
-                      ? "border-primary bg-primary-soft/30 shadow-md ring-2 ring-primary/20"
-                      : "border-border bg-card hover:bg-muted/40",
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
-                      <Layers className="size-5" />
-                    </span>
-                    {placement === "feed" && <CheckCircle className="size-5 text-primary" />}
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm text-foreground">In-Feed Advertisement</h4>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Appears organically in users' home feeds alongside creator posts marked
-                      clearly as "Sponsored". High visibility and engagement.
-                    </p>
-                  </div>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <button type="button" onClick={() => { setPlacement("feed"); setAdType(uploadedMediaType); }} className={cn("flex flex-col gap-3 rounded-2xl border p-5 text-left transition-all", placement === "feed" ? "border-primary bg-primary-soft/30 shadow-md ring-2 ring-primary/20" : "border-border bg-card hover:bg-muted/40")}>
+                  <div className="flex items-center justify-between"><span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary"><Layers className="size-5" /></span>{placement === "feed" && <CheckCircle className="size-5 text-primary" />}</div>
+                  <div><h4 className="font-bold text-sm text-foreground">In-Feed Advertisement</h4><p className="mt-1 text-xs text-muted-foreground">Appears between organic posts in eligible users' home feeds, clearly marked Sponsored.</p></div>
                 </button>
-
-                {/* Story Placement */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPlacement("story");
-                    setAdType(
-                      mediaUrl?.includes(".mp4") || mediaUrl?.includes(".mov")
-                        ? "story_video"
-                        : "story_image",
-                    );
-                  }}
-                  className={cn(
-                    "flex flex-col gap-3 rounded-2xl border p-5 text-left transition-all",
-                    placement === "story"
-                      ? "border-primary bg-primary-soft/30 shadow-md ring-2 ring-primary/20"
-                      : "border-border bg-card hover:bg-muted/40",
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="grid size-10 place-items-center rounded-xl bg-amber-500/10 text-amber-500">
-                      <ImageIcon className="size-5" />
-                    </span>
-                    {placement === "story" && <CheckCircle className="size-5 text-primary" />}
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm text-foreground">Story Advertisement</h4>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Delivered full-screen between user stories with an interactive swipe-up call
-                      to action. Ideal for mobile immersion.
-                    </p>
-                  </div>
+                <button type="button" onClick={() => { setPlacement("reels"); setAdType(uploadedMediaType); }} className={cn("flex flex-col gap-3 rounded-2xl border p-5 text-left transition-all", placement === "reels" ? "border-primary bg-primary-soft/30 shadow-md ring-2 ring-primary/20" : "border-border bg-card hover:bg-muted/40")}>
+                  <div className="flex items-center justify-between"><span className="grid size-10 place-items-center rounded-xl bg-violet-500/10 text-violet-500"><Play className="size-5" /></span>{placement === "reels" && <CheckCircle className="size-5 text-primary" />}</div>
+                  <div><h4 className="font-bold text-sm text-foreground">Reels Advertisement</h4><p className="mt-1 text-xs text-muted-foreground">Appears as a vertical sponsored slide between organic Reels, with video or image creative and a CTA.</p></div>
+                </button>
+                <button type="button" onClick={() => { setPlacement("story"); setAdType(uploadedMediaType === "video" ? "story_video" : "story_image"); }} className={cn("flex flex-col gap-3 rounded-2xl border p-5 text-left transition-all", placement === "story" ? "border-primary bg-primary-soft/30 shadow-md ring-2 ring-primary/20" : "border-border bg-card hover:bg-muted/40")}>
+                  <div className="flex items-center justify-between"><span className="grid size-10 place-items-center rounded-xl bg-amber-500/10 text-amber-500"><ImageIcon className="size-5" /></span>{placement === "story" && <CheckCircle className="size-5 text-primary" />}</div>
+                  <div><h4 className="font-bold text-sm text-foreground">Story Advertisement</h4><p className="mt-1 text-xs text-muted-foreground">Delivered full-screen between organic Stories with an interactive call to action.</p></div>
                 </button>
               </div>
 
@@ -384,6 +347,10 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                   mediaUrl={mediaUrl}
                   mediaKey={mediaKey}
                   thumbnailUrl={thumbnailUrl}
+                  creatorName={user?.name}
+                  creatorUsername={user?.username}
+                  creatorAvatarUrl={user?.avatarUrl || undefined}
+                  creatorAvatarHue={user?.avatarHue}
                 />
               </div>
             </div>
@@ -579,6 +546,10 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                     mediaUrl={mediaUrl}
                     mediaKey={mediaKey}
                     thumbnailUrl={thumbnailUrl}
+                    creatorName={user?.name}
+                    creatorUsername={user?.username}
+                    creatorAvatarUrl={user?.avatarUrl || undefined}
+                    creatorAvatarHue={user?.avatarHue}
                   />
                 </div>
               </div>

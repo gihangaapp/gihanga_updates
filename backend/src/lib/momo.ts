@@ -30,6 +30,40 @@ export function isMomoConfigured(product: MomoProduct): boolean {
   return productConfig(product) !== null;
 }
 
+/**
+ * MTN requires the callback URL to be supplied on each asynchronous payment
+ * request. The callback host must match the ProviderCallbackHost registered
+ * for this API user. MTN's sandbox and production URL requirements differ;
+ * use the scheme prescribed for the active environment.
+ */
+export function getMomoCallbackUrl(referenceId: string): string | undefined {
+  const configuredUrl = String(process.env.MTN_CALLBACK_URL || "").trim();
+  if (!configuredUrl) return undefined;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(configuredUrl);
+  } catch {
+    throw new Error("MTN_CALLBACK_URL must be a valid absolute URL");
+  }
+
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("MTN_CALLBACK_URL must use HTTP or HTTPS");
+  }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
+    throw new Error("MTN_CALLBACK_URL must not contain credentials, query parameters, or a fragment");
+  }
+  if (TARGET_ENVIRONMENT !== "sandbox" && parsed.protocol !== "https:") {
+    throw new Error("MTN production callbacks must use HTTPS");
+  }
+
+  const base = configuredUrl.replace(/\/+$/, "");
+  if (base.endsWith("/:referenceId")) {
+    return base.replace(/:referenceId$/, encodeURIComponent(referenceId));
+  }
+  return `${base}/${encodeURIComponent(referenceId)}`;
+}
+
 function safeProviderError(operation: string, status?: number) {
   return new Error(`${operation} failed${status ? ` (${status})` : ""}`);
 }
@@ -61,10 +95,11 @@ export function normalizePhone(phone: string) {
   return digits.startsWith("07") ? `250${digits.slice(1)}` : digits;
 }
 
-export async function requestToPay(input: { amount: number; phone: string; externalId: string; payerMessage: string }): Promise<{ referenceId: string }> {
+export async function requestToPay(input: { amount: number; phone: string; externalId: string; payerMessage: string; referenceId?: string; callbackUrl?: string }): Promise<{ referenceId: string }> {
   const config = productConfig("collection");
   if (!config) throw new Error("MTN MoMo Collections credentials are not configured");
-  const referenceId = crypto.randomUUID();
+  const referenceId = input.referenceId || crypto.randomUUID();
+  const callbackUrl = input.callbackUrl || getMomoCallbackUrl(referenceId);
   const token = await getAccessToken("collection");
   const res = await fetch(`${BASE_URL}/collection/v1_0/requesttopay`, {
     method: "POST",
@@ -74,6 +109,7 @@ export async function requestToPay(input: { amount: number; phone: string; exter
       "X-Target-Environment": TARGET_ENVIRONMENT,
       "Ocp-Apim-Subscription-Key": config.subscriptionKey,
       "Content-Type": "application/json",
+      ...(callbackUrl ? { "X-Callback-Url": callbackUrl } : {}),
     },
     body: JSON.stringify({
       amount: String(input.amount),
@@ -99,10 +135,11 @@ export async function getRequestToPayStatus(referenceId: string) {
   return (await res.json()) as { status: "PENDING" | "SUCCESSFUL" | "FAILED"; reason?: string; amount?: string; currency?: string };
 }
 
-export async function transfer(input: { amount: number; phone: string; externalId: string; payerMessage: string }): Promise<{ referenceId: string }> {
+export async function transfer(input: { amount: number; phone: string; externalId: string; payerMessage: string; referenceId?: string; callbackUrl?: string }): Promise<{ referenceId: string }> {
   const config = productConfig("disbursement");
   if (!config) throw new Error("MTN MoMo Disbursements credentials are not configured");
-  const referenceId = crypto.randomUUID();
+  const referenceId = input.referenceId || crypto.randomUUID();
+  const callbackUrl = input.callbackUrl || getMomoCallbackUrl(referenceId);
   const token = await getAccessToken("disbursement");
   const res = await fetch(`${BASE_URL}/disbursement/v1_0/transfer`, {
     method: "POST",
@@ -112,6 +149,7 @@ export async function transfer(input: { amount: number; phone: string; externalI
       "X-Target-Environment": TARGET_ENVIRONMENT,
       "Ocp-Apim-Subscription-Key": config.subscriptionKey,
       "Content-Type": "application/json",
+      ...(callbackUrl ? { "X-Callback-Url": callbackUrl } : {}),
     },
     body: JSON.stringify({
       amount: String(input.amount),

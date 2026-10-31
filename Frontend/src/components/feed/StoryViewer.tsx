@@ -141,7 +141,8 @@ export function StoryViewer({
     storyGroupsSinceAd.current += 1;
     if (storyGroupsSinceAd.current < 3) return false;
     storyGroupsSinceAd.current = 0;
-    setShowingAdIndex(nextStoryAdIndex.current % ads.length);
+    if (nextStoryAdIndex.current >= ads.length) return false;
+    setShowingAdIndex(nextStoryAdIndex.current);
     nextStoryAdIndex.current += 1;
     return true;
   }, [ads.length]);

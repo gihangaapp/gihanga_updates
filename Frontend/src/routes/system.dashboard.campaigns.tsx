@@ -13,6 +13,7 @@ import {
   Clock,
   Eye,
   RotateCcw,
+  Trash2,
   AlertTriangle,
   Sparkles,
   Target,
@@ -30,6 +31,7 @@ import {
   usePauseAd,
   useResumeAd,
   useRefundAd,
+  useRemoveStaffAd,
   Advertisement,
 } from "@/hooks/use-ads";
 import { AdPreview } from "@/components/ads/AdPreview";
@@ -71,6 +73,7 @@ function StaffCampaignsPage() {
   const canApproveAds = hasPermission(staffUser, "ads.approve");
   const canVerifyManualPayment = hasPermission(staffUser, "ads.payment.verify");
   const canManageAds = hasPermission(staffUser, "ads.manage");
+  const canRemoveAds = hasPermission(staffUser, "ads.remove");
 
   const approveAd = useApproveAd();
   const confirmManualPayment = useConfirmManualAdPayment();
@@ -78,6 +81,7 @@ function StaffCampaignsPage() {
   const pauseAd = usePauseAd();
   const resumeAd = useResumeAd();
   const refundAd = useRefundAd();
+  const removeAd = useRemoveStaffAd();
 
   const [previewAd, setPreviewAd] = useState<Advertisement | null>(null);
   const [rejectingAd, setRejectingAd] = useState<Advertisement | null>(null);
@@ -129,6 +133,15 @@ function StaffCampaignsPage() {
     refundAd.mutate(id, {
       onSuccess: (res) => toast.success(res.message || "Refund processed"),
       onError: (err: any) => toast.error(err.message || "Refund failed"),
+    });
+  }
+
+
+  function handleRemoveAd(id: string, title: string) {
+    if (!window.confirm(`Remove "${title}" from public Feed, Stories and Reels? This preserves its audit/payment history but stops further delivery.`)) return;
+    removeAd.mutate(id, {
+      onSuccess: (res) => toast.success(res.message || "Advertisement removed from public delivery"),
+      onError: (err: any) => toast.error(err.message || "Could not remove advertisement"),
     });
   }
 
@@ -352,6 +365,12 @@ function StaffCampaignsPage() {
                         <RotateCcw className="size-3.5" /> Refund
                       </Button>
                     )}
+
+                    {canRemoveAds && c.status !== "cancelled" && (
+                      <Button size="sm" variant="ghost" className="text-danger hover:bg-danger/10" disabled={removeAd.isPending} onClick={() => handleRemoveAd(c._id, c.title)}>
+                        <Trash2 className="size-3.5" /> Remove ad
+                      </Button>
+                    )}
                   </div>
                 </div>
               </AdminCard>
@@ -388,6 +407,8 @@ function StaffCampaignsPage() {
                 thumbnailUrl={previewAd.thumbnailUrl}
                 creatorName={typeof previewAd.creator === "object" ? previewAd.creator.name : undefined}
                 creatorUsername={typeof previewAd.creator === "object" ? previewAd.creator.username : undefined}
+                creatorAvatarUrl={typeof previewAd.creator === "object" ? previewAd.creator.avatarUrl : undefined}
+                creatorAvatarHue={typeof previewAd.creator === "object" ? previewAd.creator.avatarHue : undefined}
               />
             </div>
           </DialogContent>

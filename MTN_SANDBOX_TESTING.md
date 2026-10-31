@@ -2,7 +2,7 @@
 
 ## Preconditions
 
-Run MongoDB, start the backend with `backend/.env`, and start the frontend. For live MTN tests, all Collections credentials must be present and valid, the callback host must be publicly reachable over HTTPS, and the MTN sandbox account must be provisioned according to the current developer portal instructions.[1] [2]
+Run MongoDB, start the backend with `backend/.env`, and start the frontend. For MTN Rwanda sandbox callback tests, follow the portal documentation for the callback URL scheme (the current FAQ says HTTP for sandbox and HTTPS for production), register the exact callback hostname, and include the callback URL in each RequestToPay/Transfer request.[1] [2] Vercel serves deployments over HTTPS and may upgrade incoming HTTP requests, so verify the actual MTN callback behavior on this domain; do not assume a browser GET proves callback delivery.
 
 Use a test account that owns the wallet under test. Never use real customer credentials or real production phone numbers in the sandbox.
 
@@ -21,9 +21,9 @@ Use a test account that owns the wallet under test. Never use real customer cred
 | Successful payment | Create a deposit, approve it in the MTN sandbox test flow, then wait for callback or call `GET /api/v1/wallet/momo/status/:transactionId`. | Transaction becomes `completed`; wallet available balance and lifetime increase exactly once; a success notification is created. |
 | Failed payment | Create a deposit and cause the MTN sandbox flow to reject or fail it. | Transaction becomes `failed`; no wallet credit occurs; failure reason is stored without exposing provider secrets. |
 | Pending payment | Create a deposit and leave it awaiting approval. | Transaction remains `pending`; wallet is not credited; the frontend shows a waiting state and does not create another request on refresh. |
-| Callback | POST the provider-shaped callback payload with the transaction reference and `status: SUCCESSFUL` or `FAILED`. | The backend resolves the internal transaction, validates the allowed state, settles it once, and returns a safe acknowledgement. |
+| Callback | Allow MTN to send its callback using PUT (POST is also accepted) to the per-transaction callback URL. | The backend resolves the saved reference, fetches status directly from MTN, and settles only the provider-confirmed terminal state. |
 | Payment verification | Call the authenticated status endpoint while the provider is pending and after it reaches a terminal state. | The backend, not the frontend, decides the displayed final state. Provider failure is reported as a safe temporary-unavailable error. |
-| Duplicate callback | Send the same successful callback twice. | The first call applies settlement; the second returns a duplicate acknowledgement and does not credit the wallet again. |
+| Duplicate callback | Have MTN deliver the same callback more than once for a test transaction. | The backend re-checks MTN status; the conditional settlement changes the wallet at most once. |
 | Duplicate payment request | Submit the same `idempotencyKey` twice for the same user and payment kind. | The second request returns the existing transaction rather than creating a second MTN request. |
 | Invalid amount | Submit zero, a negative value, a decimal, a non-number, or a value below the configured minimum. | The backend returns `400`; no transaction or wallet update is created. |
 | Unauthorized payment access | Request another user's transaction status or attempt another user's transaction mutation. | The backend returns `404` or `403` according to the route and never reveals the other user's payment data. |
@@ -33,17 +33,19 @@ Use a test account that owns the wallet under test. Never use real customer cred
 | Frontend refresh during pending | Refresh or close and reopen the wallet page before approval. | Existing transactions are reloaded; no automatic second payment request is created. |
 | User closes checkout before approval | Close the dialog without approving. | The transaction stays pending until MTN reports a final state or an operational expiry policy marks it expired. Closing the browser does not create a success or refund event. |
 
-## Manual callback example
+## Safe callback route check
 
-Use only in a controlled local test environment. Replace the placeholder with an actual internal transaction or MTN reference.
+After deploying both projects, make a browser GET request to the Vercel callback path using a non-real test label:
 
 ```bash
-curl -X POST "$BACKEND_URL/api/v1/wallet/momo/callback" \
-  -H 'Content-Type: application/json' \
-  -d '{"referenceId":"REPLACE_WITH_MTN_REFERENCE","status":"SUCCESSFUL"}'
+curl -i "https://gihanga-test.vercel.app/api/v1/wallet/momo/callback/route-check"
 ```
 
-A callback with `status: PENDING` is acknowledged without settlement. Unknown references return `404`. Invalid statuses return `400`.
+Expected result: HTTP `200` with `ok: true` and `acceptedMethods: ["POST", "PUT"]`. This only confirms that Vercel forwarded the GET request to the backend route; it does not prove MTN callback delivery or change any wallet balance.
+
+Do not send a made-up `SUCCESSFUL` callback to simulate payment. For a real sandbox callback test, use the reference created by an actual sandbox payment and let MTN call the URL. The handler ignores callback status as payment proof and queries MTN's status API itself. Unknown references should return `404 Transaction not found`; the route should not return `Endpoint not found`.
+
+MTN documents callbacks as one-shot with no automatic retry. When a callback is missed, use the authenticated `GET /api/v1/wallet/momo/status/:transactionId` endpoint to verify the saved transaction with MTN.[2]
 
 ## Verification checklist
 

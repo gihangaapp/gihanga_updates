@@ -168,6 +168,8 @@ export function AdCard({ campaign }: AdCardProps) {
               thumbnailUrl={campaign.thumbnailUrl}
               creatorName={typeof campaign.creator === "object" ? campaign.creator.name : undefined}
               creatorUsername={typeof campaign.creator === "object" ? campaign.creator.username : undefined}
+              creatorAvatarUrl={typeof campaign.creator === "object" ? campaign.creator.avatarUrl : undefined}
+              creatorAvatarHue={typeof campaign.creator === "object" ? campaign.creator.avatarHue : undefined}
             />
           </div>
         </DialogContent>

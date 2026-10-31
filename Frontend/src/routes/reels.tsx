@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate, useSearch } from "@tanstack/react-router";
 import {
   Bookmark,
@@ -30,6 +30,8 @@ import { ShareSheet } from "@/components/viewing/ShareSheet";
 import { formatCount } from "@/lib/format";
 import { api, FeedPost, mediaUrl } from "@/lib/api-client";
 import { useReelsFeed, useToggleLike, useToggleBookmark, useDeletePost } from "@/hooks/use-posts";
+import { useReelAds, Advertisement } from "@/hooks/use-ads";
+import { FeedAdCard } from "@/components/ads/FeedAdCard";
 import { useFollowUser, useFollowingSet } from "@/hooks/use-social";
 import { useAuth } from "@/lib/auth-context";
 import { logRecommendationEvent } from "@/hooks/use-recommendations";
@@ -93,8 +95,10 @@ function ReelCard({
   isNeighbor,
   isMuted,
   onToggleMute,
+  slideIndex,
 }: {
   reel: FeedPost;
+  slideIndex: number;
   /** The centered, playing reel. */
   isActive: boolean;
   /** Rendered/mounted for instant prev/next navigation, but paused + muted. */
@@ -330,6 +334,7 @@ function ReelCard({
   return (
     <article
       data-reel-id={reel._id}
+      data-reel-slide-index={slideIndex}
       className="relative flex h-full w-full shrink-0 flex-col justify-center overflow-hidden rounded-3xl bg-black select-none shadow-float max-lg:rounded-none max-lg:shadow-none"
     >
       {/* B5.8 — snap points live ONLY on the direct wrapper children of the
@@ -703,7 +708,23 @@ function shouldIgnoreReelKeys(): boolean {
 
 function ReelsPage() {
   const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } = useReelsFeed();
+  const { data: reelAds = [] } = useReelAds();
   const reels = useMemo(() => data?.pages.flatMap((p) => p.posts) ?? [], [data]);
+  // Keep sponsored placements as first-class snap slides. Every seventh
+  // organic Reel may be followed by one unique ad from the server delivery
+  // batch; no returned ad is repeated during the current loaded sequence.
+  const displaySlides = useMemo(() => {
+    const slides: Array<{ kind: "reel"; id: string; reel: FeedPost; reelIndex: number } | { kind: "ad"; id: string; ad: Advertisement }> = [];
+    let nextAdIndex = 0;
+    reels.forEach((reel, reelIndex) => {
+      slides.push({ kind: "reel", id: `reel:${reel._id}`, reel, reelIndex });
+      if ((reelIndex + 1) % 7 === 0 && nextAdIndex < reelAds.length) {
+        const ad = reelAds[nextAdIndex++];
+        slides.push({ kind: "ad", id: `ad:${ad._id}`, ad });
+      }
+    });
+    return slides;
+  }, [reels, reelAds]);
   const [activeReelIndex, setActiveReelIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const navigate = useNavigate();
@@ -712,13 +733,34 @@ function ReelsPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   // B5.8 — mirrors of state for listeners that are registered ONCE.
   const activeIndexRef = useRef(0);
-  const reelsLengthRef = useRef(0);
+  const slidesLengthRef = useRef(0);
+  const previousDisplaySlidesRef = useRef(displaySlides);
   useEffect(() => {
     activeIndexRef.current = activeReelIndex;
   }, [activeReelIndex]);
   useEffect(() => {
-    reelsLengthRef.current = reels.length;
-  }, [reels.length]);
+    slidesLengthRef.current = displaySlides.length;
+  }, [displaySlides.length]);
+
+  // Ad delivery may resolve after the organic Reel feed. Inserting sponsored
+  // slides changes physical indexes, so preserve the exact logical slide the
+  // viewer was watching instead of allowing an ad to replace that Reel mid-view.
+  useLayoutEffect(() => {
+    const previousSlides = previousDisplaySlidesRef.current;
+    if (previousSlides.length > 0 && displaySlides.length > 0) {
+      const previousActive = previousSlides[activeIndexRef.current];
+      if (previousActive) {
+        const nextIndex = displaySlides.findIndex((slide) => slide.id === previousActive.id);
+        if (nextIndex >= 0 && nextIndex !== activeIndexRef.current) {
+          activeIndexRef.current = nextIndex;
+          setActiveReelIndex(nextIndex);
+          const container = containerRef.current;
+          if (container) container.scrollTop = nextIndex * container.clientHeight;
+        }
+      }
+    }
+    previousDisplaySlidesRef.current = displaySlides;
+  }, [displaySlides]);
 
   // B5.8 — while the reels route is mounted the PAGE itself never scrolls:
   // hides the desktop page scrollbar (full-screen player feel) and removes
@@ -739,7 +781,7 @@ function ReelsPage() {
   const goToReelImpl = useCallback((idx: number) => {
     const container = containerRef.current;
     if (!container) return;
-    const target = clampReelIndex(idx, reelsLengthRef.current);
+    const target = clampReelIndex(idx, slidesLengthRef.current);
     container.scrollTo({ top: target * container.clientHeight, behavior: "smooth" });
   }, []);
 
@@ -747,9 +789,9 @@ function ReelsPage() {
    * so chained input mid-animation retargets correctly. */
   const navigateStep = useCallback((dir: 1 | -1) => {
     const container = containerRef.current;
-    if (!container || reelsLengthRef.current === 0) return;
+    if (!container || slidesLengthRef.current === 0) return;
     const current = reelIndexFromScroll(container.scrollTop, container.clientHeight);
-    const target = clampReelIndex(current + dir, reelsLengthRef.current);
+    const target = clampReelIndex(current + dir, slidesLengthRef.current);
     container.scrollTo({ top: target * container.clientHeight, behavior: "smooth" });
   }, []);
   const navigateStepRef = useRef(navigateStep);
@@ -761,7 +803,7 @@ function ReelsPage() {
   const deepLinkHandled = useRef(false);
   useEffect(() => {
     if (deepLinkHandled.current || !deepLinkReel || reels.length === 0) return;
-    const idx = reels.findIndex((r) => r._id === deepLinkReel);
+    const idx = displaySlides.findIndex((slide) => slide.kind === "reel" && slide.reel._id === deepLinkReel);
     if (idx >= 0) {
       deepLinkHandled.current = true;
       setActiveReelIndex(idx);
@@ -771,13 +813,13 @@ function ReelsPage() {
         const container = containerRef.current;
         if (container) {
           container.scrollTo({
-            top: clampReelIndex(idx, reelsLengthRef.current) * container.clientHeight,
+            top: clampReelIndex(idx, slidesLengthRef.current) * container.clientHeight,
             behavior: "auto",
           });
         }
       });
     }
-  }, [deepLinkReel, reels]);
+  }, [deepLinkReel, displaySlides]);
 
   // ── B5.8 — active index from scroll GEOMETRY, committed only once the
   // scroll has SETTLED (scrollend where available, 140ms of quiet as the
@@ -794,7 +836,7 @@ function ReelsPage() {
     const commitIndex = () => {
       const idx = clampReelIndex(
         reelIndexFromScroll(container.scrollTop, container.clientHeight),
-        reelsLengthRef.current,
+        slidesLengthRef.current,
       );
       if (idx !== activeIndexRef.current) {
         activeIndexRef.current = idx;
@@ -848,15 +890,15 @@ function ReelsPage() {
       hasNextPage &&
       !isFetchingNextPage &&
       reels.length > 0 &&
-      activeReelIndex >= reels.length - 3
+      activeReelIndex >= displaySlides.length - 3
     ) {
       void fetchNextPage();
     }
-  }, [activeReelIndex, reels.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
+  }, [activeReelIndex, reels.length, displaySlides.length, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const goToReel = useCallback(
     (idx: number) => {
-      if (idx < 0 || idx >= reelsLengthRef.current) return;
+      if (idx < 0 || idx >= slidesLengthRef.current) return;
       goToReelImpl(idx);
     },
     [goToReelImpl],
@@ -869,7 +911,7 @@ function ReelsPage() {
       if (shouldIgnoreReelKeys()) return;
       // Live length via ref — a closure-captured reels.length goes stale
       // when the feed loads after mount and would leave the keys dead.
-      if (reelsLengthRef.current === 0) return;
+      if (slidesLengthRef.current === 0) return;
 
       // Key-repeat throttle (~120ms) so holding a key doesn't turbo-scroll.
       const now = Date.now();
@@ -905,7 +947,7 @@ function ReelsPage() {
           // rendering means querySelectorAll("article video") indices do NOT
           // match reel indices; the old lookup toggled the wrong video).
           const activeArticle =
-            containerRef.current?.querySelectorAll("article[data-reel-id]")[activeReelIndex];
+            containerRef.current?.querySelector(`article[data-reel-slide-index="${activeReelIndex}"]`);
           const target = activeArticle?.querySelector("video");
           if (target instanceof HTMLVideoElement) {
             if (target.paused) void target.play().catch(() => {});
@@ -919,7 +961,7 @@ function ReelsPage() {
           // B5.8 — target it by data attribute: querying the first generic
           // `.press` button hit the header MUTE button instead.
           const activeArticle =
-            containerRef.current?.querySelectorAll("article[data-reel-id]")[activeReelIndex];
+            containerRef.current?.querySelector(`article[data-reel-slide-index="${activeReelIndex}"]`);
           activeArticle?.querySelector<HTMLButtonElement>('[data-reel-action="like"]')?.click();
           break;
         }
@@ -981,6 +1023,8 @@ function ReelsPage() {
     };
   }, []);
 
+  const activeSlide = displaySlides[activeReelIndex];
+
   return (
     <AppShell immersiveMobile>
       {/* B5 — ONE scroll container with a definite height (dvh, not vh: the
@@ -993,7 +1037,7 @@ function ReelsPage() {
         <div className="relative min-h-0 flex-1">
           {/* Sticky arrows — always visible while scrolling, on desktop AND
               touch; disabled at the ends; visible focus ring for a11y. */}
-          {reels.length > 1 && (
+          {displaySlides.length > 1 && (
             <div className="absolute -right-14 top-1/2 z-30 hidden -translate-y-1/2 flex-col gap-2 lg:flex">
               <button
                 type="button"
@@ -1007,7 +1051,7 @@ function ReelsPage() {
               </button>
               <button
                 type="button"
-                disabled={activeReelIndex === reels.length - 1}
+                disabled={activeReelIndex === displaySlides.length - 1}
                 onClick={() => goToReel(activeReelIndex + 1)}
                 className="press grid size-11 place-items-center rounded-full bg-surface border border-border shadow-soft text-foreground disabled:opacity-30 focus-visible:ring-2 focus-visible:ring-ring"
                 title="Next Reel (↓ / j)"
@@ -1039,24 +1083,27 @@ function ReelsPage() {
                 </Button>
               </div>
             )}
-            {reels.map((r, i) => (
+            {displaySlides.map((slide, slideIndex) => (
               <div
-                key={r._id}
+                key={slide.id}
                 className="h-full w-full shrink-0 p-1 pb-2 max-lg:p-0"
                 style={{ scrollSnapAlign: "start", scrollSnapStop: "always" }}
               >
-                {/* B5.8 — snap points are declared HERE only (direct children
-                    of the scroller): align-start + stop-always per card, one
-                    unambiguous point per reel, flings can never skip cards. */}
-                <ReelCard
-                  reel={r}
-                  isActive={i === activeReelIndex}
-                  isNeighbor={Math.abs(i - activeReelIndex) === 1}
-                  isMuted={isMuted}
-                  onToggleMute={() => setIsMuted((prev) => !prev)}
-                />
+                {slide.kind === "reel" ? (
+                  <ReelCard
+                    reel={slide.reel}
+                    slideIndex={slideIndex}
+                    isActive={slideIndex === activeReelIndex}
+                    isNeighbor={Math.abs(slideIndex - activeReelIndex) === 1}
+                    isMuted={isMuted}
+                    onToggleMute={() => setIsMuted((prev) => !prev)}
+                  />
+                ) : (
+                  <FeedAdCard ad={slide.ad} variant="reel" isActive={slideIndex === activeReelIndex} />
+                )}
               </div>
             ))}
+
             {/* Skeleton row while prefetching the next page — compact (a
                 full-height row here would add a viewport-sized block to the
                 snap scroller for no reason; it is unreachable past the last
@@ -1070,9 +1117,11 @@ function ReelsPage() {
 
           {/* A11y: announce the current reel. */}
           <p aria-live="polite" className="sr-only">
-            {reels[activeReelIndex]
-              ? `Reel ${activeReelIndex + 1} of ${reels.length} by @${reels[activeReelIndex]?.author?.username ?? "creator"}`
-              : ""}
+            {activeSlide?.kind === "reel"
+              ? `Reel ${activeSlide.reelIndex + 1} of ${reels.length} by @${(typeof activeSlide.reel.author === "object" ? activeSlide.reel.author?.username : undefined) ?? "creator"}`
+              : activeSlide?.kind === "ad"
+                ? "Sponsored advertisement"
+                : ""}
           </p>
         </div>
       </div>

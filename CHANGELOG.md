@@ -1,3 +1,10 @@
+## 2026-10-30 — MTN callback routing
+
+- Added Vercel external rewrites for the base MoMo callback path and its per-transaction reference path.
+- Added backend GET reachability checks and POST/PUT callback handlers with optional reference path segments.
+- Included `X-Callback-Url` in collection/disbursement requests when configured and persisted the MTN reference before submission.
+- Verify callback status with MTN before applying wallet settlement.
+
 # Changelog — Gihanga Updates engineering pass
 
 All work below follows the master engineering brief (Parts A & B + §8 defects).

@@ -5,7 +5,7 @@ import { mediaUrl as resolveMediaUrl, mediaUrlWithAuth } from "@/lib/api-client"
 
 interface AdPreviewProps {
   adType: "image" | "video" | "story_image" | "story_video";
-  placement: "feed" | "story";
+  placement: "feed" | "story" | "reels";
   title: string;
   caption?: string | undefined;
   ctaText?: string | undefined;
@@ -15,6 +15,8 @@ interface AdPreviewProps {
   thumbnailUrl?: string | undefined;
   creatorName?: string | undefined;
   creatorUsername?: string | undefined;
+  creatorAvatarUrl?: string | undefined;
+  creatorAvatarHue?: number | undefined;
 }
 
 function MissingMedia({ label }: { label: string }) {
@@ -22,6 +24,38 @@ function MissingMedia({ label }: { label: string }) {
     <div className="grid h-full w-full place-items-center gap-2 bg-slate-900 p-5 text-center text-xs text-white/75">
       <ImageOff className="size-5" />
       <span>{label}</span>
+    </div>
+  );
+}
+
+function AdvertiserAvatar({
+  src,
+  name,
+  hue,
+  sizeClass,
+}: {
+  src?: string | undefined;
+  name: string;
+  hue: number;
+  sizeClass: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+  const initials = name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "A";
+  return (
+    <div
+      className={`relative grid shrink-0 place-items-center overflow-hidden rounded-full text-xs font-bold text-white ${sizeClass}`}
+      style={{ background: `linear-gradient(140deg, oklch(0.5 0.11 ${hue}), oklch(0.74 0.1 ${hue + 24}))` }}
+    >
+      <span aria-hidden="true">{initials}</span>
+      {src && !failed && (
+        <img
+          src={src}
+          alt={name}
+          className="absolute inset-0 size-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      )}
     </div>
   );
 }
@@ -36,8 +70,10 @@ export function AdPreview({
   mediaUrl,
   mediaKey,
   thumbnailUrl,
-  creatorName = "Your Brand",
-  creatorUsername = "yourbrand",
+  creatorName = "Account",
+  creatorUsername = "account",
+  creatorAvatarUrl,
+  creatorAvatarHue = 250,
 }: AdPreviewProps) {
   // Pending campaign media remains quarantined. Add the current consumer or
   // staff token to the checked media URL so <img>/<video> can preview it.
@@ -45,14 +81,16 @@ export function AdPreview({
   const mediaPath = mediaUrl || (mediaKey ? `/api/v1/media/file/${mediaKey}` : undefined);
   const resolvedMedia = mediaUrlWithAuth(resolveMediaUrl(mediaPath) || mediaPath);
   const resolvedThumbnail = mediaUrlWithAuth(resolveMediaUrl(thumbnailUrl) || thumbnailUrl);
+  const resolvedAvatar = mediaUrlWithAuth(resolveMediaUrl(creatorAvatarUrl) || creatorAvatarUrl);
   const isVideo = adType.includes("video");
+  const placementLabel = placement === "reels" ? "Reels" : "Stories";
   const [mediaFailed, setMediaFailed] = useState(false);
 
   useEffect(() => {
     setMediaFailed(false);
   }, [resolvedMedia]);
 
-  if (placement === "story") {
+  if (placement !== "feed") {
     return (
       <div className="relative mx-auto aspect-[9/16] w-full max-w-[260px] overflow-hidden rounded-3xl border border-border bg-slate-900 shadow-2xl">
         {resolvedMedia && !mediaFailed ? (
@@ -70,11 +108,11 @@ export function AdPreview({
           ) : (
             <img src={resolvedMedia} alt={title} decoding="async" onError={() => setMediaFailed(true)} className="h-full w-full object-cover" />
           )
-        ) : <MissingMedia label={mediaFailed ? "Advertisement media could not be loaded. Check the upload or media permissions." : "Upload media to preview this Story advertisement"} />}
+        ) : <MissingMedia label={mediaFailed ? `Advertisement media could not be loaded. Check the upload or media permissions. (${placementLabel})` : `Upload media to preview this ${placementLabel} advertisement`} />}
 
         <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/80 via-black/40 to-transparent p-3 text-white">
           <div className="flex items-center gap-2">
-            <div className="grid size-8 place-items-center rounded-full bg-indigo-600 text-xs font-bold text-white">{creatorName[0]?.toUpperCase()}</div>
+            <AdvertiserAvatar src={resolvedAvatar} name={creatorName} hue={creatorAvatarHue} sizeClass="size-8" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-bold leading-tight">{creatorName}</p>
               <p className="text-[10px] text-white/70">@{creatorUsername}</p>
@@ -98,7 +136,7 @@ export function AdPreview({
     <div className="surface-card overflow-hidden border border-border">
       <div className="flex items-center justify-between p-3.5">
         <div className="flex items-center gap-2.5">
-          <div className="grid size-9 place-items-center rounded-full bg-indigo-600 text-xs font-bold text-white">{creatorName[0]?.toUpperCase()}</div>
+          <AdvertiserAvatar src={resolvedAvatar} name={creatorName} hue={creatorAvatarHue} sizeClass="size-9" />
           <div>
             <div className="flex items-center gap-1.5">
               <span className="text-xs font-bold text-foreground">{creatorName}</span>

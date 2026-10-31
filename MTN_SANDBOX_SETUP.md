@@ -23,7 +23,7 @@ Copy `backend/.env.example` to `backend/.env` on the backend host only. Replace 
 | `MTN_BASE_URL` | `https://sandbox.momodeveloper.mtn.com` | Sandbox API base URL. Confirm the value in the current MTN workspace documentation before go-live. |
 | `MTN_TARGET_ENVIRONMENT` | `sandbox` or the exact target value supplied by MTN | Sent as `X-Target-Environment`. |
 | `MTN_CURRENCY` | Sandbox currency supplied by MTN; the example is `EUR` | Currency sent to MTN. Do not assume production RWF behavior from sandbox behavior. |
-| `MTN_CALLBACK_URL` | Public HTTPS URL ending in `/api/v1/wallet/momo/callback` | Callback destination to register or provide to MTN if required for the account. |
+| `MTN_CALLBACK_URL` | Public callback base URL ending in `/api/v1/wallet/momo/callback` | The backend appends the per-transaction reference ID and sends this URL in `X-Callback-Url`. MTN requires its hostname to match the API User's `providerCallbackHost`. |
 | `MTN_COLLECTION_SUBSCRIPTION_KEY` | MTN Collections subscription key | Backend-only subscription credential for deposits. |
 | `MTN_COLLECTION_API_USER` | MTN Collections API user UUID | Used only by the backend to obtain a Collections token. |
 | `MTN_COLLECTION_API_KEY` | MTN Collections API key | Used only by the backend to obtain a Collections token. |
@@ -38,7 +38,7 @@ The legacy `MOMO_*` variables remain readable by the service for backward compat
 
 The project cannot complete a real sandbox payment until the MTN developer account, product subscriptions, API users, API keys, callback host registration, and sandbox test rules have been configured. The official developer portal is the source of truth for the current provisioning sequence and any Rwanda-specific requirements.[3] [4]
 
-The callback URL must be reachable from MTN over HTTPS in the deployed environment. Localhost is not sufficient for MTN callbacks. If MTN requires a registered callback host, register the host in the developer portal before testing.
+The callback URL must be publicly reachable from MTN; Localhost is not sufficient. MTN Rwanda's sandbox FAQ currently specifies HTTP for sandbox callback URLs and HTTPS for production. Allow both PUT and POST on the listener. Vercel serves deployments over HTTPS and may upgrade incoming HTTP requests before applying rewrites, so confirm that the sandbox callback sender follows the redirect; until then, use the authenticated status endpoint to verify sandbox outcomes. The callback is sent only once, so the backend also verifies the callback by querying MTN's status endpoint before settling the wallet. For this deployment, the configured API User host is `gihanga-test.vercel.app`; use that exact host in `MTN_CALLBACK_URL` without changing the subdomain.
 
 ## Production transition
 

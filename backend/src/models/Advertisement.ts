@@ -2,7 +2,7 @@ import { Schema, model, Document, Types } from "mongoose";
 
 // ─── Ad type and placement ────────────────────────────────────────────────────
 export type AdType = "image" | "video" | "story_image" | "story_video";
-export type AdPlacement = "feed" | "story";
+export type AdPlacement = "feed" | "story" | "reels";
 
 // ─── Status lifecycle ─────────────────────────────────────────────────────────
 export type AdStatus =
@@ -172,7 +172,7 @@ const AdvertisementSchema = new Schema<IAdvertisement>(
     },
     placement: {
       type: String,
-      enum: ["feed", "story"],
+      enum: ["feed", "story", "reels"],
       required: true,
     },
     title: { type: String, required: true, maxlength: 100 },

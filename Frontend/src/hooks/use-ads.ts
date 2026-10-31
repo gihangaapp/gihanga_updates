@@ -3,7 +3,7 @@ import { api } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 
 export type AdType = "image" | "video" | "story_image" | "story_video";
-export type AdPlacement = "feed" | "story";
+export type AdPlacement = "feed" | "story" | "reels";
 export type AdStatus =
   | "draft"
   | "pending_payment"
@@ -327,6 +327,25 @@ export function useStoryAds() {
   });
 }
 
+export function useReelAds() {
+  const { user, staffUser } = useAuth();
+  const isStaffSession = Boolean(staffUser && !user);
+  const viewerKey = user?.id || staffUser?.id || "anonymous";
+  return useQuery({
+    queryKey: ["ads", "delivery", "reels", viewerKey],
+    queryFn: async () => {
+      try {
+        const res = await api.get<{ ads: Advertisement[] }>("/ads/delivery/reels", isStaffSession);
+        return res?.ads ?? [];
+      } catch (err) {
+        console.error("[useReelAds Error]:", err);
+        return [];
+      }
+    },
+    staleTime: 30000,
+  });
+}
+
 export function useAdReaction() {
   const queryClient = useQueryClient();
   const { user, staffUser } = useAuth();
@@ -452,6 +471,9 @@ export function useAdFeedback() {
           current?.filter((ad) => ad._id !== variables.id),
         );
         queryClient.setQueriesData<Advertisement[]>({ queryKey: ["ads", "delivery", "story"] }, (current) =>
+          current?.filter((ad) => ad._id !== variables.id),
+        );
+        queryClient.setQueriesData<Advertisement[]>({ queryKey: ["ads", "delivery", "reels"] }, (current) =>
           current?.filter((ad) => ad._id !== variables.id),
         );
       }
@@ -599,6 +621,18 @@ export function useDisableAd() {
     mutationFn: (id: string) =>
       api.post<{ campaign: Advertisement }>(`/system/ads/${id}/disable`, undefined, true),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["staff", "ads"] }),
+  });
+}
+
+export function useRemoveStaffAd() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete<{ success: boolean; message: string }>(`/system/ads/${id}`, true),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["staff", "ads"] });
+      queryClient.invalidateQueries({ queryKey: ["staff", "ads", "summary"] });
+      queryClient.invalidateQueries({ queryKey: ["ads"] });
+    },
   });
 }
 

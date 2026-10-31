@@ -1,4 +1,5 @@
-import { Router, Response } from "express";
+import { Router, Request, Response } from "express";
+import crypto from "node:crypto";
 import mongoose from "mongoose";
 import { authenticateConsumer, AuthenticatedRequest } from "../../../middleware/rbac";
 import { getWalletSummary, applyLedgerEntry, debitWalletAtomic } from "../../../lib/wallet";
@@ -6,7 +7,7 @@ import { getPointsToCashRate } from "../../../lib/rewards";
 import { Transaction } from "../../../models/Transaction";
 import { Wallet } from "../../../models/Wallet";
 import { User } from "../../../models/User";
-import { requestToPay, transfer, isMomoConfigured, getRequestToPayStatus, getTransferStatus, normalizePhone, getMomoCurrency } from "../../../lib/momo";
+import { requestToPay, transfer, isMomoConfigured, getRequestToPayStatus, getTransferStatus, normalizePhone, getMomoCurrency, getMomoCallbackUrl } from "../../../lib/momo";
 import { settleMomoTransaction } from "../../../lib/paymentSettlement";
 import { notify } from "../../../lib/notify";
 import { notifyStaff } from "../../../lib/staffNotify";
@@ -91,15 +92,21 @@ router.post("/deposit", authenticateConsumer, async (req: AuthenticatedRequest, 
 
     if (isMomoConfigured("collection")) {
       try {
-        const { referenceId } = await requestToPay({
+        // Save the same reference used in X-Reference-Id before contacting MTN.
+        // This prevents a very fast callback racing the initial request response.
+        const referenceId = crypto.randomUUID();
+        const callbackUrl = getMomoCallbackUrl(referenceId);
+        tx.momoReferenceId = referenceId;
+        tx.momoStatus = "PENDING";
+        await tx.save();
+        await requestToPay({
           amount: numericAmount,
           phone: normalizedPhone,
           externalId: String(tx._id),
           payerMessage: "Gihanga Updates wallet deposit",
+          referenceId,
+          callbackUrl,
         });
-        tx.momoReferenceId = referenceId;
-        tx.momoStatus = "PENDING";
-        await tx.save();
         return res.status(202).json({
           transaction: tx,
           message: "Check your phone to approve the payment request.",
@@ -169,15 +176,21 @@ router.post("/withdraw", authenticateConsumer, async (req: AuthenticatedRequest,
 
     if (isMomoConfigured("disbursement")) {
       try {
-        const { referenceId } = await transfer({
+        // Persist the reference before submission so the callback can resolve
+        // the transaction even if MTN responds very quickly.
+        const referenceId = crypto.randomUUID();
+        const callbackUrl = getMomoCallbackUrl(referenceId);
+        tx.momoReferenceId = referenceId;
+        tx.momoStatus = "PENDING";
+        await tx.save();
+        await transfer({
           amount: numericAmount,
           phone: normalizedPhone,
           externalId: String(tx._id),
           payerMessage: "Gihanga Updates wallet withdrawal",
+          referenceId,
+          callbackUrl,
         });
-        tx.momoReferenceId = referenceId;
-        tx.momoStatus = "PENDING";
-        await tx.save();
         return res.status(202).json({ transaction: tx, message: "Withdrawal submitted to MTN MoMo.", mode: "live" });
       } catch (momoError: any) {
         // Roll back the hold — the disbursement never actually left.
@@ -216,65 +229,72 @@ router.get("/momo/status/:transactionId", authenticateConsumer, async (req: Auth
   }
 });
 
-// POST /api/v1/wallet/momo/callback — MTN's async webhook for both Collections and Disbursements.
-// Public endpoint (MTN calls it directly) — the payload's reference id is the only proof needed
-// since it's an unguessable UUID we generated and control.
-router.post("/momo/callback", async (req, res: Response) => {
+// Public callback reachability check. GET never changes payment state.
+const callbackHealth = (_req: Request, res: Response) =>
+  res.status(200).json({
+    ok: true,
+    endpoint: "MTN MoMo callback",
+    acceptedMethods: ["POST", "PUT"],
+    message: "Callback endpoint is reachable. GET is a health check only.",
+  });
+
+router.get("/momo/callback", callbackHealth);
+router.get("/momo/callback/:referenceId", callbackHealth);
+
+// MTN sends callbacks using PUT (and some integration setups use POST).
+// Never trust a callback's status as proof of payment: fetch the authoritative
+// MTN transaction status before settling a wallet ledger entry.
+const momoCallbackHandler = async (req: Request, res: Response) => {
   try {
-        const { referenceId, externalId, status, reason } = req.body || {};
-    const lookup = referenceId || externalId;
-    if (!lookup || !["PENDING", "SUCCESSFUL", "FAILED"].includes(status)) return res.status(400).json({ error: "Invalid MTN callback" });
-    const references: Record<string, unknown>[] = [{ momoReferenceId: lookup }, { internalReferenceId: lookup }];
+    const body = req.body && typeof req.body === "object" ? req.body : {};
+    const lookup = String(req.params.referenceId || body.referenceId || body.externalId || "").trim();
+    if (!lookup) return res.status(400).json({ error: "Callback reference is required" });
+
+    const references: Record<string, unknown>[] = [
+      { momoReferenceId: lookup },
+      { internalReferenceId: lookup },
+    ];
     if (mongoose.isValidObjectId(lookup)) references.push({ _id: lookup });
+
     const tx = await Transaction.findOne({ $or: references });
     if (!tx) return res.status(404).json({ error: "Transaction not found" });
-    if (status === "PENDING") return res.status(200).json({ ok: true, status: "pending" });
-    const settled = await settleMomoTransaction(String(tx._id), status, reason);
-    if (settled.applied) {
-      await notify({ recipient: String(tx.user), kind: "payment", text: status === "SUCCESSFUL" ? (tx.kind === "deposit" ? `Your deposit of ${Math.abs(tx.amount)} was successful` : `Your withdrawal of ${Math.abs(tx.amount)} was completed`) : `Your ${tx.kind} could not be completed` });
+    if (!tx.momoReferenceId) {
+      return res.status(409).json({ error: "MTN reference is not attached to this transaction yet" });
     }
-    return res.status(200).json({ ok: true, duplicate: !settled.applied });
 
-    /* Legacy callback mutation removed: settlement is now provider-verified and idempotent.
-    const wallet = await Wallet.findById(tx.wallet);
+    const provider = tx.kind === "payout"
+      ? await getTransferStatus(tx.momoReferenceId)
+      : await getRequestToPayStatus(tx.momoReferenceId);
 
-    if (status === "SUCCESSFUL") {
-      tx.status = "completed";
-      if (wallet) {
-        if (tx.kind === "deposit") {
-          wallet.available += tx.amount;
-          wallet.lifetime += tx.amount;
-        } else if (tx.kind === "payout") {
-          wallet.pending += tx.amount; // amount is negative for payouts — this releases the hold
-        }
-        await wallet.save();
-      }
+    if (provider.status === "PENDING") {
+      return res.status(200).json({ ok: true, status: "PENDING" });
+    }
+    if (provider.status !== "SUCCESSFUL" && provider.status !== "FAILED") {
+      return res.status(502).json({ error: "MTN returned an unrecognized payment status" });
+    }
+
+    const settled = await settleMomoTransaction(String(tx._id), provider.status, provider.reason);
+    if (settled.applied) {
       await notify({
         recipient: String(tx.user),
         kind: "payment",
-        text:
-          tx.kind === "deposit"
-            ? `Your deposit of ${Math.abs(tx.amount)} was successful`
-            : `Your withdrawal of ${Math.abs(tx.amount)} was completed`,
+        text: provider.status === "SUCCESSFUL"
+          ? (tx.kind === "deposit" ? `Your deposit of ${Math.abs(tx.amount)} was successful` : `Your withdrawal of ${Math.abs(tx.amount)} was completed`)
+          : `Your ${tx.kind} could not be completed`,
       });
-    } else if (status === "FAILED") {
-      tx.status = "failed";
-      if (wallet && tx.kind === "payout") {
-        // Release the hold back to available since the payout never happened.
-        wallet.available += Math.abs(tx.amount);
-        wallet.pending += tx.amount;
-        await wallet.save();
-      }
-      await notify({ recipient: String(tx.user), kind: "payment", text: `Your ${tx.kind} could not be completed` });
     }
-
-    await tx.save();
-    return res.status(200).json({ ok: true });
-    */
-  } catch (error: any) {
-    return res.status(500).json({ error: "Callback processing failed", details: error.message });
+    return res.status(200).json({ ok: true, status: provider.status, duplicate: !settled.applied });
+  } catch {
+    // MTN's callback is one-shot in this API. A non-2xx response is visible in
+    // logs; the authenticated status endpoint/reconciler can still verify it.
+    return res.status(502).json({ error: "Callback status verification failed; no wallet change was applied" });
   }
-});
+};
+
+router.post("/momo/callback", momoCallbackHandler);
+router.put("/momo/callback", momoCallbackHandler);
+router.post("/momo/callback/:referenceId", momoCallbackHandler);
+router.put("/momo/callback/:referenceId", momoCallbackHandler);
 
 // POST /api/v1/wallet/convert-points — Kingdom Points → cash balance, at the admin-set rate
 router.post("/convert-points", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {

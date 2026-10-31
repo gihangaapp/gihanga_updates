@@ -1,5 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "rewrites": [
+    {
+      "source": "/api/v1/wallet/momo/callback",
+      "destination": "https://gihanga-updates.onrender.com/api/v1/wallet/momo/callback"
+    },
+    {
+      "source": "/api/v1/wallet/momo/callback/:referenceId",
+      "destination": "https://gihanga-updates.onrender.com/api/v1/wallet/momo/callback/:referenceId"
+    }
+  ]
 }

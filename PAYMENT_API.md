@@ -1,6 +1,6 @@
 # Gihanga Payment API
 
-All endpoints are mounted below `/api/v1`. Consumer endpoints require the existing consumer bearer token. The callback endpoint is public because MTN calls it directly, but it accepts only recognized transaction references and terminal provider states.
+All endpoints are mounted below `/api/v1`. Consumer endpoints require the existing consumer bearer token. The callback endpoint is public because MTN calls it directly. Its reference is used only to locate a saved transaction; the backend queries MTN for the authoritative state before applying a wallet change.
 
 ## `GET /wallet/me`
 
@@ -44,21 +44,17 @@ A successful provider callback completes the payout and releases the pending hol
 
 Authenticates the consumer and verifies ownership of the internal transaction. The backend calls the appropriate MTN status endpoint using the server-side credentials. Terminal MTN states are passed through the idempotent settlement layer. The frontend cannot submit a success state.
 
-## `POST /wallet/momo/callback`
+## MTN callback routes
 
-MTN callback endpoint. The implementation accepts a recognized `referenceId` or `externalId`, plus one of `PENDING`, `SUCCESSFUL`, or `FAILED`.
+The backend exposes these public routes:
 
-```json
-{
-  "referenceId": "mtn-request-reference",
-  "status": "SUCCESSFUL",
-  "reason": "optional-provider-reason"
-}
-```
+- `GET /wallet/momo/callback` and `GET /wallet/momo/callback/:referenceId` — reachability checks only. They never change payment state.
+- `POST` and `PUT /wallet/momo/callback` — callback requests without a reference in the path; the body must include `referenceId` or `externalId`.
+- `POST` and `PUT /wallet/momo/callback/:referenceId` — callback requests with the MTN reference in the path. The path reference takes priority over body fields.
 
-The implementation also accepts `externalId` when the MTN callback uses the request's external identifier. `PENDING` is acknowledged without a wallet mutation. A terminal callback conditionally claims the pending transaction before applying any financial effect. A repeated callback returns an acknowledgement with `duplicate: true` and does not credit or debit again.
+The callback body is not treated as proof of success. The backend finds the saved transaction and calls the appropriate MTN status endpoint using its stored MTN reference. Only MTN's authoritative `PENDING`, `SUCCESSFUL`, or `FAILED` result is passed to the idempotent settlement helper. A repeated terminal callback cannot credit or debit the wallet twice.
 
-The deployment must use the current callback payload and registration requirements supplied by MTN. The endpoint deliberately does not treat an arbitrary frontend request as proof of payment.
+The payment request includes `X-Callback-Url` when `MTN_CALLBACK_URL` is configured. The backend appends the transaction reference ID to that base URL and saves the same reference before submitting the request. The callback hostname must exactly match the API User's registered `providerCallbackHost`.
 
 ## State model
 
