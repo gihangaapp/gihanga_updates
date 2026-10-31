@@ -24,14 +24,14 @@ import { toast } from "sonner";
 import logoImg from "@/assets/logo.png";
 import { useAuth, passwordScore, strengthLabels } from "@/lib/auth-context";
 import { useTheme } from "@/hooks/use-theme";
-import { useCreateStaff } from "@/hooks/use-staff-management";
-import { ROLE_LABEL } from "@/lib/permissions";
+import { useCreateStaff, useStaffSetupStatus } from "@/hooks/use-staff-management";
+import { hasPermission, ROLE_LABEL } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/system/register")({
   head: () => ({
     meta: [
-      { title: "Register Administrator — Gihanga Updates" },
+      { title: "Staff Registration — Gihanga Updates" },
       { name: "robots", content: "noindex" },
     ],
   }),
@@ -55,7 +55,7 @@ const ROLE_CARDS: RoleCardConfig[] = [
     title: "Moderator",
     badge: "Safety",
     blurb: "First line of defense for community safety.",
-    perks: ["Review reports & AI flags", "Watch live streams", "View user accounts"],
+    perks: ["Review reports and AI safety flags", "Escalate harmful live streams", "View relevant user account context"],
     icon: ShieldCheck,
   },
   {
@@ -63,7 +63,7 @@ const ROLE_CARDS: RoleCardConfig[] = [
     title: "Admin",
     badge: "Operations",
     blurb: "Full operational control of the platform.",
-    perks: ["Everything a Moderator can", "Suspend / ban accounts", "Approve payments & ads"],
+    perks: ["Manage platform users and content", "Review payments and ad campaigns", "View platform analytics"],
     icon: Shield,
   },
   {
@@ -71,7 +71,7 @@ const ROLE_CARDS: RoleCardConfig[] = [
     title: "Super Admin",
     badge: "Full Access",
     blurb: "Complete command including staff and settings.",
-    perks: ["Everything an Admin can", "Register & manage staff", "Platform settings & flags"],
+    perks: ["Everything an Admin can", "Create and manage staff", "Control platform settings and security"],
     icon: Crown,
   },
 ];
@@ -81,26 +81,30 @@ function StaffRegisterPage() {
   const { staffUser, signInStaff } = useAuth();
   const { theme, toggle } = useTheme();
   const createStaff = useCreateStaff();
+  const { data: setupStatus, isLoading: setupStatusLoading, isError: setupStatusError } = useStaffSetupStatus(!staffUser);
 
   const [form, setForm] = useState({
     name: "",
     username: "",
     email: "",
     password: "",
-    role: "moderator" as Role,
+    bootstrapSecret: "",
+    role: (staffUser ? "moderator" : "superadmin") as Role,
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-  const [switchAccount, setSwitchAccount] = useState(!staffUser);
+  const isBootstrap = !staffUser && setupStatus?.setupAvailable === true;
+  const canProvision = staffUser ? hasPermission(staffUser, "staff.create") : isBootstrap;
 
   const strength = passwordScore(form.password);
   const usernameValid = /^[a-zA-Z0-9_]{3,20}$/.test(form.username);
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
   const passwordValid = form.password.length >= 8;
+  const bootstrapSecretValid = !isBootstrap || form.bootstrapSecret.length >= 32;
 
   const canSubmit =
-    form.name.trim().length >= 2 && usernameValid && emailValid && passwordValid && !createStaff.isPending;
+    form.name.trim().length >= 2 && usernameValid && emailValid && passwordValid && bootstrapSecretValid && !createStaff.isPending;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -116,16 +120,17 @@ function StaffRegisterPage() {
         email: form.email.trim().toLowerCase(),
         password: form.password,
         role: form.role,
+        ...(isBootstrap ? { bootstrapSecret: form.bootstrapSecret } : {}),
       });
 
-      if (switchAccount || !staffUser) {
+      if (isBootstrap && result.tokens) {
         signInStaff(result.tokens, result.user);
-        toast.success(`Administrator registered — signed in as ${ROLE_LABEL[result.user.role]}.`, {
-          description: `${result.user.name} (@${result.user.username}) is now active.`,
+        toast.success("Initial Super Admin account created", {
+          description: `${result.user.name} (@${result.user.username}) is now signed in.`,
         });
         navigate({ to: "/system/dashboard" });
       } else {
-        toast.success(`Administrator account created successfully!`, {
+        toast.success("Staff account created successfully", {
           description: `${result.user.name} (@${result.user.username}) registered as ${ROLE_LABEL[result.user.role]}.`,
         });
         navigate({ to: "/system/dashboard/staff" });
@@ -139,6 +144,35 @@ function StaffRegisterPage() {
     () => ["bg-danger", "bg-danger", "bg-warning", "bg-info", "bg-success"][strength],
     [strength],
   );
+
+  if ((!staffUser && setupStatusLoading) || (!staffUser && !setupStatus && !setupStatusError)) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background px-5">
+        <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-5 py-4 text-sm text-muted-foreground shadow-soft">
+          <Loader2 className="size-4 animate-spin text-primary" /> Checking secure staff setup…
+        </div>
+      </div>
+    );
+  }
+
+  if (!canProvision) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background px-5">
+        <div className="w-full max-w-md rounded-3xl border border-border bg-card p-7 text-center shadow-soft">
+          <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-danger/10 text-danger"><Shield className="size-6" /></span>
+          <h1 className="mt-4 font-display text-xl font-extrabold text-foreground">Staff registration unavailable</h1>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            {staffUser
+              ? "Only the Super Admin can create staff accounts."
+              : setupStatusError
+                ? "We couldn't verify whether initial setup is available. Try again later or contact the platform owner."
+                : "The initial Super Admin setup has already been completed. Sign in with an authorized staff account."}
+          </p>
+          <Link to="/system" className="press mt-5 inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-bold text-primary-foreground">Go to staff sign in <ArrowRight className="size-4" /></Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative flex min-h-screen bg-background">
@@ -199,12 +233,12 @@ function StaffRegisterPage() {
               </span>
             </h1>
             <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-white/75">
-              Select a role and register Moderators, Admins, or Super Admins with scoped permissions matching their platform responsibilities.
+              The first setup creates the single initial Super Admin. After setup, only an authorized Super Admin can add Moderators and Admins.
             </p>
           </motion.div>
 
           <div className="space-y-3">
-            {ROLE_CARDS.map((r, i) => {
+            {ROLE_CARDS.filter((r) => isBootstrap ? r.id === "superadmin" : r.id !== "superadmin").map((r, i) => {
               const Icon = r.icon;
               const isSelected = form.role === r.id;
               return (
@@ -281,7 +315,7 @@ function StaffRegisterPage() {
             <img src={logoImg} alt="" className="size-9 rounded-xl object-contain" />
             <div>
               <p className="font-display text-base leading-tight font-extrabold text-foreground">
-                Register Administrator
+                {isBootstrap ? "Initial Super Admin Setup" : "Register Staff Member"}
               </p>
               <p className="text-[11px] font-bold tracking-[0.16em] text-primary uppercase">
                 Gihanga Updates
@@ -296,9 +330,9 @@ function StaffRegisterPage() {
                   Create a staff account
                 </h2>
                 <p className="mt-1 text-[13px] text-muted-foreground">
-                  {staffUser
-                    ? `Provision a new staff member with scoped operational privileges.`
-                    : "Create an administrator account with access to the management portal."}
+                  {isBootstrap
+                    ? "Create the platform's first Super Admin account. This public setup closes after successful registration."
+                    : "Provision a Moderator or Admin with role-scoped operational privileges."}
                 </p>
               </div>
               <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-primary-soft text-primary">
@@ -308,22 +342,8 @@ function StaffRegisterPage() {
 
             {/* Active Session & Switch toggle (when already signed in) */}
             {staffUser && (
-              <div className="mb-5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-primary/20 bg-primary-soft/20 px-3.5 py-2.5 text-xs">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck className="size-4 shrink-0 text-primary" />
-                  <span className="text-foreground">
-                    Active session: <strong>{staffUser.name}</strong> ({ROLE_LABEL[staffUser.role]})
-                  </span>
-                </div>
-                <label className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={switchAccount}
-                    onChange={(e) => setSwitchAccount(e.target.checked)}
-                    className="size-3.5 rounded border-border accent-primary"
-                  />
-                  Switch to new account
-                </label>
+              <div className="rounded-xl border border-border bg-muted/40 px-3.5 py-3 text-xs text-muted-foreground">
+                Creating as <strong className="text-foreground">{staffUser.name}</strong>. Your current Super Admin session will remain active.
               </div>
             )}
 
@@ -339,7 +359,7 @@ function StaffRegisterPage() {
               </div>
 
               <div className="grid grid-cols-3 gap-2.5">
-                {ROLE_CARDS.map((r) => {
+                {ROLE_CARDS.filter((r) => isBootstrap ? r.id === "superadmin" : r.id !== "superadmin").map((r) => {
                   const Icon = r.icon;
                   const isSelected = form.role === r.id;
                   return (
@@ -400,6 +420,28 @@ function StaffRegisterPage() {
             </div>
 
             <form onSubmit={submit} className="space-y-4">
+              {isBootstrap && (
+                <div>
+                  <label htmlFor="bootstrap-secret" className="mb-1.5 block text-xs font-bold tracking-wide text-muted-foreground uppercase">
+                    One-time setup secret
+                  </label>
+                  <div className="group relative">
+                    <Lock className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      id="bootstrap-secret"
+                      type="password"
+                      required
+                      minLength={32}
+                      autoComplete="off"
+                      value={form.bootstrapSecret}
+                      onChange={(e) => setForm({ ...form, bootstrapSecret: e.target.value })}
+                      placeholder="Enter STAFF_BOOTSTRAP_SECRET from backend environment"
+                      className="h-12 w-full rounded-xl border border-border bg-elevated pl-10 pr-4 text-sm text-foreground outline-none transition focus:border-primary/60 focus:ring-4 focus:ring-primary/10"
+                    />
+                  </div>
+                  <p className="mt-1.5 text-[11px] text-muted-foreground">The platform owner must first configure a random secret of at least 32 characters in the backend environment. It is never stored in the user account.</p>
+                </div>
+              )}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="mb-1.5 block text-xs font-bold tracking-wide text-muted-foreground uppercase">
@@ -562,9 +604,9 @@ function StaffRegisterPage() {
             </Link>
             <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70">
               <ShieldCheck className="size-3" />
-              {staffUser && !switchAccount
-                ? "New account will be created while maintaining your current active session"
-                : "Creating an account signs you into it immediately"}
+              {isBootstrap
+                ? "You will be signed in to the initial Super Admin account after setup."
+                : "The new staff member receives separate credentials; your Super Admin session remains active."}
             </p>
           </div>
         </motion.div>

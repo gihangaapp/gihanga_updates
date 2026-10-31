@@ -11,6 +11,17 @@ export interface StaffMember {
   createdAt: string;
 }
 
+
+export function useStaffSetupStatus(enabled = true) {
+  return useQuery({
+    queryKey: ["staff", "setup-status"],
+    queryFn: () => api.get<{ setupAvailable: boolean }>("/system/staff/setup-status", true),
+    enabled,
+    staleTime: 30_000,
+    retry: 1,
+  });
+}
+
 export function useStaffList() {
   return useQuery({
     queryKey: ["staff", "list"],
@@ -36,10 +47,12 @@ export function useCreateStaff() {
       email: string;
       password: string;
       role: "moderator" | "admin" | "superadmin";
+      bootstrapSecret?: string;
     }) =>
       api.post<{
         user: import("@/lib/api-client").UserProfile;
-        tokens: { accessToken: string; refreshToken: string };
+        tokens: { accessToken: string; refreshToken: string } | null;
+        bootstrap: boolean;
       }>("/system/staff/create", input, true),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["staff", "list"] });

@@ -33,7 +33,10 @@ router.get("/", authenticateStaff, async (req: AuthenticatedRequest, res: Respon
     if (permissions.has("ads.view")) {
       stats.pendingCampaigns = await Advertisement.countDocuments({ status: "review" });
     }
-    stats.totalPosts = await Post.countDocuments({});
+    [stats.totalPosts, stats.newPosts24h] = await Promise.all([
+      Post.countDocuments({}),
+      Post.countDocuments({ createdAt: { $gte: since24h } }),
+    ]);
 
     return res.json({ stats, role: req.staffUser!.role });
   } catch (error: any) {

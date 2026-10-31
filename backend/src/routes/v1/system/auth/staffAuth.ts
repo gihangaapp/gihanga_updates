@@ -29,8 +29,8 @@ router.post("/login", async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Invalid staff credentials" });
     }
 
-    if (user.status === "banned" || user.status === "suspended") {
-      return res.status(403).json({ error: `Staff account is ${user.status}` });
+    if (user.status !== "active") {
+      return res.status(403).json({ error: "Staff account is not active" });
     }
 
     const staffRole = user.role as Exclude<UserRole, "user">;
@@ -86,7 +86,7 @@ router.post("/refresh", async (req: Request, res: Response) => {
     const decoded = verifyStaffRefreshToken(refreshToken);
     const user = await User.findById(decoded.userId);
 
-    if (!user || user.role === "user" || !user.refreshTokenHash) {
+    if (!user || user.role === "user" || user.status !== "active" || !user.refreshTokenHash) {
       return res.status(401).json({ error: "Invalid staff session" });
     }
 
@@ -121,8 +121,8 @@ router.get("/me", authenticateStaff, async (req: AuthenticatedRequest, res: Resp
     }
 
     const user = await User.findById(req.staffUser.userId);
-    if (!user || user.role === "user") {
-      return res.status(404).json({ error: "Staff user not found" });
+    if (!user || user.role === "user" || user.status !== "active") {
+      return res.status(404).json({ error: "Active staff user not found" });
     }
 
     const staffRole = user.role as Exclude<UserRole, "user">;

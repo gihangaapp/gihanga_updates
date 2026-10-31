@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { UserRole } from "../models/User";
+import { User, UserRole } from "../models/User";
 import { verifyConsumerAccessToken, verifyStaffAccessToken, ConsumerTokenPayload, StaffTokenPayload } from "../lib/jwt";
 
 export type Permission =
@@ -27,6 +27,10 @@ export type Permission =
   | "staff.promote.admin"
   | "staff.demote"
   | "staff.view"
+  | "staff.create"
+  | "content.view"
+  | "content.remove"
+  | "content.restore"
   | "payments.view"
   | "payments.approve"
   | "wallet.freeze"
@@ -63,9 +67,6 @@ const MODERATOR_PERMISSIONS: Set<Permission> = new Set([
   "live.forceEnd",
   "audit.viewOwn",
   "accounts.view",
-  "ads.view",
-  "ads.approve",
-  "ads.remove",
 ]);
 
 const ADMIN_PERMISSIONS: Set<Permission> = new Set([
@@ -79,13 +80,18 @@ const ADMIN_PERMISSIONS: Set<Permission> = new Set([
   "accounts.ban",
   "accounts.makeCreator",
   "accounts.grantPoints",
+  "content.view",
+  "content.remove",
+  "content.restore",
   "payments.view",
   "payments.approve",
-  "wallet.freeze",
-  "wallet.unfreeze",
+  "ads.view",
   "ads.approve",
   "ads.payment.verify",
   "ads.manage",
+  "ads.remove",
+  "wallet.freeze",
+  "wallet.unfreeze",
   "analytics.view",
   "analytics.revenue",
   "rewards.view",
@@ -98,6 +104,7 @@ const SUPERADMIN_PERMISSIONS: Set<Permission> = new Set([
   "staff.promote.admin",
   "staff.demote",
   "staff.view",
+  "staff.create",
   "rewards.edit",
   "settings.view",
   "settings.featureFlags",
@@ -138,7 +145,7 @@ export function authenticateConsumer(req: AuthenticatedRequest, res: Response, n
   }
 }
 
-export function authenticateStaff(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+export async function authenticateStaff(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Staff authentication required" });
@@ -147,8 +154,23 @@ export function authenticateStaff(req: AuthenticatedRequest, res: Response, next
   const token = authHeader.split(" ")[1] as string;
   try {
     const decoded = verifyStaffAccessToken(token);
-    req.staffUser = decoded;
-    next();
+    // Re-check the live account on every staff API request. This immediately
+    // revokes access after demotion, suspension, deletion, or role changes;
+    // a still-valid JWT must never preserve old staff privileges.
+    const account = await User.findById(decoded.userId).select("role status username email");
+    if (!account || account.role === "user" || account.status !== "active") {
+      return res.status(401).json({ error: "Staff account is inactive or no longer authorized" });
+    }
+    if (account.role !== decoded.role) {
+      return res.status(401).json({ error: "Staff permissions changed. Please sign in again." });
+    }
+    req.staffUser = {
+      ...decoded,
+      role: account.role as Exclude<UserRole, "user">,
+      username: account.username,
+      email: account.email,
+    };
+    return next();
   } catch (error) {
     return res.status(401).json({ error: "Invalid or expired staff token" });
   }
@@ -162,7 +184,7 @@ export function authenticateStaff(req: AuthenticatedRequest, res: Response, next
  * that don't care about the distinction (e.g. going live). This grants no
  * staff permission — it just recognizes a staff member's own identity.
  */
-export function authenticateConsumerOrStaff(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+export async function authenticateConsumerOrStaff(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Authentication required" });
@@ -177,14 +199,23 @@ export function authenticateConsumerOrStaff(req: AuthenticatedRequest, res: Resp
   }
   try {
     const staffDecoded = verifyStaffAccessToken(token);
-    req.staffUser = staffDecoded;
+    const account = await User.findById(staffDecoded.userId).select("role status username email");
+    if (!account || account.role === "user" || account.status !== "active" || account.role !== staffDecoded.role) {
+      return res.status(401).json({ error: "Staff account is inactive or no longer authorized" });
+    }
+    req.staffUser = {
+      ...staffDecoded,
+      role: account.role as Exclude<UserRole, "user">,
+      username: account.username,
+      email: account.email,
+    };
     // Normalize into the same shape authenticateConsumer produces, so every
     // downstream handler (live.ts, etc.) works unmodified regardless of
     // which token type actually authenticated this request.
     req.user = {
       userId: staffDecoded.userId,
-      username: staffDecoded.username,
-      email: staffDecoded.email,
+      username: account.username,
+      email: account.email,
       role: "user",
       isCreator: false,
       type: staffDecoded.type,

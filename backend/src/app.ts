@@ -39,6 +39,7 @@ import recommendationRoutes from "./routes/v1/recommendations/recommendations";
 import mediaRoutes from "./routes/v1/media/media";
 import achievementsRoutes from "./routes/v1/achievements/achievements";
 import staffAchievementsRoutes from "./routes/v1/system/achievements/staffAchievements";
+import staffContentRoutes from "./routes/v1/system/content/staffContent";
 import consumerModerationRoutes from "./routes/v1/moderation/consumerModeration";
 
 export function createApp(): Express {
@@ -147,6 +148,7 @@ export function createApp(): Express {
   app.use("/api/v1/media", mediaRoutes);
   app.use("/api/v1/achievements", achievementsRoutes);
   app.use("/api/v1/system/achievements", staffAchievementsRoutes);
+  app.use("/api/v1/system/content", staffContentRoutes);
   app.use("/api/v1/moderation", consumerModerationRoutes);
 
   // 404 Handler

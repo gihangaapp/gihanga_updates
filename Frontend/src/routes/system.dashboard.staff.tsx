@@ -39,7 +39,7 @@ const roleTone: Record<string, "info" | "accent" | "warning"> = {
 
 function StaffManagementPage() {
   const navigate = useNavigate();
-  const { staffUser, signInStaff } = useAuth();
+  const { staffUser } = useAuth();
   const { data, isLoading } = useStaffList();
   const promote = usePromoteStaff();
   const createStaff = useCreateStaff();
@@ -51,7 +51,7 @@ function StaffManagementPage() {
     username: "",
     email: "",
     password: "",
-    role: "moderator" as "moderator" | "admin" | "superadmin",
+    role: "moderator" as "moderator" | "admin",
   });
 
   const staff = data?.staff ?? [];
@@ -71,9 +71,10 @@ function StaffManagementPage() {
         username: newStaff.username.trim(),
         email: newStaff.email.trim(),
       });
-      signInStaff(result.tokens, result.user);
-      toast.success(`Staff account created. Signed in as ${ROLE_LABEL[result.user.role]}.`);
-      navigate({ to: "/system/dashboard" });
+      toast.success(`Staff account created as ${ROLE_LABEL[result.user.role]}.`, {
+        description: `The new staff member can now sign in with their own credentials.`,
+      });
+      navigate({ to: "/system/dashboard/staff" });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't create staff account");
     }
@@ -84,10 +85,10 @@ function StaffManagementPage() {
       <AdminPageHeader
         icon={ShieldCheck}
         title="Staff Management"
-        description="Promote existing accounts to Moderator or Admin, register new staff, or remove access."
+        description="Create and oversee Moderator and Admin accounts. Only the Super Admin can change staff access."
         accent="warning"
         action={
-          staffUser?.role === "superadmin" || staffUser?.role === "admin" ? (
+          staffUser?.role === "superadmin" ? (
             <Link
               to="/system/register"
               className="press gradient-brand flex h-10 items-center gap-2 rounded-xl px-4 text-xs font-bold text-primary-foreground shadow-glow"
@@ -257,7 +258,7 @@ function StaffManagementPage() {
           </AdminCard>
 
           {/* Create staff (admin / superadmin) */}
-          {(staffUser?.role === "superadmin" || staffUser?.role === "admin") && (
+          {staffUser?.role === "superadmin" && (
             <AdminCard className="p-5">
               <AdminCardHeader
                 title="Quick create"
@@ -331,7 +332,6 @@ function StaffManagementPage() {
                   >
                     <option value="moderator">Moderator</option>
                     <option value="admin">Admin</option>
-                    <option value="superadmin">Super Admin</option>
                   </select>
                   <Button type="submit" variant="outline" className="border-primary/30 text-primary hover:bg-primary-soft" disabled={createStaff.isPending}>
                     {createStaff.isPending ? "Creating…" : "Create"}

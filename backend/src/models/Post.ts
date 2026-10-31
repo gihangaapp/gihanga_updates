@@ -59,6 +59,7 @@ export interface IPost extends Document {
   removedAt?: Date;
   removedBy?: Types.ObjectId;
   removedReason?: string;
+  removedPreviousStatus?: PostStatus;
   /** Content-safety state — see PostModerationInfo. */
   moderation?: PostModerationInfo;
   createdAt: Date;
@@ -103,7 +104,8 @@ const PostSchema = new Schema<IPost>(
     scheduledFor: { type: Date },
     removedAt: { type: Date },
     removedBy: { type: Schema.Types.ObjectId, ref: "User" },
-    removedReason: { type: String },
+    removedReason: { type: String, maxlength: 500 },
+    removedPreviousStatus: { type: String, enum: ["published", "scheduled", "draft", "processing", "rejected"] },
     moderation: {
       status: {
         type: String,
@@ -119,6 +121,8 @@ const PostSchema = new Schema<IPost>(
 );
 
 PostSchema.index({ author: 1, status: 1, createdAt: -1 });
+PostSchema.index({ status: 1, createdAt: -1 });
+PostSchema.index({ kind: 1, createdAt: -1 });
 // Supports the public home timeline's audience filter + newest-first cursor.
 // This is additive only and does not alter or migrate existing post records.
 PostSchema.index({ status: 1, audience: 1, createdAt: -1, _id: -1 });

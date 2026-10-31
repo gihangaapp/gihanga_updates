@@ -46,6 +46,7 @@ import { Route as SystemDashboardAdSettingsRouteImport } from './routes/system.d
 import { Route as SystemDashboardAuditRouteImport } from './routes/system.dashboard.audit'
 import { Route as SystemDashboardCampaignsRouteImport } from './routes/system.dashboard.campaigns'
 import { Route as SystemDashboardGrowthRouteImport } from './routes/system.dashboard.growth'
+import { Route as SystemDashboardContentRouteImport } from './routes/system.dashboard.content'
 import { Route as SystemDashboardLiveRouteImport } from './routes/system.dashboard.live'
 import { Route as SystemDashboardModerationRouteImport } from './routes/system.dashboard.moderation'
 import { Route as SystemDashboardPaymentsRouteImport } from './routes/system.dashboard.payments'
@@ -241,6 +242,11 @@ const SystemDashboardGrowthRoute = SystemDashboardGrowthRouteImport.update({
   path: '/growth',
   getParentRoute: () => SystemDashboardRoute,
 } as any)
+const SystemDashboardContentRoute = SystemDashboardContentRouteImport.update({
+  id: '/content',
+  path: '/content',
+  getParentRoute: () => SystemDashboardRoute,
+} as any)
 const SystemDashboardLiveRoute = SystemDashboardLiveRouteImport.update({
   id: '/live',
   path: '/live',
@@ -310,6 +316,7 @@ export interface FileRoutesByFullPath {
   '/system/dashboard/audit': typeof SystemDashboardAuditRoute
   '/system/dashboard/campaigns': typeof SystemDashboardCampaignsRoute
   '/system/dashboard/growth': typeof SystemDashboardGrowthRoute
+  '/system/dashboard/content': typeof SystemDashboardContentRoute
   '/system/dashboard/live': typeof SystemDashboardLiveRoute
   '/system/dashboard/moderation': typeof SystemDashboardModerationRoute
   '/system/dashboard/payments': typeof SystemDashboardPaymentsRoute
@@ -354,6 +361,7 @@ export interface FileRoutesByTo {
   '/system/dashboard/audit': typeof SystemDashboardAuditRoute
   '/system/dashboard/campaigns': typeof SystemDashboardCampaignsRoute
   '/system/dashboard/growth': typeof SystemDashboardGrowthRoute
+  '/system/dashboard/content': typeof SystemDashboardContentRoute
   '/system/dashboard/live': typeof SystemDashboardLiveRoute
   '/system/dashboard/moderation': typeof SystemDashboardModerationRoute
   '/system/dashboard/payments': typeof SystemDashboardPaymentsRoute
@@ -400,6 +408,7 @@ export interface FileRoutesById {
   '/system/dashboard/audit': typeof SystemDashboardAuditRoute
   '/system/dashboard/campaigns': typeof SystemDashboardCampaignsRoute
   '/system/dashboard/growth': typeof SystemDashboardGrowthRoute
+  '/system/dashboard/content': typeof SystemDashboardContentRoute
   '/system/dashboard/live': typeof SystemDashboardLiveRoute
   '/system/dashboard/moderation': typeof SystemDashboardModerationRoute
   '/system/dashboard/payments': typeof SystemDashboardPaymentsRoute
@@ -447,6 +456,7 @@ export interface FileRouteTypes {
     | '/system/dashboard/audit'
     | '/system/dashboard/campaigns'
     | '/system/dashboard/growth'
+    | '/system/dashboard/content'
     | '/system/dashboard/live'
     | '/system/dashboard/moderation'
     | '/system/dashboard/payments'
@@ -491,6 +501,7 @@ export interface FileRouteTypes {
     | '/system/dashboard/audit'
     | '/system/dashboard/campaigns'
     | '/system/dashboard/growth'
+    | '/system/dashboard/content'
     | '/system/dashboard/live'
     | '/system/dashboard/moderation'
     | '/system/dashboard/payments'
@@ -536,6 +547,7 @@ export interface FileRouteTypes {
     | '/system/dashboard/audit'
     | '/system/dashboard/campaigns'
     | '/system/dashboard/growth'
+    | '/system/dashboard/content'
     | '/system/dashboard/live'
     | '/system/dashboard/moderation'
     | '/system/dashboard/payments'
@@ -837,6 +849,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SystemDashboardGrowthRouteImport
       parentRoute: typeof SystemDashboardRoute
     }
+    '/system/dashboard/content': {
+      id: '/system/dashboard/content'
+      path: '/content'
+      fullPath: '/system/dashboard/content'
+      preLoaderRoute: typeof SystemDashboardContentRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
     '/system/dashboard/live': {
       id: '/system/dashboard/live'
       path: '/live'
@@ -900,6 +919,7 @@ interface SystemDashboardRouteChildren {
   SystemDashboardAuditRoute: typeof SystemDashboardAuditRoute
   SystemDashboardCampaignsRoute: typeof SystemDashboardCampaignsRoute
   SystemDashboardGrowthRoute: typeof SystemDashboardGrowthRoute
+  SystemDashboardContentRoute: typeof SystemDashboardContentRoute
   SystemDashboardLiveRoute: typeof SystemDashboardLiveRoute
   SystemDashboardModerationRoute: typeof SystemDashboardModerationRoute
   SystemDashboardPaymentsRoute: typeof SystemDashboardPaymentsRoute
@@ -917,6 +937,7 @@ const SystemDashboardRouteChildren: SystemDashboardRouteChildren = {
   SystemDashboardAuditRoute: SystemDashboardAuditRoute,
   SystemDashboardCampaignsRoute: SystemDashboardCampaignsRoute,
   SystemDashboardGrowthRoute: SystemDashboardGrowthRoute,
+  SystemDashboardContentRoute: SystemDashboardContentRoute,
   SystemDashboardLiveRoute: SystemDashboardLiveRoute,
   SystemDashboardModerationRoute: SystemDashboardModerationRoute,
   SystemDashboardPaymentsRoute: SystemDashboardPaymentsRoute,

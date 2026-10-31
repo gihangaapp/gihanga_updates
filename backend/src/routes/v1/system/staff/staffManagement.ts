@@ -1,6 +1,8 @@
-import { Router, Response, NextFunction } from "express";
+import { Router, Response } from "express";
+import { timingSafeEqual } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { User } from "../../../../models/User";
+import { User, UserRole } from "../../../../models/User";
+import { Setting } from "../../../../models/Setting";
 import { AuditLog } from "../../../../models/AuditLog";
 import { authenticateStaff, requirePermission, ROLE_PERMISSIONS, AuthenticatedRequest } from "../../../../middleware/rbac";
 import { signStaffTokens, verifyStaffAccessToken } from "../../../../lib/jwt";
@@ -10,22 +12,27 @@ import { notify } from "../../../../lib/notify";
 const router = Router();
 const STAFF_FIELDS = "name username email role status createdAt";
 
-// Optional staff auth middleware — extracts staff identity if provided, but does not block registration
-function optionalStaffAuth(req: AuthenticatedRequest, _res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith("Bearer ")) {
-    const token = authHeader.split(" ")[1] as string;
-    try {
-      req.staffUser = verifyStaffAccessToken(token);
-    } catch {
-      // Proceed without authenticated staff user if token is expired or invalid
-    }
+// Public, non-sensitive flag used by the registration screen to show the
+// one-time bootstrap form only before the first Super Admin has been created.
+router.get("/setup-status", async (_req, res: Response) => {
+  try {
+    const [staffCount, completed] = await Promise.all([
+      User.countDocuments({ role: { $in: ["moderator", "admin", "superadmin"] } }),
+      Setting.exists({ key: "staff_bootstrap_completed" }),
+    ]);
+    return res.json({ setupAvailable: staffCount === 0 && !completed });
+  } catch {
+    return res.status(503).json({ error: "Unable to check staff setup status" });
   }
-  next();
-}
+});
 
-// POST /api/v1/system/staff/create — create a staff account and sign into it.
-router.post("/create", optionalStaffAuth, async (req: AuthenticatedRequest, res: Response) => {
+// POST /api/v1/system/staff/create
+// The unauthenticated path is a one-time bootstrap for the first Super Admin.
+// Once a staff account exists (or bootstrap has completed), only a signed-in
+// Super Admin with staff.create may create Moderator/Admin accounts.
+router.post("/create", async (req: AuthenticatedRequest, res: Response) => {
+  let bootstrapLockAcquired = false;
+  let bootstrap = false;
   try {
     const { name, username, email, password, role } = req.body as Record<string, unknown>;
     if (
@@ -54,7 +61,86 @@ router.post("/create", optionalStaffAuth, async (req: AuthenticatedRequest, res:
       return res.status(400).json({ error: "Password must be at least 8 characters and at most 72 bytes" });
     }
     if (!["moderator", "admin", "superadmin"].includes(role)) {
-      return res.status(400).json({ error: "Role must be moderator, admin, or superadmin" });
+      return res.status(400).json({ error: "Role must be Moderator, Admin, or Super Admin" });
+    }
+
+    const bootstrapCompleteKey = "staff_bootstrap_completed";
+    const bootstrapLockKey = "staff_bootstrap_lock";
+    const staffCount = await User.countDocuments({ role: { $in: ["moderator", "admin", "superadmin"] } });
+    const bootstrapComplete = await Setting.exists({ key: bootstrapCompleteKey });
+
+    let actor: { userId: string; username: string; role: string } | null = null;
+    if (staffCount === 0 && !bootstrapComplete) {
+      if (role !== "superadmin") {
+        return res.status(403).json({ error: "The first staff account must be the platform Super Admin" });
+      }
+
+      // The first-run endpoint is public by necessity, so require a separate
+      // high-entropy deployment secret. Without it, any visitor could claim
+      // the initial Super Admin account before the owner does.
+      const configuredSecret = process.env.STAFF_BOOTSTRAP_SECRET || "";
+      const suppliedSecret = typeof req.body.bootstrapSecret === "string" ? req.body.bootstrapSecret : "";
+      if (configuredSecret.length < 32) {
+        return res.status(503).json({ error: "Initial setup is locked. Configure STAFF_BOOTSTRAP_SECRET (at least 32 characters) on the backend first." });
+      }
+      const expected = Buffer.from(configuredSecret, "utf8");
+      const supplied = Buffer.from(suppliedSecret, "utf8");
+      if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
+        return res.status(403).json({ error: "The initial setup secret is incorrect" });
+      }
+
+      // A unique Setting key is used as a short-lived atomic setup lock, so two
+      // simultaneous first-run requests cannot create multiple Super Admins.
+      const lockCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      await Setting.deleteOne({ key: bootstrapLockKey, "value.lockedAt": { $lt: lockCutoff } });
+      try {
+        await Setting.create({
+          key: bootstrapLockKey,
+          value: { lockedAt: new Date().toISOString() },
+          description: "Temporary lock for first Super Admin bootstrap",
+          category: "flags",
+          editableBy: "superadmin",
+        });
+        bootstrapLockAcquired = true;
+      } catch (lockError: any) {
+        if (lockError?.code === 11000) {
+          return res.status(409).json({ error: "Initial Super Admin setup is already in progress or completed" });
+        }
+        throw lockError;
+      }
+
+      const [staffAfterLock, completedAfterLock] = await Promise.all([
+        User.countDocuments({ role: { $in: ["moderator", "admin", "superadmin"] } }),
+        Setting.exists({ key: bootstrapCompleteKey }),
+      ]);
+      if (staffAfterLock > 0 || completedAfterLock) {
+        return res.status(403).json({ error: "Staff bootstrap is already complete. Sign in with an authorized account." });
+      }
+      bootstrap = true;
+    } else {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "A Super Admin session is required to create staff accounts" });
+      }
+      let decoded;
+      try {
+        decoded = verifyStaffAccessToken(authHeader.split(" ")[1] as string);
+      } catch {
+        return res.status(401).json({ error: "Invalid or expired staff token" });
+      }
+      const creator = await User.findById(decoded.userId).select("role status username");
+      if (!creator || creator.role !== decoded.role || creator.status !== "active") {
+        return res.status(401).json({ error: "Staff account is inactive or no longer authorized" });
+      }
+      const creatorRole = creator.role as Exclude<UserRole, "user">;
+      if (!ROLE_PERMISSIONS[creatorRole]?.has("staff.create")) {
+        return res.status(403).json({ error: "Only an authorized Super Admin can create staff accounts" });
+      }
+      if (role === "superadmin") {
+        return res.status(400).json({ error: "Additional Super Admin accounts cannot be created here" });
+      }
+      actor = { userId: String(creator._id), username: creator.username, role: creatorRole };
+      req.staffUser = { ...decoded, username: creator.username };
     }
 
     const existing = await User.findOne({
@@ -76,26 +162,34 @@ router.post("/create", optionalStaffAuth, async (req: AuthenticatedRequest, res:
       onboarded: true,
     });
     const staffRole = user.role as Exclude<typeof user.role, "user">;
-    const tokens = signStaffTokens({
-      _id: user._id,
-      username: user.username,
-      email: user.email,
-      role: staffRole,
-    });
-    user.refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
-    await user.save();
+    const tokens = bootstrap
+      ? signStaffTokens({ _id: user._id, username: user.username, email: user.email, role: staffRole })
+      : null;
+    if (tokens) {
+      user.refreshTokenHash = await bcrypt.hash(tokens.refreshToken, 10);
+      await user.save();
+    }
 
     await logAudit({
-      actor: req.staffUser?.userId || user._id,
-      actorUsername: req.staffUser?.username || user.username,
-      action: "staff.create",
+      actor: actor?.userId || user._id,
+      actorUsername: actor?.username || user.username,
+      action: bootstrap ? "staff.bootstrap" : "staff.create",
       targetUser: user._id,
-      meta: {
-        role: user.role,
-        creator: req.staffUser ? `${req.staffUser.username} (${req.staffUser.role})` : "self",
-      },
+      meta: { role: user.role, createdBy: actor ? `${actor.username} (${actor.role})` : "initial bootstrap" },
       ipAddress: req.ip,
     });
+
+    if (bootstrap) {
+      await Setting.create({
+        key: bootstrapCompleteKey,
+        value: true,
+        description: "Marks the one-time initial Super Admin setup as completed",
+        category: "flags",
+        editableBy: "superadmin",
+      });
+    } else {
+      await notify({ recipient: String(user._id), kind: "system", text: `You've been appointed as a ${role} on Gihanga Updates` });
+    }
 
     return res.status(201).json({
       user: {
@@ -120,12 +214,17 @@ router.post("/create", optionalStaffAuth, async (req: AuthenticatedRequest, res:
         permissions: Array.from(ROLE_PERMISSIONS[staffRole]),
       },
       tokens,
+      bootstrap,
     });
   } catch (error: any) {
     if (error?.code === 11000) {
       return res.status(409).json({ error: "Email or username is already in use" });
     }
     return res.status(500).json({ error: "Failed to create staff account", details: error.message });
+  } finally {
+    if (bootstrapLockAcquired) {
+      await Setting.deleteOne({ key: "staff_bootstrap_lock" }).catch(() => undefined);
+    }
   }
 });
 

@@ -22,6 +22,19 @@ import { queueStats } from "../../../../services/moderation/moderationQueue";
 const router = Router();
 const REPORTER_FIELDS = "name username avatarHue avatarUrl";
 
+async function softRemovePost(postId: unknown, staffId: string, reason: string) {
+  if (!postId) return;
+  const cleanReason = typeof reason === "string" ? reason.trim().slice(0, 500) : "";
+  const post = await Post.findById(postId);
+  if (!post || post.status === "removed") return;
+  post.removedPreviousStatus = post.status;
+  post.status = "removed";
+  post.removedAt = new Date();
+  post.removedBy = staffId as any;
+  post.removedReason = cleanReason;
+  await post.save();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // AI moderation review queue (ModerationRecord-based)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -509,11 +522,12 @@ router.post(
   requirePermission("moderation.queue.action"),
   async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { action, reason } = req.body as { action: "remove" | "warn" | "suspend" | "dismiss"; reason: string };
+      const { action, reason } = req.body as { action: "remove" | "warn" | "suspend" | "dismiss"; reason?: unknown };
+      const cleanReason = typeof reason === "string" ? reason.trim().slice(0, 500) : "";
       if (!["remove", "warn", "suspend", "dismiss"].includes(action)) {
         return res.status(400).json({ error: "action must be remove, warn, suspend or dismiss" });
       }
-      if (action !== "dismiss" && !reason?.trim()) {
+      if (action !== "dismiss" && !cleanReason) {
         return res.status(400).json({ error: "A reason is required for this action" });
       }
 
@@ -521,7 +535,7 @@ router.post(
       if (!report) return res.status(404).json({ error: "Report not found" });
 
       if (action === "remove" && report.targetPost) {
-        await Post.findByIdAndDelete(report.targetPost);
+        await softRemovePost(report.targetPost, req.staffUser!.userId, cleanReason);
       } else if (action === "suspend") {
         await User.findByIdAndUpdate(report.target, { status: "suspended" });
       }
@@ -529,7 +543,7 @@ router.post(
       report.status = action === "dismiss" ? "dismissed" : "resolved";
       report.actionedBy = req.staffUser!.userId as any;
       report.actionedAt = new Date();
-      report.actionNote = reason?.trim();
+      report.actionNote = cleanReason || undefined;
       await report.save();
 
       await AuditLog.create({
@@ -538,7 +552,7 @@ router.post(
         targetUser: report.target,
         targetPost: report.targetPost,
         targetId: String(report._id),
-        meta: { reason },
+        meta: { reason: cleanReason },
       });
 
       if (action === "warn" || action === "suspend" || action === "remove") {
@@ -547,10 +561,10 @@ router.post(
           kind: "system",
           text:
             action === "warn"
-              ? `You received a warning from moderation: ${reason}`
+              ? `You received a warning from moderation: ${cleanReason}`
               : action === "suspend"
-                ? `Your account has been suspended: ${reason}`
-                : `Content you posted was removed for violating guidelines: ${reason}`,
+                ? `Your account has been suspended: ${cleanReason}`
+                : `Content you posted was removed for violating guidelines: ${cleanReason}`,
         });
       }
 
@@ -568,12 +582,13 @@ router.post(
   requirePermission("moderation.queue.action"),
   async (req: AuthenticatedRequest, res: Response) => {
     try {
-      const { ids, action, reason } = req.body as { ids: string[]; action: "remove" | "warn" | "suspend" | "dismiss"; reason?: string };
+      const { ids, action, reason } = req.body as { ids: string[]; action: "remove" | "warn" | "suspend" | "dismiss"; reason?: unknown };
+      const cleanReason = typeof reason === "string" ? reason.trim().slice(0, 500) : "";
       if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: "ids must be a non-empty array" });
       if (!["remove", "warn", "suspend", "dismiss"].includes(action)) {
         return res.status(400).json({ error: "action must be remove, warn, suspend or dismiss" });
       }
-      if (action !== "dismiss" && !reason?.trim()) {
+      if (action !== "dismiss" && !cleanReason) {
         return res.status(400).json({ error: "A reason is required for this action" });
       }
 
@@ -582,7 +597,7 @@ router.post(
 
       for (const report of reports) {
         if (action === "remove" && report.targetPost) {
-          await Post.findByIdAndDelete(report.targetPost);
+          await softRemovePost(report.targetPost, req.staffUser!.userId, cleanReason);
         } else if (action === "suspend") {
           await User.findByIdAndUpdate(report.target, { status: "suspended" });
         }
@@ -590,7 +605,7 @@ router.post(
         report.status = action === "dismiss" ? "dismissed" : "resolved";
         report.actionedBy = req.staffUser!.userId as any;
         report.actionedAt = new Date();
-        report.actionNote = reason?.trim();
+        report.actionNote = cleanReason || undefined;
         await report.save();
 
         await AuditLog.create({
@@ -599,7 +614,7 @@ router.post(
           targetUser: report.target,
           targetPost: report.targetPost,
           targetId: String(report._id),
-          meta: { reason, bulk: true },
+          meta: { reason: cleanReason, bulk: true },
         });
 
         if (action !== "dismiss") {
@@ -608,10 +623,10 @@ router.post(
             kind: "system",
             text:
               action === "warn"
-                ? `You received a warning from moderation: ${reason}`
+                ? `You received a warning from moderation: ${cleanReason}`
                 : action === "suspend"
-                  ? `Your account has been suspended: ${reason}`
-                  : `Content you posted was removed for violating guidelines: ${reason}`,
+                  ? `Your account has been suspended: ${cleanReason}`
+                  : `Content you posted was removed for violating guidelines: ${cleanReason}`,
           });
         }
         succeeded += 1;

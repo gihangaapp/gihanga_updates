@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
+  Archive,
   ArrowRight,
   Award,
   Bell,
@@ -95,6 +96,17 @@ export const adminNavSections: AdminNavSection[] = [
         label: "User Accounts",
         icon: Users,
         permissions: ["accounts.view"],
+      },
+    ],
+  },
+  {
+    label: "Content Operations",
+    items: [
+      {
+        to: "/system/dashboard/content",
+        label: "Content Management",
+        icon: Archive,
+        permissions: ["content.view"],
       },
     ],
   },

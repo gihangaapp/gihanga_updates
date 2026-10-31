@@ -48,11 +48,12 @@ export const Route = createFileRoute("/system/dashboard/")({
 /* ── Data ─────────────────────────────────────────────────────────────────── */
 
 interface GrowthData {
-  series: { date: string; newUsers: number; newPosts: number; revenue: number }[];
+  series: { date: string; newUsers: number; newPosts: number; pointsActivity?: number; revenue?: number }[];
   totals: {
     newUsers30d: number;
     newPosts30d: number;
-    revenue30d: number;
+    revenue30d?: number;
+    pointsActivity?: number;
     totalUsers: number;
     totalCreators: number;
   };
@@ -190,7 +191,7 @@ function DashboardIndex() {
 
   const usersTrend = weekTrend(growth?.series ?? [], "newUsers");
   const postsTrend = weekTrend(growth?.series ?? [], "newPosts");
-  const revenueTrend = weekTrend(growth?.series ?? [], "revenue");
+  const pointsTrend = weekTrend(growth?.series ?? [], "pointsActivity");
 
   const firstName = staffUser?.name?.split(" ")[0] ?? "there";
   const role = staffUser?.role ?? "";
@@ -206,7 +207,6 @@ function DashboardIndex() {
   const pendingReports = Number(stats["pendingReports"] ?? 0);
   const pendingPayments = Number(stats["pendingPayments"] ?? 0);
   const pendingCampaigns = Number(stats["pendingCampaigns"] ?? 0);
-  const queueMax = Math.max(pendingReports, pendingPayments, pendingCampaigns, 1);
   const queues = [
     {
       label: "Moderation reports",
@@ -214,6 +214,7 @@ function DashboardIndex() {
       display: String(pendingReports),
       meta: "Awaiting a staff decision",
       to: "/system/dashboard/moderation",
+      permission: "moderation.queue.view" as const,
       colorIndex: 1 as const,
     },
     {
@@ -222,6 +223,7 @@ function DashboardIndex() {
       display: String(pendingPayments),
       meta: "MTN MoMo deposits & withdrawals",
       to: "/system/dashboard/payments",
+      permission: "payments.view" as const,
       colorIndex: 4 as const,
     },
     {
@@ -230,9 +232,11 @@ function DashboardIndex() {
       display: String(pendingCampaigns),
       meta: "Sponsored content to approve",
       to: "/system/dashboard/campaigns",
+      permission: "ads.view" as const,
       colorIndex: 2 as const,
     },
-  ];
+  ].filter((item) => hasPermission(staffUser, item.permission));
+  const queueMax = Math.max(...queues.map((queue) => queue.value), 1);
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -255,10 +259,10 @@ function DashboardIndex() {
           <p className="mt-1 text-sm text-muted-foreground">
             Signed in as{" "}
             <span className="font-bold text-primary">{ROLE_LABEL[role] || role}</span> — here's
-            what's happening on Gihanga Updates.
+            what's happening across your authorized workspaces.
           </p>
         </div>
-        {(staffUser?.role === "superadmin" || staffUser?.role === "admin") && (
+        {staffUser?.role === "superadmin" && (
           <Link
             to="/system/register"
             className="press gradient-brand flex h-10 items-center gap-2 rounded-xl px-4 text-xs font-bold text-primary-foreground shadow-glow"
@@ -287,7 +291,7 @@ function DashboardIndex() {
             label="Total posts"
             value={formatCount(stats["totalPosts"] ?? 0)}
             trend={postsTrend}
-            hint={`${formatCount(stats["newUsers24h"] ?? 0)}+ creators active daily`}
+            hint={`${formatCount(stats["newPosts24h"] ?? 0)} new posts in the last 24h`}
             tone="aqua"
             delay={0.06}
           />
@@ -299,15 +303,26 @@ function DashboardIndex() {
             tone="danger"
             delay={0.12}
           />
-          <AdminStatCard
-            icon={Wallet}
-            label="Points revenue (30d)"
-            value={`${formatCount(growth?.totals?.revenue30d ?? 0)}`}
-            trend={revenueTrend}
-            hint="From gifts and ad spend combined"
-            tone="success"
-            delay={0.18}
-          />
+          {canAnalytics ? (
+            <AdminStatCard
+              icon={Wallet}
+              label="Points activity (30d)"
+              value={`${formatCount(growth?.totals?.pointsActivity ?? growth?.totals?.revenue30d ?? 0)} pts`}
+              trend={pointsTrend}
+              hint="Gift and fee transaction volume; not cash revenue"
+              tone="success"
+              delay={0.18}
+            />
+          ) : (
+            <AdminStatCard
+              icon={Radio}
+              label="Live streams now"
+              value={formatCount(stats["liveNow"] ?? 0)}
+              hint="Live sessions you can oversee"
+              tone="success"
+              delay={0.18}
+            />
+          )}
         </div>
       )}
 
@@ -316,9 +331,9 @@ function DashboardIndex() {
         {/* Platform activity line chart */}
         <AdminCard className="p-5">
           <AdminCardHeader
-            title="Platform activity"
-            subtitle="New posts and users over the last 30 days"
-            action={
+            title={canAnalytics ? "Platform activity" : "Moderation snapshot"}
+            subtitle={canAnalytics ? "New posts and users over the last 30 days" : "Live community safety workload"}
+            action={canAnalytics ? (
               <div className="flex items-center gap-3 text-[11px] font-semibold text-muted-foreground">
                 <span className="flex items-center gap-1.5">
                   <span className="size-2 rounded-full bg-chart-1" /> Posts
@@ -327,28 +342,45 @@ function DashboardIndex() {
                   <span className="size-2 rounded-full bg-chart-4" /> Users
                 </span>
               </div>
-            }
+            ) : null}
           />
           <div className="mt-4">
-            {lineData.length > 1 ? (
-              <AdminLineChart
-                data={lineData}
-                series={[
-                  { key: "New posts", name: "New posts", colorIndex: 1 },
-                  { key: "New users", name: "New users", colorIndex: 4 },
-                ]}
-                height={272}
-              />
+            {canAnalytics ? (
+              lineData.length > 1 ? (
+                <AdminLineChart
+                  data={lineData}
+                  series={[
+                    { key: "New posts", name: "New posts", colorIndex: 1 },
+                    { key: "New users", name: "New users", colorIndex: 4 },
+                  ]}
+                  height={272}
+                />
+              ) : (
+                <div className="grid h-[272px] place-items-center rounded-xl bg-muted/30 text-center">
+                  <div>
+                    <TrendingUp className="mx-auto mb-2 size-7 text-muted-foreground/60" />
+                    <p className="text-sm font-semibold text-muted-foreground">No analytics data yet</p>
+                    <p className="mt-1 text-xs text-muted-foreground/70">Activity charts appear once growth data is available.</p>
+                  </div>
+                </div>
+              )
             ) : (
-              <div className="grid h-[272px] place-items-center rounded-xl bg-muted/30 text-center">
-                <div>
-                  <TrendingUp className="mx-auto mb-2 size-7 text-muted-foreground/60" />
-                  <p className="text-sm font-semibold text-muted-foreground">
-                    {canAnalytics ? "No analytics data yet" : "Analytics permission required"}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground/70">
-                    Activity charts appear once growth data is available.
-                  </p>
+              <div className="grid h-[272px] grid-cols-2 gap-3">
+                <div className="flex flex-col justify-between rounded-xl border border-danger/15 bg-danger/5 p-4">
+                  <span className="grid size-10 place-items-center rounded-xl bg-danger/10 text-danger"><ShieldAlert className="size-5" /></span>
+                  <div>
+                    <p className="font-display text-3xl font-extrabold tabular-nums text-foreground">{formatCount(stats["pendingReports"] ?? 0)}</p>
+                    <p className="mt-1 text-xs font-semibold text-muted-foreground">Reports awaiting review</p>
+                  </div>
+                  <Link to="/system/dashboard/moderation" className="text-xs font-bold text-primary hover:underline">Open reports queue →</Link>
+                </div>
+                <div className="flex flex-col justify-between rounded-xl border border-aqua/20 bg-aqua/5 p-4">
+                  <span className="grid size-10 place-items-center rounded-xl bg-aqua/15 text-aqua-foreground dark:text-aqua"><Radio className="size-5" /></span>
+                  <div>
+                    <p className="font-display text-3xl font-extrabold tabular-nums text-foreground">{formatCount(stats["liveNow"] ?? 0)}</p>
+                    <p className="mt-1 text-xs font-semibold text-muted-foreground">Live sessions to oversee</p>
+                  </div>
+                  <Link to="/system/dashboard/live" className="text-xs font-bold text-primary hover:underline">Open live oversight →</Link>
                 </div>
               </div>
             )}
@@ -357,8 +389,9 @@ function DashboardIndex() {
 
         {/* Right rail: donut + queues */}
         <div className="space-y-5">
-          <AdminCard className="p-5">
-            <AdminCardHeader title="Content mix" subtitle="Distribution across the platform" />
+          {canAnalytics && (
+            <AdminCard className="p-5">
+              <AdminCardHeader title="Content mix" subtitle="Distribution across the platform" />
             {hasDonutData ? (
               <>
                 <div className="mt-2 grid grid-cols-[150px_1fr] items-center gap-4 sm:grid-cols-[160px_1fr]">
@@ -399,23 +432,26 @@ function DashboardIndex() {
                 </p>
               </div>
             )}
-          </AdminCard>
+            </AdminCard>
+          )}
 
           <AdminCard className="p-5">
             <AdminCardHeader
               title="Needs attention"
               subtitle="Queues waiting on staff"
               action={
-                <Link
-                  to="/system/dashboard/moderation"
-                  className="text-xs font-bold text-primary hover:underline"
-                >
-                  View all
-                </Link>
+                hasPermission(staffUser, "moderation.queue.view") ? (
+                  <Link
+                    to="/system/dashboard/moderation"
+                    className="text-xs font-bold text-primary hover:underline"
+                  >
+                    View all
+                  </Link>
+                ) : null
               }
             />
             <div className="mt-5 space-y-5">
-              {queues.map((q, i) => (
+              {queues.length ? queues.map((q, i) => (
                 <AdminProgressRow
                   key={q.label}
                   label={q.label}
@@ -425,7 +461,9 @@ function DashboardIndex() {
                   delay={i * 0.08}
                   colorIndex={q.colorIndex}
                 />
-              ))}
+              )) : (
+                <p className="py-5 text-center text-xs text-muted-foreground">No operational queues are assigned to this role.</p>
+              )}
             </div>
           </AdminCard>
         </div>
@@ -435,17 +473,19 @@ function DashboardIndex() {
       <div className="grid gap-5 xl:grid-cols-[1fr_1.5fr]">
         <AdminCard className="p-5">
           <AdminCardHeader
-            title="Audience growth"
-            subtitle="New members per week"
-            action={
+            title={canAnalytics ? "Audience growth" : "Safety operations"}
+            subtitle={canAnalytics ? "New members per week" : "Your assigned community protection tools"}
+            action={canAnalytics ? (
               <Link
                 to="/system/dashboard/growth"
                 className="flex items-center gap-1 text-xs font-bold text-primary hover:underline"
               >
                 Details <ArrowUpRight className="size-3.5" />
               </Link>
-            }
+            ) : null}
           />
+          {canAnalytics ? (
+          <>
           <div className="mt-4">
             {barData.length > 1 ? (
               <AdminBarChart data={barData} height={232} />
@@ -474,14 +514,29 @@ function DashboardIndex() {
               </p>
             </div>
           </div>
+          </>
+          ) : (
+            <div className="mt-4 grid gap-3">
+              <Link to="/system/dashboard/moderation" className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3.5 transition-colors hover:border-primary/30 hover:bg-primary-soft/20">
+                <span className="grid size-10 place-items-center rounded-xl bg-danger/10 text-danger"><ShieldAlert className="size-5" /></span>
+                <span className="min-w-0 flex-1"><span className="block text-sm font-bold text-foreground">Report investigations</span><span className="block text-xs text-muted-foreground">Review reports, evidence and appeals</span></span>
+                <ArrowRight className="size-4 text-muted-foreground" />
+              </Link>
+              <Link to="/system/dashboard/live" className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 p-3.5 transition-colors hover:border-primary/30 hover:bg-primary-soft/20">
+                <span className="grid size-10 place-items-center rounded-xl bg-aqua/15 text-aqua-foreground dark:text-aqua"><Radio className="size-5" /></span>
+                <span className="min-w-0 flex-1"><span className="block text-sm font-bold text-foreground">Live stream safety</span><span className="block text-xs text-muted-foreground">Watch and escalate unsafe live sessions</span></span>
+                <ArrowRight className="size-4 text-muted-foreground" />
+              </Link>
+            </div>
+          )}
         </AdminCard>
 
         {/* Recent staff activity table */}
         <AdminCard className="overflow-hidden">
           <div className="flex items-center justify-between gap-3 p-5 pb-4">
             <AdminCardHeader
-              title="Recent staff activity"
-              subtitle="Latest actions from the administration team"
+              title={canAuditAll ? "Recent staff activity" : "Your recent staff activity"}
+              subtitle={canAuditAll ? "Latest actions from the administration team" : "Recent actions performed by your account"}
             />
             <Link
               to="/system/dashboard/audit"
@@ -593,11 +648,11 @@ function DashboardIndex() {
                 <Clock className="size-4 text-primary" />
               </span>
               <div>
-                <p className="text-[13px] font-bold text-foreground">Peak activity window</p>
+                <p className="text-[13px] font-bold text-foreground">Live activity now</p>
                 <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
                   {stats["liveNow"]
-                    ? `${stats["liveNow"]} live stream${stats["liveNow"] > 1 ? "s" : ""} running right now — keep Live Oversight open.`
-                    : "Evenings (6–10 PM EAT) consistently show the highest posting and viewing volume."}
+                    ? `${stats["liveNow"]} live stream${stats["liveNow"] > 1 ? "s are" : " is"} currently active. Check Live Oversight for reports and safety issues.`
+                    : "There are no live streams currently active in the platform snapshot."}
                 </p>
               </div>
             </div>
@@ -606,11 +661,11 @@ function DashboardIndex() {
                 <Lightbulb className="size-4 text-warning" />
               </span>
               <div>
-                <p className="text-[13px] font-bold text-foreground">Moderation tip</p>
+                <p className="text-[13px] font-bold text-foreground">Reports awaiting review</p>
                 <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
                   {stats["pendingReports"]
-                    ? `${stats["pendingReports"]} report${stats["pendingReports"] > 1 ? "s" : ""} older than 24h increase appeal risk — clear the oldest first.`
-                    : "Queue is clear. A great moment to review auto-moderation rules and thresholds."}
+                    ? `${stats["pendingReports"]} report${stats["pendingReports"] > 1 ? "s are" : " is"} awaiting a staff decision. Review the oldest items first.`
+                    : "The reports queue is currently clear. Continue monitoring user reports and AI safety reviews."}
                 </p>
               </div>
             </div>
@@ -628,12 +683,13 @@ function DashboardIndex() {
           <AdminCardHeader title="Quick actions" subtitle="Jump straight into a workspace" />
           <div className="mt-4 space-y-2">
             {[
-              { to: "/system/dashboard/accounts", icon: Users, label: "Search user accounts" },
-              { to: "/system/dashboard/live", icon: Radio, label: "Watch live streams" },
-              { to: "/system/dashboard/campaigns", icon: Target, label: "Review ad campaigns" },
-              { to: "/system/dashboard/activity", icon: Activity, label: "See staff leaderboard" },
-              { to: "/system/dashboard/audit", icon: Eye, label: "Inspect the audit trail" },
-            ].map((q) => (
+              { to: "/system/dashboard/accounts", icon: Users, label: "Search user accounts", permission: "accounts.view" as const },
+              { to: "/system/dashboard/live", icon: Radio, label: "Watch live streams", permission: "live.forceEnd" as const },
+              { to: "/system/dashboard/content", icon: FileText, label: "Manage platform content", permission: "content.view" as const },
+              { to: "/system/dashboard/campaigns", icon: Target, label: "Review ad campaigns", permission: "ads.view" as const },
+              { to: "/system/dashboard/activity", icon: Activity, label: "See staff leaderboard", permission: "audit.viewAll" as const },
+              { to: "/system/dashboard/audit", icon: Eye, label: "Inspect the audit trail", permission: "audit.viewOwn" as const },
+            ].filter((q) => hasPermission(staffUser, q.permission)).map((q) => (
               <Link
                 key={q.to}
                 to={q.to}
