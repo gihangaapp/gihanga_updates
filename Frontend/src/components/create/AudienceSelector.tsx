@@ -16,8 +16,8 @@ const AUDIENCES: { id: AudienceOption; label: string; description: string; icon:
     { id: "public", label: "Everyone", description: "Anyone on or off Gihanga", icon: Globe2 },
     {
       id: "followers",
-      label: "Followers",
-      description: "Only your confirmed followers",
+      label: "Esteems",
+      description: "Only your confirmed esteems",
       icon: Users,
     },
     { id: "private", label: "Only me", description: "Visible only to you", icon: Lock },

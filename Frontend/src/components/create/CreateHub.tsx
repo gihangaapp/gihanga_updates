@@ -64,8 +64,8 @@ export function CreateHost() {
 
   const modeTabs = [
     { id: "post" as const, label: "Post", icon: Sparkles },
-    { id: "reel" as const, label: "Reel", icon: Video },
-    { id: "story" as const, label: "Story", icon: Radio },
+    { id: "reel" as const, label: "Deed", icon: Video },
+    { id: "story" as const, label: "Decision", icon: Radio },
   ];
 
   const content = (

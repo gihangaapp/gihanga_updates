@@ -161,7 +161,7 @@ router.get("/activity", authenticateStaff, requirePermission("operations.activit
     for (const event of events) rows.push(mapActivity(event.type, event.category, event.summary, event.createdAt, event.actor, event.targetId, event.metadata));
     for (const user of users) if (!hasEvent("users", user._id)) rows.push(mapActivity("user.registered", "users", `@${user.username} joined Gihanga Updates`, user.createdAt, user, String(user._id)));
     for (const post of posts) if (!hasEvent("content", post._id)) rows.push(mapActivity("content.post.created", "content", `A ${post.kind} was created (${post.status})`, post.createdAt, post.author, String(post._id), { kind: post.kind, status: post.status }));
-    for (const story of stories) if (!hasEvent("content", story._id)) rows.push(mapActivity("content.story.created", "content", `A ${story.mediaType} story was published`, story.createdAt, story.author, String(story._id), { moderation: story.moderation?.status }));
+    for (const story of stories) if (!hasEvent("content", story._id)) rows.push(mapActivity("content.story.created", "content", `A ${story.mediaType} decision was published`, story.createdAt, story.author, String(story._id), { moderation: story.moderation?.status }));
     for (const comment of comments) if (!hasEvent("community", comment._id)) rows.push(mapActivity("community.comment.created", "community", `A comment was added${comment.hidden ? " and is hidden pending review" : ""}`, comment.createdAt, comment.author, String(comment._id)));
     for (const report of reports) if (!hasEvent("moderation", report._id)) rows.push(mapActivity("moderation.report.submitted", "moderation", `${report.reason} report · ${report.severity} priority · ${report.status}`, report.createdAt, report.target, String(report._id)));
     for (const stream of streams) if (!hasEvent("live", stream._id)) rows.push(mapActivity("live.session.updated", "live", `Live session “${stream.title}” is ${stream.status}`, stream.endedAt || stream.startedAt || stream.createdAt, stream.host, String(stream._id), { status: stream.status, viewerCount: stream.viewerCount }));
@@ -232,7 +232,7 @@ router.get("/analytics", authenticateStaff, requirePermission("operations.activi
     if (canViewAccounts) totals.newUsers = sum("users");
     if (canViewContent) { totals.newPosts = sum("posts"); totals.newStories = sum("stories"); totals.newComments = sum("comments"); totals.contentViews = sum("views"); }
     if (canViewReports) totals.reports = sum("reports");
-    const definitions: Record<string, string> = { activeUsers: "Distinct users with at least one recorded content interaction that day; not app sessions.", contentViews: "Recorded post/reel/story viewing interaction events; this is not an estimated reach metric." };
+    const definitions: Record<string, string> = { activeUsers: "Distinct users with at least one recorded content interaction that day; not app sessions.", contentViews: "Recorded post/deed/decision viewing interaction events; this is not an estimated reach metric." };
     if (canViewFinancial) {
       totals.adRevenueRwf = sum("revenueRwf");
       definitions.adRevenueRwf = "Completed ad_payment transactions recorded in RWF, not total wallet deposits or gross platform turnover.";

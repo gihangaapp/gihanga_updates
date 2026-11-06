@@ -33,13 +33,13 @@ function cameraErrorMessage(err: unknown): string {
     case "NotAllowedError":
       return "Camera access was blocked. Allow it in your browser settings, or pick something from your gallery below.";
     case "NotFoundError":
-      return "No camera was found on this device. You can still upload photos & videos from your gallery or create a text story.";
+      return "No camera was found on this device. You can still upload photos & videos from your gallery or create a text decision.";
     case "NotReadableError":
       return "Your camera is in use by another app. Close it and try again, or use the gallery instead.";
     case "OverconstrainedError":
       return "This device can't provide the requested camera mode. Try switching cameras.";
     default:
-      return "The camera couldn't start. You can still use your gallery or create a text story.";
+      return "The camera couldn't start. You can still use your gallery or create a text decision.";
   }
 }
 
@@ -316,7 +316,7 @@ export function StoryCamera({
           <h3 className="font-display text-lg font-bold">Camera Unavailable</h3>
           <p className="text-xs text-white/70">
             {errorDetail ||
-              "Camera access is disabled or unsupported on this device. You can still upload photos & videos from your gallery or create a text story."}
+              "Camera access is disabled or unsupported on this device. You can still upload photos & videos from your gallery or create a text decision."}
           </p>
           <div className="flex flex-col gap-2 w-full pt-2">
             <button
@@ -333,7 +333,7 @@ export function StoryCamera({
               className="press flex h-11 items-center justify-center gap-2 rounded-2xl bg-white/15 px-5 font-bold text-white hover:bg-white/20"
             >
               <Type className="size-4" />
-              Create Text Story
+              Create Text Decision
             </button>
           </div>
         </div>

@@ -26,12 +26,12 @@ export const Route = createFileRoute("/landing")({
       {
         name: "description",
         content:
-          "Join thousands of creators on Gihanga Updates. Share stories, reels, go live, and build your audience across Rwanda and East Africa.",
+          "Join thousands of creators on Gihanga Updates. Share decisions, deeds, go live, and build your audience across Rwanda and East Africa.",
       },
       { property: "og:title", content: "Gihanga Updates — The Creative Platform for Rwanda" },
       {
         property: "og:description",
-        content: "Share stories, reels, and updates with creators shaping culture across Rwanda.",
+        content: "Share decisions, deeds, and updates with creators shaping culture across Rwanda.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -44,7 +44,7 @@ export const Route = createFileRoute("/landing")({
 const navLinks = [
   { label: "Creators", icon: Sparkles, href: "#creators" },
   { label: "Community", icon: Users, href: "#community" },
-  { label: "Reels", icon: Film, href: "#reels" },
+  { label: "Deeds", icon: Film, href: "#reels" },
   { label: "Live", icon: Camera, href: "#live" },
   { label: "Wallet", icon: Wallet, href: "#wallet" },
   { label: "Get the App", icon: Globe, href: "#download" },
@@ -69,7 +69,7 @@ const exploreCategories = [
 
 const discoverCategories = [
   "Top Creators",
-  "Trending Reels",
+  "Trending Deeds",
   "Live Now",
   "New Voices",
   "Kigali Scene",
@@ -97,7 +97,7 @@ const enableSteps = [
   {
     number: "03",
     title: "Post your first update.",
-    body: "Share a photo, reel, or story with your followers instantly.",
+    body: "Share a photo, deed, or decision with your esteems instantly.",
   },
   {
     number: "04",
@@ -125,7 +125,7 @@ const enableSteps = [
 const faqGeneral = [
   {
     q: "What is Gihanga Updates?",
-    a: "Gihanga Updates is a social content platform built for creators and audiences in Rwanda and across East Africa. Share stories, reels, go live, and get paid for your creativity.",
+    a: "Gihanga Updates is a social content platform built for creators and audiences in Rwanda and across East Africa. Share decisions, deeds, go live, and get paid for your creativity.",
   },
   {
     q: "Is Gihanga Updates free to use?",
@@ -137,7 +137,7 @@ const faqGeneral = [
   },
   {
     q: "What content can I post?",
-    a: "Photos, videos, stories, reels, text updates, and live streams. Express yourself however feels right.",
+    a: "Photos, videos, decisions, deeds, text updates, and live streams. Express yourself however feels right.",
   },
   {
     q: "Is my data safe?",
@@ -180,7 +180,7 @@ const footerColumns = [
   },
   {
     title: "Explore",
-    links: ["Creators", "Reels", "Stories", "Live", "Trending", "Explore", "Hashtags"],
+    links: ["Creators", "Deeds", "Decisions", "Live", "Trending", "Explore", "Hashtags"],
   },
   {
     title: "For Creators",
@@ -357,7 +357,7 @@ export function LandingPage() {
               transition={{ duration: 0.5, delay: 0.1 }}
               className="mx-auto mt-5 max-w-md text-[15px] leading-relaxed text-muted-foreground lg:mx-0"
             >
-              Stories, reels and updates from the creators shaping culture across Rwanda — with the
+              Decisions, deeds and updates from the creators shaping culture across Rwanda — with the
               tools to build an audience and get paid for it in RWF.
             </motion.p>
 

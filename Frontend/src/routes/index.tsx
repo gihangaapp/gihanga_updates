@@ -31,13 +31,13 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Follow creators, watch reels and stories, and keep up with what's happening across Rwanda on Gihanga Updates.",
+          "Follow creators, watch deeds and decisions, and keep up with what's happening across Rwanda on Gihanga Updates.",
       },
       { property: "og:title", content: "Gihanga Updates — The Creative Platform for Rwanda" },
       {
         property: "og:description",
         content:
-          "Follow creators, watch reels and stories, and keep up with what's happening across Rwanda on Gihanga Updates.",
+          "Follow creators, watch deeds and decisions, and keep up with what's happening across Rwanda on Gihanga Updates.",
       },
     ],
   }),

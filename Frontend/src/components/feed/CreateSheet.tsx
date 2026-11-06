@@ -40,7 +40,7 @@ function closeCreate() {
 
 const audiences = [
   { id: "public", label: "Everyone", icon: Globe2 },
-  { id: "followers", label: "Followers", icon: Users },
+  { id: "followers", label: "Esteems", icon: Users },
   { id: "private", label: "Only me", icon: Lock },
 ] as const;
 
@@ -87,7 +87,7 @@ export function CreateHost() {
   function pickFile(f: File) {
     const video = f.type.startsWith("video/");
     if (mode === "reel" && !video) {
-      toast.error("Reels need a video file");
+      toast.error("Deeds need a video file");
       return;
     }
     if (video) {
@@ -96,7 +96,7 @@ export function CreateHost() {
       probe.onloadedmetadata = () => {
         URL.revokeObjectURL(probe.src);
         if (mode === "reel" && probe.duration > REEL_MAX_SECONDS) {
-          toast.error("Reels must be 2 minutes or shorter");
+          toast.error("Deeds must be 2 minutes or shorter");
           return;
         }
         setFile(f);
@@ -133,7 +133,7 @@ export function CreateHost() {
           mediaType: isVideo ? "video" : "image",
           caption: body.trim() || undefined,
         });
-        toast.success("Story added", { description: "Visible to your followers for 24 hours." });
+        toast.success("Decision added", { description: "Visible to your esteems for 24 hours." });
         closeCreate();
         return;
       }
@@ -152,7 +152,7 @@ export function CreateHost() {
       } else if (result?.moderation?.status === "processing" || result?.processing) {
         toast.info("Your post is saved and will appear in feeds once its safety check is complete.");
       } else {
-        toast.success(mode === "reel" ? "Reel published" : "Posted to your feed");
+        toast.success(mode === "reel" ? "Deed published" : "Posted to your feed");
       }
       closeCreate();
       navigate({ to: mode === "reel" ? "/reels" : "/" });
@@ -174,8 +174,8 @@ export function CreateHost() {
           {(
             [
               { id: "post", label: "Post", icon: Sparkles },
-              { id: "reel", label: "Reel", icon: Video },
-              { id: "story", label: "Story", icon: Radio },
+              { id: "reel", label: "Deed", icon: Video },
+              { id: "story", label: "Decision", icon: Radio },
             ] as const
           ).map((t) => (
             <button
@@ -229,9 +229,9 @@ export function CreateHost() {
             maxLength={500}
             placeholder={
               mode === "story"
-                ? "Add a caption to your story…"
+                ? "Add a caption to your decision…"
                 : mode === "reel"
-                  ? "Describe your reel. Use #tags to reach more people."
+                  ? "Describe your deed. Use #tags to reach more people."
                   : `What's the update, ${user.name.split(" ")[0]}?`
             }
             className="box-border min-h-[110px] w-full resize-none rounded-xl border-0 bg-transparent p-3 text-[15px] leading-relaxed shadow-none placeholder:text-muted-foreground focus-visible:ring-0"
@@ -322,7 +322,7 @@ export function CreateHost() {
           </Button>
           <Button variant="brand" disabled={!canPost || uploading} onClick={submit}>
             {uploading && <Loader2 className="size-4 animate-spin" />}
-            {mode === "story" ? "Share story" : mode === "reel" ? "Publish reel" : "Post"}
+            {mode === "story" ? "Share decision" : mode === "reel" ? "Publish deed" : "Post"}
           </Button>
         </div>
       </DialogContent>

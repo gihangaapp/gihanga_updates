@@ -265,7 +265,7 @@ export function GoLiveDialog({
               )}
             >
               <Lock className="size-4" />
-              Followers-only stream
+              Esteems-only stream
             </button>
             {asStaff && (
               <p className="rounded-xl bg-primary-soft px-3.5 py-2.5 text-xs font-semibold text-primary">
@@ -507,7 +507,7 @@ function LiveDiscoveryPage() {
                       </span>
                       {s.subsOnly && (
                         <span className="flex items-center gap-1 rounded-md bg-amber-500/90 px-1.5 py-0.5 text-[10px] font-bold text-black">
-                          <Lock className="size-2.5" /> Followers only
+                          <Lock className="size-2.5" /> Esteems only
                         </span>
                       )}
                     </div>
@@ -547,7 +547,7 @@ function LiveDiscoveryPage() {
             <div className="min-w-0 flex-1">
               <p className="font-bold">Ready to go live?</p>
               <p className="text-sm text-muted-foreground">
-                Share your moment with your followers in real time.
+                Share your moment with your esteems in real time.
               </p>
             </div>
             <Button

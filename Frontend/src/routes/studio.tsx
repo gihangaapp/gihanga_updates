@@ -43,7 +43,7 @@ export const Route = createFileRoute("/studio")({
       {
         name: "description",
         content:
-          "Track views, followers and earnings, manage scheduled posts and drafts, and understand your audience in Gihanga Creator Studio.",
+          "Track views, esteems and earnings, manage scheduled posts and drafts, and understand your audience in Gihanga Creator Studio.",
       },
       { property: "og:title", content: "Creator Studio — Gihanga Updates" },
       {
@@ -181,7 +181,7 @@ function StudioPage() {
             icon={Eye}
           />
           <Stat
-            label="New followers"
+            label="New esteems"
             value={formatCount(data?.totals.newFollowers30d ?? 0)}
             delta={`${formatCount(data?.totals.followers ?? 0)} total`}
             icon={UserPlus}
@@ -214,7 +214,7 @@ function StudioPage() {
                     metric === m ? "bg-card text-primary shadow-soft" : "text-muted-foreground",
                   )}
                 >
-                  {m}
+                  {m === "followers" ? "Esteems" : m}
                 </button>
               ))}
             </div>
@@ -380,7 +380,7 @@ function StudioPage() {
           </span>
           <span className="min-w-0 flex-1">
             <p className="font-display text-base font-bold">
-              Go live to your {formatCount(data?.totals.followers ?? 0)} followers
+              Go live to your {formatCount(data?.totals.followers ?? 0)} esteems
             </p>
             <p className="text-sm text-muted-foreground">
               Live sessions are a great way to connect in real time.

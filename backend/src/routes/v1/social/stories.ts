@@ -153,7 +153,7 @@ router.post("/:id/reply", authenticateConsumer, async (req: AuthenticatedRequest
         recipient: story.author._id || story.author,
         actor: req.user!.userId,
         kind: "story_reply",
-        text: `replied to your story: "${message.trim().slice(0, 80)}"`,
+        text: `replied to your decision: "${message.trim().slice(0, 80)}"`,
         relatedPost: story._id as any,
       });
     }

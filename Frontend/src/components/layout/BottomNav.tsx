@@ -12,7 +12,7 @@ export function BottomNav() {
   const items = [
     { label: "Home", icon: Home, to: "/" },
     { label: "Search", icon: Search, to: "/search" },
-    { label: "Reels", icon: Film, to: "/reels" },
+    { label: "Deeds", icon: Film, to: "/reels" },
     { label: "Profile", icon: User, to: profileLink },
   ];
 
@@ -75,7 +75,7 @@ export function BottomNav() {
           {/* Center cutout spacer */}
           <div className="w-14 shrink-0" />
 
-          {/* Right Items (Reels, Profile) */}
+          {/* Right Items (Deeds, Profile) */}
           <div className="flex flex-1 items-center justify-around pl-3">
             {rightItems.map((item) => {
               const active = pathname === item.to;

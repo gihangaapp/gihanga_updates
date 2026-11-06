@@ -34,7 +34,7 @@ export function StoryPreview({
   return (
     <div className="flex flex-col gap-4 max-w-[360px] mx-auto w-full">
       <div className="flex items-center justify-between">
-        <h3 className="font-display text-base font-bold">Story Preview</h3>
+        <h3 className="font-display text-base font-bold">Decision Preview</h3>
         <span className="rounded-full bg-warning/20 px-3 py-1 text-xs font-semibold text-warning">
           24h Expiry
         </span>
@@ -96,7 +96,7 @@ export function StoryPreview({
         </Button>
         <Button variant="brand" onClick={onPublish} disabled={isPublishing}>
           <Send className="size-4" />
-          Share Story
+          Share Decision
         </Button>
       </div>
     </div>

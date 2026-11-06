@@ -138,7 +138,7 @@ function StaffCampaignsPage() {
 
 
   function handleRemoveAd(id: string, title: string) {
-    if (!window.confirm(`Remove "${title}" from public Feed, Stories and Reels? This preserves its audit/payment history but stops further delivery.`)) return;
+    if (!window.confirm(`Remove "${title}" from public Feed, Decisions and Deeds? This preserves its audit/payment history but stops further delivery.`)) return;
     removeAd.mutate(id, {
       onSuccess: (res) => toast.success(res.message || "Advertisement removed from public delivery"),
       onError: (err: any) => toast.error(err.message || "Could not remove advertisement"),

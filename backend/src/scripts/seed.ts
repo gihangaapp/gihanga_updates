@@ -113,8 +113,8 @@ async function seed() {
   const defaultSettings = [
     { key: "rewards.points_per_upload", value: 50, category: "rewards", description: "Kingdom Points awarded for a new post upload" },
     { key: "rewards.points_per_like", value: 1, category: "rewards", description: "Kingdom Points awarded per like received" },
-    { key: "rewards.points_per_follow", value: 5, category: "rewards", description: "Kingdom Points awarded per new follower" },
-    { key: "rewards.points_per_1000_views", value: 10, category: "rewards", description: "Kingdom Points awarded per 1000 reel views" },
+    { key: "rewards.points_per_follow", value: 5, category: "rewards", description: "Kingdom Points awarded per new esteem" },
+    { key: "rewards.points_per_1000_views", value: 10, category: "rewards", description: "Kingdom Points awarded per 1000 deed views" },
     { key: "rewards.points_per_share", value: 3, category: "rewards", description: "Kingdom Points awarded per share" },
     { key: "rewards.points_per_daily_login", value: 10, category: "rewards", description: "Kingdom Points for daily streak" },
     { key: "rewards.points_per_referral", value: 200, category: "rewards", description: "Kingdom Points per successful invite" },

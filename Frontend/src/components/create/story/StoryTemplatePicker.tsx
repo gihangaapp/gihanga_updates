@@ -100,7 +100,7 @@ export function StoryTemplatePicker({ onSelectTemplate, onClose }: StoryTemplate
     <div className="flex flex-col gap-4 rounded-3xl border border-border bg-card p-5 shadow-float max-w-sm w-full mx-auto">
       <div className="flex items-center justify-between">
         <h3 className="font-display text-sm font-bold flex items-center gap-1.5">
-          <Layout className="size-4 text-primary" /> Story Templates
+          <Layout className="size-4 text-primary" /> Decision Templates
         </h3>
         <button
           type="button"

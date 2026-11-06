@@ -51,7 +51,7 @@ export const Route = createFileRoute("/register")({
       { property: "og:title", content: "Create your account — Gihanga Updates" },
       {
         property: "og:description",
-        content: "Join Gihanga Updates and start sharing stories, reels and updates.",
+        content: "Join Gihanga Updates and start sharing decisions, deeds and updates.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -281,7 +281,7 @@ function RegisterPage() {
       signInConsumer(res.tokens, res.user);
       setBusy(false);
       toast.success("Welcome to Gihanga Updates!", {
-        description: `Account created. Following ${selectedCreators.length} creators.`,
+        description: `Account created. Estemmed ${selectedCreators.length} creators.`,
       });
       navigate({ to: "/" });
     } catch (err: any) {
@@ -448,7 +448,7 @@ function RegisterPage() {
                       <User2 className="size-5 mb-1.5" />
                       <p className="text-sm font-bold text-foreground">Regular User</p>
                       <p className="text-[11px] font-normal text-muted-foreground leading-snug mt-0.5">
-                        Watch reels, follow creators, comment, and save posts.
+                        Watch deeds, follow creators, comment, and save posts.
                       </p>
                     </button>
                     <button
@@ -713,7 +713,7 @@ function RegisterPage() {
                         Follow Top Creators & Users
                       </p>
                       <p className="text-[11px] text-muted-foreground">
-                        Follow at least {MIN_CREATORS_TO_FOLLOW} creators to see their stories &
+                        Follow at least {MIN_CREATORS_TO_FOLLOW} creators to see their decisions &
                         posts
                       </p>
                     </div>
@@ -775,7 +775,7 @@ function RegisterPage() {
                                 </div>
                                 <p className="truncate text-[11px] text-muted-foreground">
                                   @{creator.username} · {formatCount(creator.followersCount || 0)}{" "}
-                                  followers
+                                  esteems
                                 </p>
                               </div>
                             </div>
@@ -795,7 +795,7 @@ function RegisterPage() {
                               {isFollowing ? (
                                 <>
                                   <UserCheck className="size-4 shrink-0" />
-                                  <span className="max-[360px]:hidden">Following</span>
+                                  <span className="max-[360px]:hidden">Estemmed</span>
                                 </>
                               ) : (
                                 <>

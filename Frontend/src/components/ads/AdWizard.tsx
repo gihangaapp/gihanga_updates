@@ -328,11 +328,11 @@ export function AdWizard({ open, onOpenChange, onCreated }: AdWizardProps) {
                 </button>
                 <button type="button" onClick={() => { setPlacement("reels"); setAdType(uploadedMediaType); }} className={cn("flex flex-col gap-3 rounded-2xl border p-5 text-left transition-all", placement === "reels" ? "border-primary bg-primary-soft/30 shadow-md ring-2 ring-primary/20" : "border-border bg-card hover:bg-muted/40")}>
                   <div className="flex items-center justify-between"><span className="grid size-10 place-items-center rounded-xl bg-violet-500/10 text-violet-500"><Play className="size-5" /></span>{placement === "reels" && <CheckCircle className="size-5 text-primary" />}</div>
-                  <div><h4 className="font-bold text-sm text-foreground">Reels Advertisement</h4><p className="mt-1 text-xs text-muted-foreground">Appears as a vertical sponsored slide between organic Reels, with video or image creative and a CTA.</p></div>
+                  <div><h4 className="font-bold text-sm text-foreground">Deeds Advertisement</h4><p className="mt-1 text-xs text-muted-foreground">Appears as a vertical sponsored slide between organic Deeds, with video or image creative and a CTA.</p></div>
                 </button>
                 <button type="button" onClick={() => { setPlacement("story"); setAdType(uploadedMediaType === "video" ? "story_video" : "story_image"); }} className={cn("flex flex-col gap-3 rounded-2xl border p-5 text-left transition-all", placement === "story" ? "border-primary bg-primary-soft/30 shadow-md ring-2 ring-primary/20" : "border-border bg-card hover:bg-muted/40")}>
                   <div className="flex items-center justify-between"><span className="grid size-10 place-items-center rounded-xl bg-amber-500/10 text-amber-500"><ImageIcon className="size-5" /></span>{placement === "story" && <CheckCircle className="size-5 text-primary" />}</div>
-                  <div><h4 className="font-bold text-sm text-foreground">Story Advertisement</h4><p className="mt-1 text-xs text-muted-foreground">Delivered full-screen between organic Stories with an interactive call to action.</p></div>
+                  <div><h4 className="font-bold text-sm text-foreground">Decision Advertisement</h4><p className="mt-1 text-xs text-muted-foreground">Delivered full-screen between organic Decisions with an interactive call to action.</p></div>
                 </button>
               </div>
 

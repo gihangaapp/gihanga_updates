@@ -33,12 +33,12 @@ export const Route = createFileRoute("/notifications")({
       {
         name: "description",
         content:
-          "Likes, comments, mentions, new followers and live alerts from across your Gihanga network in one place.",
+          "Likes, comments, mentions, new esteems and live alerts from across your Gihanga network in one place.",
       },
       { property: "og:title", content: "Notifications — Your Gihanga Activity" },
       {
         property: "og:description",
-        content: "Likes, comments, mentions and follower activity from your Gihanga network.",
+        content: "Likes, comments, mentions and esteem activity from your Gihanga network.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -190,7 +190,7 @@ function NotificationsPage() {
                   ) : n.kind === "follow" && n.actor ? (
                     followingSet?.has(n.actor.username) ? (
                       <Button size="sm" variant="soft" disabled>
-                        Following
+                        Estemmed
                       </Button>
                     ) : (
                       <Button
@@ -199,7 +199,7 @@ function NotificationsPage() {
                         onClick={(e) => {
                           e.stopPropagation();
                           followUser.mutate({ username: n.actor!.username, follow: true });
-                          toast.success("Following");
+                          toast.success("Estemmed");
                         }}
                       >
                         Follow back

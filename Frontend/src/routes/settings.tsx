@@ -782,9 +782,9 @@ function OverviewSection({
                 @{user?.username || "username"} • {user?.email || "No email"}
               </p>
               <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground font-semibold">
-                <span>{user?.followersCount || 0} followers</span>
+                <span>{user?.followersCount || 0} esteems</span>
                 <span>•</span>
-                <span>{user?.followingCount || 0} following</span>
+                <span>{user?.followingCount || 0} estemmed</span>
               </div>
             </div>
           </div>
@@ -1359,7 +1359,7 @@ function PrivacySection({
     <div className="space-y-6">
       <SettingsSection
         title="Account Visibility"
-        description="Choose who can discover your profile, watch your stories, and view your posts."
+        description="Choose who can discover your profile, watch your decisions, and view your posts."
         icon={Eye}
       >
         <SettingsToggle
@@ -1393,8 +1393,8 @@ function PrivacySection({
           value={settings?.whoCanMessage || "everyone"}
           options={[
             { value: "everyone", label: "Everyone" },
-            { value: "followers", label: "Followers only" },
-            { value: "following", label: "People you follow" },
+            { value: "followers", label: "Esteems only" },
+            { value: "following", label: "Estemmed accounts" },
             { value: "nobody", label: "Nobody" },
           ]}
           onChange={(val: any) => onSave({ whoCanMessage: val })}
@@ -1406,8 +1406,8 @@ function PrivacySection({
           value={settings?.whoCanComment || "everyone"}
           options={[
             { value: "everyone", label: "Everyone" },
-            { value: "followers", label: "Followers only" },
-            { value: "following", label: "People you follow" },
+            { value: "followers", label: "Esteems only" },
+            { value: "following", label: "Estemmed accounts" },
             { value: "nobody", label: "Nobody" },
           ]}
           onChange={(val: any) => onSave({ whoCanComment: val })}
@@ -1415,12 +1415,12 @@ function PrivacySection({
 
         <SettingsSelect
           label="Who can tag or mention you"
-          hint="Choose who can tag your @username in posts, reels, and stories."
+          hint="Choose who can tag your @username in posts, deeds, and decisions."
           value={settings?.whoCanMention || "everyone"}
           options={[
             { value: "everyone", label: "Everyone" },
-            { value: "followers", label: "Followers only" },
-            { value: "following", label: "People you follow" },
+            { value: "followers", label: "Esteems only" },
+            { value: "following", label: "Estemmed accounts" },
             { value: "nobody", label: "Nobody" },
           ]}
           onChange={(val: any) => onSave({ whoCanMention: val })}
@@ -1428,11 +1428,11 @@ function PrivacySection({
 
         <SettingsSelect
           label="Remix & Duet Permissions"
-          hint="Allow creators to sample your audio clips and build reels using your content."
+          hint="Allow creators to sample your audio clips and build deeds using your content."
           value={settings?.whoCanRemix || "everyone"}
           options={[
             { value: "everyone", label: "Everyone" },
-            { value: "followers", label: "Followers only" },
+            { value: "followers", label: "Esteems only" },
             { value: "nobody", label: "Nobody" },
           ]}
           onChange={(val: any) => onSave({ whoCanRemix: val })}
@@ -1771,7 +1771,7 @@ function NotificationsSection({
         <SettingsToggle
           id="pushLikes"
           label="Likes & Reactions"
-          hint="When someone likes your post, reel, or comment."
+          hint="When someone likes your post, deed, or comment."
           checked={settings?.pushLikes !== false}
           onChange={(val) => onSave({ pushLikes: val })}
         />
@@ -1786,8 +1786,8 @@ function NotificationsSection({
 
         <SettingsToggle
           id="pushFollows"
-          label="New Followers"
-          hint="When someone starts following your creator channel."
+          label="New Esteems"
+          hint="When someone adds you to their Estemmed list."
           checked={settings?.pushFollows !== false}
           onChange={(val) => onSave({ pushFollows: val })}
         />
@@ -1795,7 +1795,7 @@ function NotificationsSection({
         <SettingsToggle
           id="pushMentions"
           label="Mentions & Tags"
-          hint="When someone tags your @username in a caption or story."
+          hint="When someone tags your @username in a caption or decision."
           checked={settings?.pushMentions !== false}
           onChange={(val) => onSave({ pushMentions: val })}
         />
@@ -1878,7 +1878,7 @@ function NotificationsSection({
         <SettingsToggle
           id="emailDigest"
           label="Weekly Creator Digest"
-          hint="A summary of your top performing posts, follower growth, and trending hashtags."
+          hint="A summary of your top performing posts, esteem growth, and trending hashtags."
           checked={settings?.emailDigest || false}
           onChange={(val) => onSave({ emailDigest: val })}
         />
@@ -1917,7 +1917,7 @@ function FeedSection({
         />
 
         <SettingsSelect
-          label="Autoplay Videos & Reels"
+          label="Autoplay Videos & Deeds"
           hint="Choose under which network conditions videos automatically play in your feed."
           value={settings?.autoplayVideos || "always"}
           options={[
@@ -1938,7 +1938,7 @@ function FeedSection({
 
         <SettingsSelect
           label="Preferred Video Quality"
-          hint="Set default stream resolution for reels and video broadcasts."
+          hint="Set default stream resolution for deeds and video broadcasts."
           value={settings?.preferredVideoQuality || "auto"}
           options={[
             { value: "auto", label: "Automatic (Optimized for speed)" },
@@ -1960,7 +1960,7 @@ function FeedSection({
           value={settings?.defaultFeed || "for_you"}
           options={[
             { value: "for_you", label: "For You (Discovery & Recommended)" },
-            { value: "following", label: "Following (Accounts you follow)" },
+            { value: "following", label: "Estemmed (Accounts you estemmed)" },
           ]}
           onChange={(val: any) => onSave({ defaultFeed: val })}
         />
@@ -2017,8 +2017,8 @@ function MessagesSection({
           value={settings?.messageRequests || "everyone"}
           options={[
             { value: "everyone", label: "Everyone" },
-            { value: "followers", label: "Followers only" },
-            { value: "following", label: "People you follow" },
+            { value: "followers", label: "Esteems only" },
+            { value: "following", label: "Estemmed accounts" },
             { value: "nobody", label: "Nobody" },
           ]}
           onChange={(val: any) => onSave({ messageRequests: val })}
@@ -2129,7 +2129,7 @@ function CreatorSection({
           value={settings?.defaultLiveAudience || "public"}
           options={[
             { value: "public", label: "Public (Open to everyone)" },
-            { value: "followers", label: "Followers Only" },
+            { value: "followers", label: "Esteems Only" },
             { value: "subscribers", label: "Subscribers / Top Supporters" },
           ]}
           onChange={(val: any) => onSave({ defaultLiveAudience: val })}
@@ -2138,7 +2138,7 @@ function CreatorSection({
         <SettingsToggle
           id="notifyFollowersOnLive"
           label="Broadcast Notification"
-          hint="Send push alert to followers as soon as you go live."
+          hint="Send push alert to your esteems as soon as you go live."
           checked={settings?.notifyFollowersOnLive !== false}
           onChange={(val) => onSave({ notifyFollowersOnLive: val })}
         />
@@ -2304,7 +2304,7 @@ function AdsSection({
       >
         <SettingsRow
           label="Promotions Balance"
-          hint="Use Gihanga Points to boost reels and reach wider audiences."
+          hint="Use Gihanga Points to boost deeds and reach wider audiences."
         >
           <Button variant="outline" size="sm" className="rounded-xl text-xs font-bold">
             Create Campaign
@@ -2453,7 +2453,7 @@ function AccessibilitySection({
         <SettingsToggle
           id="captionsEnabled"
           label="Closed Captions & Subtitles"
-          hint="Display automatic transcripts on video reels and creator streams."
+          hint="Display automatic transcripts on video deeds and creator streams."
           checked={settings?.captionsEnabled !== false}
           onChange={(val) => onSave({ captionsEnabled: val })}
         />
@@ -2629,7 +2629,7 @@ function ConnectedAppsSection() {
     {
       id: "app-1",
       name: "Gihanga Creator Studio Desktop",
-      permissions: "Stream keys, Live analytics, Story management",
+      permissions: "Stream keys, Live analytics, Decision management",
       lastUsed: "2 hours ago",
     },
     {
@@ -2988,7 +2988,7 @@ function AccountManagementSection() {
 
         <SettingsRow
           label="Permanently Delete Account"
-          hint="Irreversible action: Deletes all posts, stories, reels, points, and chat records permanently."
+          hint="Irreversible action: Deletes all posts, decisions, deeds, points, and chat records permanently."
         >
           <Button
             size="sm"
@@ -3009,7 +3009,7 @@ function AccountManagementSection() {
               Deactivate Account?
             </h3>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              Your profile, posts, and followers will be temporarily hidden. You can reactivate your
+              Your profile, posts, and esteems will be temporarily hidden. You can reactivate your
               account at any time simply by logging back in.
             </p>
             <div className="pt-2 flex justify-end gap-2">
@@ -3046,7 +3046,7 @@ function AccountManagementSection() {
 
             <p className="text-xs text-muted-foreground leading-relaxed">
               This action <strong className="text-danger">CANNOT</strong> be undone. All your posts,
-              followers, points balance, and messaging history will be erased from Gihanga Updates.
+              esteems, points balance, and messaging history will be erased from Gihanga Updates.
             </p>
 
             <form onSubmit={handleDeletePermanent} className="space-y-4">

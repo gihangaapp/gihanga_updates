@@ -42,7 +42,7 @@ export const Route = createFileRoute("/profile/$username")({
       { title: "Profile — Gihanga Updates" },
       {
         name: "description",
-        content: "View this creator's posts, reels and activity on Gihanga Updates.",
+        content: "View this creator's posts, deeds and activity on Gihanga Updates.",
       },
     ],
   }),
@@ -51,7 +51,7 @@ export const Route = createFileRoute("/profile/$username")({
 
 const tabs = [
   { id: "posts", label: "Posts", icon: Grid3x3 },
-  { id: "reels", label: "Reels", icon: Film },
+  { id: "reels", label: "Deeds", icon: Film },
   { id: "likes", label: "Likes", icon: Heart },
 ] as const;
 
@@ -155,13 +155,13 @@ function FollowListDialog({
     <Dialog open={tab !== null} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[70vh] overflow-y-auto sm:max-w-[420px]">
         <DialogHeader>
-          <DialogTitle>{tab === "followers" ? "Followers" : "Following"}</DialogTitle>
+          <DialogTitle>{tab === "followers" ? "Esteems" : "Estemmed"}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-1">
           {isLoading && <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>}
           {!isLoading && !list?.length && (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              {tab === "followers" ? "No followers yet." : "Not following anyone yet."}
+              {tab === "followers" ? "No esteems yet." : "No one estemmed yet."}
             </p>
           )}
           {list?.map((u) => {
@@ -197,7 +197,7 @@ function FollowListDialog({
                       )
                     }
                   >
-                    {isFollowing ? "Following" : "Follow"}
+                    {isFollowing ? "Estemmed" : "Follow"}
                   </Button>
                 )}
               </div>
@@ -388,7 +388,7 @@ function ProfilePage() {
                         {
                           onSuccess: () =>
                             toast.success(
-                              wasFollowing ? `Unfollowed @${username}` : `Following @${username}`,
+                              wasFollowing ? `Unfollowed @${username}` : `Estemmed @${username}`,
                             ),
                           onError: (err: any) =>
                             toast.error(err.message || "Couldn't update follow status"),
@@ -396,7 +396,7 @@ function ProfilePage() {
                       );
                     }}
                   >
-                    {profile.isFollowing ? "Following" : "Follow"}
+                    {profile.isFollowing ? "Estemmed" : "Follow"}
                   </Button>
                 )}
               </div>
@@ -433,12 +433,12 @@ function ProfilePage() {
               {[
                 { label: "Posts", value: profile.postsCount, onClick: undefined },
                 {
-                  label: "Followers",
+                  label: "Esteems",
                   value: profile.followersCount,
                   onClick: () => setFollowTab("followers"),
                 },
                 {
-                  label: "Following",
+                  label: "Estemmed",
                   value: profile.followingCount,
                   onClick: () => setFollowTab("following"),
                 },
@@ -468,7 +468,7 @@ function ProfilePage() {
               )}
             </ul>
 
-            {/* Achievement badges — Stars (followers) | Diamonds (views).
+            {/* Achievement badges — Stars (esteems) | Diamonds (views).
                 All configured badges render (locked = outlined, unlocked = filled).
                 Tapping a badge opens a detail popover with progress. */}
             <AchievementBadgeRow
@@ -521,7 +521,7 @@ function ProfilePage() {
           })}
         </div>
 
-        {/* Posts, Reels, and Likes Media Grid with full audio/video/image support and delete menu */}
+        {/* Posts, Deeds, and Likes Media Grid with full audio/video/image support and delete menu */}
         {((tab === "likes" ? likesQuery.isLoading : postsQuery.isLoading) && grid.length === 0) ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3" aria-label="Loading profile posts" aria-busy="true">
             {Array.from({ length: 6 }, (_, index) => (
@@ -534,7 +534,7 @@ function ProfilePage() {
               {tab === "posts"
                 ? "No posts shared yet."
                 : tab === "reels"
-                  ? "No reels published yet."
+                  ? "No deeds published yet."
                   : "No liked posts yet."}
             </p>
           </div>

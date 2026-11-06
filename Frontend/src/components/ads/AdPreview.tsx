@@ -83,7 +83,7 @@ export function AdPreview({
   const resolvedThumbnail = mediaUrlWithAuth(resolveMediaUrl(thumbnailUrl) || thumbnailUrl);
   const resolvedAvatar = mediaUrlWithAuth(resolveMediaUrl(creatorAvatarUrl) || creatorAvatarUrl);
   const isVideo = adType.includes("video");
-  const placementLabel = placement === "reels" ? "Reels" : "Stories";
+  const placementLabel = placement === "reels" ? "Deeds" : "Decisions";
   const [mediaFailed, setMediaFailed] = useState(false);
 
   useEffect(() => {

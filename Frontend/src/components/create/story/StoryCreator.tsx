@@ -108,7 +108,7 @@ export function StoryCreator({ onClose }: StoryCreatorProps) {
       tempVideo.onloadedmetadata = () => {
         URL.revokeObjectURL(tempVideo.src);
         if (tempVideo.duration > 120) {
-          toast.error("Story videos must be 2 minutes or less");
+          toast.error("Decision videos must be 2 minutes or less");
           return;
         }
         const previewUrl = URL.createObjectURL(file);
@@ -146,7 +146,7 @@ export function StoryCreator({ onClose }: StoryCreatorProps) {
 
   const handleSaveDraft = () => {
     saveDraft({ type: "story", slides });
-    toast.success("Story saved to drafts");
+    toast.success("Decision saved to drafts");
     onClose();
   };
 
@@ -203,7 +203,7 @@ export function StoryCreator({ onClose }: StoryCreatorProps) {
       toast.success(
         selectedAudience === "close_friends"
           ? "Shared with Close Friends!"
-          : "Story shared with your followers!",
+          : "Decision shared with your esteems!",
       );
       // Stay exactly where the user was — closing the creator returns to the
       // page it was opened from; never redirect (e.g. to the live page).
@@ -212,7 +212,7 @@ export function StoryCreator({ onClose }: StoryCreatorProps) {
       }, 1000);
     } catch (err: any) {
       setUploadStage("failed");
-      setUploadError(err?.message || "Failed to share story.");
+      setUploadError(err?.message || "Failed to share decision.");
     }
   };
 
@@ -451,7 +451,7 @@ export function StoryCreator({ onClose }: StoryCreatorProps) {
             className="press flex shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-white/15 px-3.5 py-2 text-xs font-bold text-white hover:bg-white/25 backdrop-blur-md"
           >
             <GAvatar user={user} size="xs" />
-            <span>Your Story</span>
+            <span>Your Decision</span>
           </button>
 
           {/* Close Friends Button (Opens Close Friends selection modal) */}

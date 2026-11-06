@@ -32,7 +32,7 @@ function formatDate(iso: string | null): string | null {
 const MOTIVATIONAL = [
   "You're getting closer to your next Gihanga achievement!",
   "Keep going — your community is growing.",
-  "Every follower brings you one step closer.",
+  "Every esteem brings you one step closer.",
   "Your content is reaching more people every day.",
 ];
 
@@ -49,7 +49,7 @@ export function AchievementBadgeDetail({
   const earned = Boolean(data.earned);
   const { label: colorLabel } = resolveBadgeColor(data.color);
   const awardDate = formatDate(data.awardedAt ?? null);
-  const metricLabel = data.metric === "followers" ? "eligible followers" : "eligible content views";
+  const metricLabel = data.metric === "followers" ? "eligible esteems" : "eligible content views";
 
   if (earned) {
     return (
@@ -118,7 +118,7 @@ export function AchievementBadgeDetail({
       </div>
       <p className="text-[11px] text-muted-foreground">
         Remaining: <span className="font-semibold text-foreground">{formatCount(remaining)}</span>{" "}
-        {data.metric === "followers" ? "followers" : "views"}
+        {data.metric === "followers" ? "esteems" : "views"}
       </p>
       <p className="flex items-start gap-1.5 text-[11px] italic leading-relaxed text-foreground/80">
         <Sparkles

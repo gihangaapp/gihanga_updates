@@ -27,7 +27,7 @@ export function CoverSelector({
     <div className="flex flex-col gap-4 rounded-2xl border border-border bg-card p-4">
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-1.5 text-xs font-bold text-foreground">
-          <ImageIcon className="size-4 text-info" /> Select Reel Cover Frame
+          <ImageIcon className="size-4 text-info" /> Select Deed Cover Frame
         </span>
         <span className="text-xs font-mono font-semibold text-muted-foreground">
           {Math.floor(selectedTimestamp)}s
@@ -58,7 +58,7 @@ export function CoverSelector({
       />
 
       <p className="text-[11px] text-center text-muted-foreground">
-        Drag the slider to choose the frame that will be shown on your profile grid and reels tab.
+        Drag the slider to choose the frame that will be shown on your profile grid and deeds tab.
       </p>
     </div>
   );

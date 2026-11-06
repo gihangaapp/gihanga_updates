@@ -192,7 +192,7 @@ function ContentManagementPage() {
                 <option value="all">All types</option>
                 <option value="photo">Photos</option>
                 <option value="video">Videos</option>
-                <option value="reel">Reels</option>
+                <option value="reel">Deeds</option>
                 <option value="text">Text</option>
               </select>
             </label>

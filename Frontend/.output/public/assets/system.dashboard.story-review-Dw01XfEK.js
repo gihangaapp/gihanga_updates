@@ -1,0 +1,1 @@
+import{i as e}from"./utils-C2iKZ1M-.js";import{t}from"./AdminWorkspacePage-DscMrVdc.js";var n=e(),r=()=>(0,n.jsx)(t,{module:`story-review`});export{r as component};

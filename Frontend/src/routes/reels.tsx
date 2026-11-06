@@ -50,13 +50,13 @@ export const Route = createFileRoute("/reels")({
   }),
   head: () => ({
     meta: [
-      { title: "Reels — Short Video from Gihanga Creators" },
+      { title: "Deeds — Short Video from Gihanga Creators" },
       {
         name: "description",
         content:
           "Scroll full-screen short videos from Gihanga creators: dance, street photography, workflows and more.",
       },
-      { property: "og:title", content: "Reels — Short Video from Gihanga Creators" },
+      { property: "og:title", content: "Deeds — Short Video from Gihanga Creators" },
       {
         property: "og:description",
         content: "Full-screen short video from the Gihanga creator community.",
@@ -329,7 +329,7 @@ function ReelCard({
     isLongCaption && !isExpanded ? `${bodyText.slice(0, maxCharLimit)}…` : bodyText;
 
   const tagsList = Array.isArray(reel.tags) ? reel.tags : [];
-  const primaryTag = tagsList[0] || "REELS";
+  const primaryTag = tagsList[0] || "DEEDS";
 
   return (
     <article
@@ -366,7 +366,7 @@ function ReelCard({
         />
       ) : hasError ? (
         <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-6 text-center text-white">
-          <p className="text-sm font-semibold">Unable to play this Reel.</p>
+          <p className="text-sm font-semibold">Unable to play this Deed.</p>
           <Button
             variant="outline"
             size="sm"
@@ -428,7 +428,7 @@ function ReelCard({
 
       <span className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
 
-      {/* Top Header Overlay matching screenshot (Reels title at top-left, Camera & Mute icons at top-right) */}
+      {/* Top Header Overlay matching screenshot (Deeds title at top-left, Camera & Mute icons at top-right) */}
       <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between p-4 max-lg:pt-[max(1rem,env(safe-area-inset-top))] bg-gradient-to-b from-black/70 via-black/30 to-transparent">
         <div className="flex items-center gap-2">
           {/* Mobile has no top/bottom bars on this page — keep a way out. */}
@@ -440,7 +440,7 @@ function ReelCard({
             <ArrowLeft className="size-5" />
           </Link>
           <h2 className="font-display text-xl font-extrabold text-white drop-shadow-md tracking-tight">
-            Reels
+            Deeds
           </h2>
         </div>
         <div className="flex items-center gap-2">
@@ -456,7 +456,7 @@ function ReelCard({
             type="button"
             onClick={() => openCreate("reel")}
             className="press grid size-9 place-items-center rounded-full bg-black/40 text-white backdrop-blur-md hover:bg-black/60"
-            title="Create Reel"
+            title="Create Deed"
           >
             <Camera className="size-5" />
           </button>
@@ -581,7 +581,7 @@ function ReelCard({
                   : "border-white bg-white text-slate-950 hover:bg-white/90",
               )}
             >
-              {following ? "Following" : "Follow"}
+              {following ? "Estemmed" : "Follow"}
             </button>
           )}
         </div>
@@ -618,7 +618,7 @@ function ReelCard({
       <ShareSheet
         open={shareOpen}
         onOpenChange={setShareOpen}
-        title={`Reel by @${authorUsername} on Gihanga Updates`}
+        title={`Deed by @${authorUsername} on Gihanga Updates`}
         text={reel.body}
         url={`${typeof window !== "undefined" ? window.location.origin : ""}/post/${reel._id}`}
         onShare={handleShare}
@@ -656,7 +656,7 @@ function ReelCard({
               className="flex w-full items-center gap-3 rounded-2xl p-3 text-xs font-bold hover:bg-white/10"
             >
               <Share2 className="size-4.5" />
-              <span>Share Reel</span>
+              <span>Share Deed</span>
             </button>
 
             {isOwn && (
@@ -665,12 +665,12 @@ function ReelCard({
                 onClick={() => {
                   setMoreOpen(false);
                   deletePost.mutate(reel._id);
-                  toast.success("Reel deleted");
+                  toast.success("Deed deleted");
                 }}
                 className="flex w-full items-center gap-3 rounded-2xl p-3 text-xs font-bold text-red-400 hover:bg-red-500/10"
               >
                 <Trash2 className="size-4.5" />
-                <span>Delete Reel</span>
+                <span>Delete Deed</span>
               </button>
             )}
 
@@ -1044,8 +1044,8 @@ function ReelsPage() {
                 disabled={activeReelIndex === 0}
                 onClick={() => goToReel(activeReelIndex - 1)}
                 className="press grid size-11 place-items-center rounded-full bg-surface border border-border shadow-soft text-foreground disabled:opacity-30 focus-visible:ring-2 focus-visible:ring-ring"
-                title="Previous Reel (↑ / k)"
-                aria-label="Previous reel"
+                title="Previous Deed (↑ / k)"
+                aria-label="Previous deed"
               >
                 <ChevronUp className="size-6" />
               </button>
@@ -1054,8 +1054,8 @@ function ReelsPage() {
                 disabled={activeReelIndex === displaySlides.length - 1}
                 onClick={() => goToReel(activeReelIndex + 1)}
                 className="press grid size-11 place-items-center rounded-full bg-surface border border-border shadow-soft text-foreground disabled:opacity-30 focus-visible:ring-2 focus-visible:ring-ring"
-                title="Next Reel (↓ / j)"
-                aria-label="Next reel"
+                title="Next Deed (↓ / j)"
+                aria-label="Next deed"
               >
                 <ChevronDown className="size-6" />
               </button>
@@ -1065,21 +1065,21 @@ function ReelsPage() {
           <div
             ref={containerRef}
             tabIndex={-1}
-            aria-label="Reels player — use arrow keys or j and k to navigate"
+            aria-label="Deeds player — use arrow keys or j and k to navigate"
             className="flex h-full w-full flex-col overflow-y-auto no-scrollbar overscroll-contain"
             style={{ scrollSnapType: "y mandatory" }}
           >
             {isLoading && (
               <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-5 animate-spin text-primary" /> Loading reels…
+                <Loader2 className="size-5 animate-spin text-primary" /> Loading deeds…
               </div>
             )}
             {!isLoading && reels.length === 0 && (
               <div className="surface-card m-4 rounded-3xl p-8 text-center text-muted-foreground space-y-3">
                 <Play className="size-10 mx-auto text-muted-foreground/40" />
-                <p className="text-sm font-semibold">No reels yet — be the first to post one!</p>
+                <p className="text-sm font-semibold">No deeds yet — be the first to post one!</p>
                 <Button variant="brand" size="sm" onClick={() => openCreate("reel")}>
-                  Create a Reel
+                  Create a Deed
                 </Button>
               </div>
             )}
@@ -1118,7 +1118,7 @@ function ReelsPage() {
           {/* A11y: announce the current reel. */}
           <p aria-live="polite" className="sr-only">
             {activeSlide?.kind === "reel"
-              ? `Reel ${activeSlide.reelIndex + 1} of ${reels.length} by @${(typeof activeSlide.reel.author === "object" ? activeSlide.reel.author?.username : undefined) ?? "creator"}`
+              ? `Deed ${activeSlide.reelIndex + 1} of ${reels.length} by @${(typeof activeSlide.reel.author === "object" ? activeSlide.reel.author?.username : undefined) ?? "creator"}`
               : activeSlide?.kind === "ad"
                 ? "Sponsored advertisement"
                 : ""}

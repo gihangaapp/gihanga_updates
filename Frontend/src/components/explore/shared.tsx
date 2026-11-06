@@ -62,7 +62,7 @@ const CATEGORIES: { id: PostCategory; label: string; icon: LucideIcon }[] = [
   { id: "all", label: "All", icon: Sparkles },
   { id: "photo", label: "Photos", icon: ImageIcon },
   { id: "video", label: "Videos", icon: Video },
-  { id: "reel", label: "Reels", icon: Film },
+  { id: "reel", label: "Deeds", icon: Film },
   { id: "text", label: "Text", icon: Type },
 ];
 
@@ -394,7 +394,7 @@ export function UserCard({ u, className }: { u: PublicUser; className?: string }
             size="sm"
             onClick={() => {
               followUser.mutate({ username: u.username, follow: !isFollowing });
-              if (!isFollowing) toast.success(`Following @${u.username}`);
+              if (!isFollowing) toast.success(`Estemmed @${u.username}`);
             }}
             className={cn(
               "h-8 shrink-0 rounded-xl px-3 text-xs font-extrabold transition-transform active:scale-95",
@@ -405,7 +405,7 @@ export function UserCard({ u, className }: { u: PublicUser; className?: string }
           >
             {isFollowing ? (
               <span className="flex items-center gap-1">
-                <UserCheck className="size-3.5" /> Following
+                <UserCheck className="size-3.5" /> Estemmed
               </span>
             ) : (
               <span className="flex items-center gap-1">
@@ -423,7 +423,7 @@ export function UserCard({ u, className }: { u: PublicUser; className?: string }
       <div className="mt-3 flex items-center justify-between border-t border-border/50 pt-2 text-[11px] text-muted-foreground">
         <div className="flex items-center gap-1.5 font-bold">
           <span className="text-foreground">{formatCount(u.followersCount || 0)}</span>
-          <span>followers</span>
+          <span>esteems</span>
         </div>
         {u.isCreator && (
           <span className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-amber-500">

@@ -219,7 +219,7 @@ export function MobileGoLive({
             className="press flex items-center gap-1.5 rounded-full bg-black/45 px-3.5 py-1.5 text-sm font-bold backdrop-blur"
           >
             {subsOnly ? <Lock className="size-4" /> : <Users className="size-4" />}
-            {subsOnly ? "Followers" : "Everyone"}
+            {subsOnly ? "Esteems" : "Everyone"}
             <ChevronDown className="size-4" />
           </button>
         </div>
@@ -297,7 +297,7 @@ export function MobileGoLive({
                   className="w-full resize-none rounded-xl bg-white/10 px-3 py-2 text-sm text-white outline-none placeholder:text-white/50"
                 />
                 <p className="text-sm text-white/60">
-                  Your followers and anyone watching will see this title.
+                  Your esteems and anyone watching will see this title.
                 </p>
                 <Button
                   variant="brand"
@@ -328,7 +328,7 @@ export function MobileGoLive({
                 />
                 <AudienceRow
                   icon={<Lock className="size-5" />}
-                  label="Followers only"
+                  label="Esteems only"
                   hint="Only people who follow you can watch."
                   selected={subsOnly}
                   onClick={() => {
@@ -365,7 +365,7 @@ export function MobileGoLive({
                 />
                 <SettingRow
                   icon={<Lock className="size-5" />}
-                  label="Followers-only"
+                  label="Esteems-only"
                   checked={subsOnly}
                   onChange={() => setSubsOnly((v) => !v)}
                 />

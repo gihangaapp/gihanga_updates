@@ -15,7 +15,7 @@ export const Route = createFileRoute("/welcome")({
       {
         name: "description",
         content:
-          "Create your Gihanga Updates account to follow creators, share stories and reels, and join the conversation across Rwanda.",
+          "Create your Gihanga Updates account to follow creators, share decisions and deeds, and join the conversation across Rwanda.",
       },
       { property: "og:title", content: "Welcome to Gihanga Updates — Join the Creators" },
       {
@@ -33,9 +33,9 @@ const highlights = [
   {
     icon: Sparkles,
     title: "A feed with taste",
-    body: "For you, Following and Trending — no noise.",
+    body: "For you, Estemmed and Trending — no noise.",
   },
-  { icon: Flame, title: "Stories & reels", body: "Go live, post vertical, keep the room warm." },
+  { icon: Flame, title: "Decisions & deeds", body: "Go live, post vertical, keep the room warm." },
   { icon: Users, title: "Creator tools", body: "Drafts, scheduling and payouts in RWF." },
   { icon: ShieldCheck, title: "Safety first", body: "Granular controls over who sees what." },
 ];
@@ -79,7 +79,7 @@ function Welcome() {
             transition={{ duration: 0.5, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
             className="mt-4 text-[15px] text-muted-foreground"
           >
-            Stories, reels and updates from the creators shaping culture — with the tools to build
+            Decisions, deeds and updates from the creators shaping culture — with the tools to build
             an audience and get paid for it in RWF.
           </motion.p>
 

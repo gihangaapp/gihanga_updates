@@ -64,7 +64,7 @@ export function CloseFriendsModal({ onClose, onDone }: CloseFriendsModalProps) {
             </div>
             <div>
               <h3 className="font-display text-sm font-bold">Close Friends</h3>
-              <p className="text-[11px] text-white/60">Choose followers to share private stories</p>
+              <p className="text-[11px] text-white/60">Choose esteems to share private decisions</p>
             </div>
           </div>
           <button type="button" onClick={onClose} className="text-white/60 hover:text-white">
@@ -84,7 +84,7 @@ export function CloseFriendsModal({ onClose, onDone }: CloseFriendsModalProps) {
           />
         </div>
 
-        {/* Following List */}
+        {/* Estemmed List */}
         <div className="flex flex-col gap-1.5 max-h-64 overflow-y-auto no-scrollbar">
           {isLoading && (
             <div className="flex items-center justify-center py-8 text-xs text-white/60 gap-2">
@@ -95,7 +95,7 @@ export function CloseFriendsModal({ onClose, onDone }: CloseFriendsModalProps) {
 
           {!isLoading && filtered.length === 0 && (
             <p className="py-8 text-center text-xs text-white/50">
-              No people found in your following list.
+              No people found in your Estemmed list.
             </p>
           )}
 

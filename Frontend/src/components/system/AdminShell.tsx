@@ -95,7 +95,7 @@ export const adminNavSections: AdminNavSection[] = [
       { to: "/system/dashboard/moderation", label: "Report Inbox", icon: ShieldAlert, permissions: ["moderation.queue.view"], badgeKey: "pendingReports" },
       { to: "/system/dashboard/post-review", label: "Post Review", icon: FileText, permissions: ["moderation.content.view"] },
       { to: "/system/dashboard/comment-review", label: "Comment Review", icon: Flag, permissions: ["moderation.content.view"] },
-      { to: "/system/dashboard/story-review", label: "Story Review", icon: Radio, permissions: ["moderation.content.view"] },
+      { to: "/system/dashboard/story-review", label: "Decision Review", icon: Radio, permissions: ["moderation.content.view"] },
       { to: "/system/dashboard/live", label: "Live Management & Safety", icon: Radio, permissions: ["live.forceEnd"], badgeKey: "liveNow" },
       { to: "/system/dashboard/user-investigations", label: "User Investigations", icon: Users, permissions: ["moderation.investigations.view"] },
       { to: "/system/dashboard/appeals", label: "Appeals", icon: ClipboardCheck, permissions: ["moderation.appeals.view"] },

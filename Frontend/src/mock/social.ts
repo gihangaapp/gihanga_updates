@@ -34,7 +34,7 @@ export const notifications: Notification[] = [
     unread: true,
     postImage: posts[3]?.image as string,
   },
-  { id: "n3", kind: "follow", user: U(6), text: "started following you", time: "44m", unread: true },
+  { id: "n3", kind: "follow", user: U(6), text: "became one of your esteems", time: "44m", unread: true },
   {
     id: "n4",
     kind: "live",
@@ -62,12 +62,12 @@ export const notifications: Notification[] = [
     id: "n7",
     kind: "like",
     user: U(1),
-    text: "and 840 others liked your reel",
+    text: "and 840 others liked your deed",
     time: "8h",
     unread: false,
     postImage: posts[1]?.image as string,
   },
-  { id: "n8", kind: "follow", user: U(5), text: "started following you", time: "1d", unread: false },
+  { id: "n8", kind: "follow", user: U(5), text: "became one of your esteems", time: "1d", unread: false },
 ];
 
 export interface Message {

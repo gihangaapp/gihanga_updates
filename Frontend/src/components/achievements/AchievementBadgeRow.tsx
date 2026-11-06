@@ -3,7 +3,7 @@
  * in two visually distinct groups separated by a thin divider:
  *
  *   [★ Red  ★ Gold  ★ Blue]  │  [◆ Red  ◆ Green  ◆ Blue]
- *        Stars (followers)          Diamonds (views)
+ *        Stars (esteems)            Diamonds (views)
  *
  * Each badge is a button that opens a Radix Popover with the detail panel.
  * Locked badges are outlined silhouettes; unlocked badges are filled — but
@@ -86,7 +86,7 @@ function BadgeButton({
               {thresholdLabel}
             </span>
             <span className="text-[9px] uppercase tracking-wide text-muted-foreground">
-              {badge.metric === "followers" ? "followers" : "views"}
+              {badge.metric === "followers" ? "esteems" : "views"}
             </span>
           </span>
         </button>
@@ -141,7 +141,7 @@ export function AchievementBadgeRow({ badges, progress, isLoading }: Achievement
         <div
           className="flex flex-wrap items-center gap-0.5"
           role="group"
-          aria-label="Gihanga Stars — follower milestones"
+          aria-label="Gihanga Stars — esteem milestones"
         >
           {stars.map((b) => (
             <BadgeButton key={b.achievementId} badge={b} progress={progress} />

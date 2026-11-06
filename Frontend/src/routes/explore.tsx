@@ -17,7 +17,7 @@ export const Route = createFileRoute("/explore")({
       {
         name: "description",
         content:
-          "Explore fresh posts, photos, videos and reels from the Gihanga community.",
+          "Explore fresh posts, photos, videos and deeds from the Gihanga community.",
       },
       { property: "og:title", content: "Explore — Discover Posts | Gihanga" },
       {

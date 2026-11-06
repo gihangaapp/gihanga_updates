@@ -163,7 +163,7 @@ router.post("/register", async (req: Request, res: Response) => {
               recipient: String(t._id),
               actor: String(user._id),
               kind: "follow",
-              text: "started following you",
+              text: "became one of your esteems",
             }).catch(() => {});
           }
         }

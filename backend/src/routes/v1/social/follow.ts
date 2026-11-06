@@ -55,11 +55,11 @@ router.post("/:username", authenticateConsumer, async (req: AuthenticatedRequest
       recipient: String(target._id),
       actor: req.user!.userId,
       kind: "follow",
-      text: "started following you",
+      text: "became one of your esteems",
     });
 
     getIO()?.emit("user:followers-changed", { username: target.username, followersCount: updatedTarget?.followersCount ?? 0 });
-    await awardPoints(String(target._id), "follow", "You got a new follower").catch((err) =>
+    await awardPoints(String(target._id), "follow", "You got a new esteem").catch((err) =>
       console.error("[Rewards] Follow bonus failed:", err),
     );
 

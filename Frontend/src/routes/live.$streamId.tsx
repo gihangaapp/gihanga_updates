@@ -1291,14 +1291,14 @@ function LiveRoomPage() {
                   <DropdownMenuItem
                     onClick={() =>
                       inviteFollowers.mutate(undefined, {
-                        onSuccess: (r) => toast.success(`Invited ${r.invited} followers`),
+                        onSuccess: (r) => toast.success(`Invited ${r.invited} esteems`),
                         onError: (err: Error) =>
                           toast.error(err.message || "Couldn't send invites"),
                       })
                     }
                     disabled={inviteFollowers.isPending}
                   >
-                    <Send className="size-4" /> Invite followers
+                    <Send className="size-4" /> Invite esteems
                   </DropdownMenuItem>
                 )}
                 {isHost && (
@@ -1777,7 +1777,7 @@ function LiveRoomPage() {
                   followUser.mutate({ username: stream.host.username, follow: !following })
                 }
               >
-                {following ? "Following" : "Follow"}
+                {following ? "Estemmed" : "Follow"}
               </Button>
             )}
 
@@ -2255,7 +2255,7 @@ function LiveRoomPage() {
             <GAvatar user={toDisplayUser(stream.host)} size="lg" />
             <p className="font-display text-lg font-extrabold">Request to be in this live video.</p>
             <p className="text-sm text-muted-foreground">
-              Anyone can watch it, and some of your followers may get notified. When the live ends,{" "}
+              Anyone can watch it, and some of your esteems may get notified. When the live ends,{" "}
               @{stream.host.username} can share it on their profile.
             </p>
           </div>

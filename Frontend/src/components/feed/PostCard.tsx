@@ -215,7 +215,7 @@ export const PostCard = memo(function PostCard({ post, index = 0 }: {
               )
             }
           >
-            {following ? "Following" : "Follow"}
+            {following ? "Estemmed" : "Follow"}
           </Button>
         )}
 

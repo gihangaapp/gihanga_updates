@@ -193,7 +193,7 @@ function AchievementsConfigPage() {
       <AdminPageHeader
         icon={Award}
         title="Achievement Badge System"
-        description="Configure Gihanga Stars (followers) and Diamonds (views) milestone thresholds. Edits are versioned and audited."
+        description="Configure Gihanga Stars (esteems) and Diamonds (views) milestone thresholds. Edits are versioned and audited."
         accent="accent"
         action={
           <div className="flex gap-2">
@@ -233,7 +233,7 @@ function AchievementsConfigPage() {
           "stars",
           Star,
           "text-warning",
-          "Gihanga Stars — Follower Milestones",
+          "Gihanga Stars — Esteem Milestones",
           "Current milestones; revoked if the count drops",
         )}
         {renderSection(
@@ -258,7 +258,7 @@ function AchievementsConfigPage() {
           <li className="flex gap-2">
             <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary" />
             <span>
-              <strong className="text-foreground">Follower badges</strong> are current milestones —
+              <strong className="text-foreground">Esteem badges</strong> are current milestones —
               if a user drops below a threshold, the badge is revoked (award record preserved for
               audit).
             </span>
@@ -280,7 +280,7 @@ function AchievementsConfigPage() {
           <li className="flex gap-2">
             <span className="mt-1 size-1.5 shrink-0 rounded-full bg-primary" />
             <span>
-              Eligible followers exclude deleted/suspended accounts. Eligible views sum{" "}
+              Eligible esteems exclude deleted/suspended accounts. Eligible views sum{" "}
               <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-primary">
                 Post.viewsCount
               </code>{" "}

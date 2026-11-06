@@ -137,7 +137,7 @@ export function SideNav() {
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-bold">{user.name}</span>
             <span className="block truncate text-xs text-muted-foreground">
-              {formatCount(user.followers)} followers
+              {formatCount(user.followers)} esteems
             </span>
           </span>
           <Button

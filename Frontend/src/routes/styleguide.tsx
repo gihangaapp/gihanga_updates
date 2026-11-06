@@ -157,7 +157,7 @@ function Styleguide() {
         <Section title="Badges, inputs & controls">
           <div className="flex flex-wrap items-center gap-2">
             <Badge>Creator</Badge>
-            <Badge variant="secondary">Following</Badge>
+            <Badge variant="secondary">Estemmed</Badge>
             <Badge variant="outline">Draft</Badge>
             <Badge variant="destructive">Live</Badge>
           </div>

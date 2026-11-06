@@ -37,7 +37,7 @@ export const audienceByAge = [
 
 export const trafficSources = [
   { source: "For you", share: 52 },
-  { source: "Following", share: 21 },
+  { source: "Estemmed", share: 21 },
   { source: "Explore", share: 15 },
   { source: "Search", share: 8 },
   { source: "External", share: 4 },
@@ -109,7 +109,7 @@ export const walletBalance = { available: 1_284_500, pending: 316_200, lifetime:
 export const transactions: Transaction[] = [
   {
     id: "t1",
-    label: "Reel bonus — August cycle",
+    label: "Deed bonus — August cycle",
     kind: "earning",
     amount: 284_000,
     date: "Aug 4",
@@ -158,7 +158,7 @@ export const transactions: Transaction[] = [
 ];
 
 export const revenueSplit = [
-  { name: "Reel bonus", value: 44 },
+  { name: "Deed bonus", value: 44 },
   { name: "Brand deals", value: 28 },
   { name: "Tips & gifts", value: 19 },
   { name: "Subscriptions", value: 9 },
@@ -188,7 +188,7 @@ export const campaigns: Campaign[] = [
   },
   {
     id: "c2",
-    name: "Reel series — Kigali Nights",
+    name: "Deed series — Kigali Nights",
     objective: "Video views",
     status: "active",
     budget: 180_000,

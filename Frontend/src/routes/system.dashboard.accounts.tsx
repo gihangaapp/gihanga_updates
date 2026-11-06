@@ -257,7 +257,7 @@ function AccountsPage() {
               <AdminTh className="min-w-[220px]">User</AdminTh>
               <AdminTh>Status</AdminTh>
               <AdminTh>Role</AdminTh>
-              <AdminTh>Followers</AdminTh>
+              <AdminTh>Esteems</AdminTh>
               <AdminTh className="text-right">Actions</AdminTh>
             </tr>
           </thead>

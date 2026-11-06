@@ -43,35 +43,35 @@ import { Route as SystemDashboardAccountsRouteImport } from './routes/system.das
 import { Route as SystemDashboardAchievementsRouteImport } from './routes/system.dashboard.achievements'
 import { Route as SystemDashboardActivityRouteImport } from './routes/system.dashboard.activity'
 import { Route as SystemDashboardAdSettingsRouteImport } from './routes/system.dashboard.ad-settings'
+import { Route as SystemDashboardAnnouncementsRouteImport } from './routes/system.dashboard.announcements'
+import { Route as SystemDashboardAppealsRouteImport } from './routes/system.dashboard.appeals'
+import { Route as SystemDashboardApprovalsRouteImport } from './routes/system.dashboard.approvals'
 import { Route as SystemDashboardAuditRouteImport } from './routes/system.dashboard.audit'
 import { Route as SystemDashboardCampaignsRouteImport } from './routes/system.dashboard.campaigns'
-import { Route as SystemDashboardGrowthRouteImport } from './routes/system.dashboard.growth'
+import { Route as SystemDashboardCommentReviewRouteImport } from './routes/system.dashboard.comment-review'
 import { Route as SystemDashboardContentRouteImport } from './routes/system.dashboard.content'
-import { Route as SystemDashboardLiveRouteImport } from './routes/system.dashboard.live'
-import { Route as SystemDashboardModerationRouteImport } from './routes/system.dashboard.moderation'
-import { Route as SystemDashboardPaymentsRouteImport } from './routes/system.dashboard.payments'
-import { Route as SystemDashboardRewardsRouteImport } from './routes/system.dashboard.rewards'
-import { Route as SystemDashboardSettingsRouteImport } from './routes/system.dashboard.settings'
-import { Route as SystemDashboardStaffRouteImport } from './routes/system.dashboard.staff'
-import { Route as SystemDashboardOperationsRouteImport } from './routes/system.dashboard.operations'
-import { Route as SystemDashboardUserIntelligenceRouteImport } from './routes/system.dashboard.user-intelligence'
 import { Route as SystemDashboardCreatorIntelligenceRouteImport } from './routes/system.dashboard.creator-intelligence'
 import { Route as SystemDashboardCreatorsRouteImport } from './routes/system.dashboard.creators'
-import { Route as SystemDashboardAnnouncementsRouteImport } from './routes/system.dashboard.announcements'
-import { Route as SystemDashboardSecurityRouteImport } from './routes/system.dashboard.security'
-import { Route as SystemDashboardSystemControlRouteImport } from './routes/system.dashboard.system-control'
-import { Route as SystemDashboardSupportRouteImport } from './routes/system.dashboard.support'
-import { Route as SystemDashboardVerificationRouteImport } from './routes/system.dashboard.verification'
-import { Route as SystemDashboardApprovalsRouteImport } from './routes/system.dashboard.approvals'
-import { Route as SystemDashboardPostReviewRouteImport } from './routes/system.dashboard.post-review'
-import { Route as SystemDashboardCommentReviewRouteImport } from './routes/system.dashboard.comment-review'
-import { Route as SystemDashboardStoryReviewRouteImport } from './routes/system.dashboard.story-review'
-import { Route as SystemDashboardAppealsRouteImport } from './routes/system.dashboard.appeals'
-import { Route as SystemDashboardUserInvestigationsRouteImport } from './routes/system.dashboard.user-investigations'
 import { Route as SystemDashboardEnforcementRouteImport } from './routes/system.dashboard.enforcement'
+import { Route as SystemDashboardGrowthRouteImport } from './routes/system.dashboard.growth'
 import { Route as SystemDashboardGuidelinesRouteImport } from './routes/system.dashboard.guidelines'
+import { Route as SystemDashboardLiveRouteImport } from './routes/system.dashboard.live'
+import { Route as SystemDashboardModerationRouteImport } from './routes/system.dashboard.moderation'
 import { Route as SystemDashboardMyPerformanceRouteImport } from './routes/system.dashboard.my-performance'
-import { Route as SystemDashboardWorkspaceTrendingRouteImport } from './routes/system.dashboard.trending'
+import { Route as SystemDashboardOperationsRouteImport } from './routes/system.dashboard.operations'
+import { Route as SystemDashboardPaymentsRouteImport } from './routes/system.dashboard.payments'
+import { Route as SystemDashboardPostReviewRouteImport } from './routes/system.dashboard.post-review'
+import { Route as SystemDashboardRewardsRouteImport } from './routes/system.dashboard.rewards'
+import { Route as SystemDashboardSecurityRouteImport } from './routes/system.dashboard.security'
+import { Route as SystemDashboardSettingsRouteImport } from './routes/system.dashboard.settings'
+import { Route as SystemDashboardStaffRouteImport } from './routes/system.dashboard.staff'
+import { Route as SystemDashboardStoryReviewRouteImport } from './routes/system.dashboard.story-review'
+import { Route as SystemDashboardSupportRouteImport } from './routes/system.dashboard.support'
+import { Route as SystemDashboardSystemControlRouteImport } from './routes/system.dashboard.system-control'
+import { Route as SystemDashboardTrendingRouteImport } from './routes/system.dashboard.trending'
+import { Route as SystemDashboardUserIntelligenceRouteImport } from './routes/system.dashboard.user-intelligence'
+import { Route as SystemDashboardUserInvestigationsRouteImport } from './routes/system.dashboard.user-investigations'
+import { Route as SystemDashboardVerificationRouteImport } from './routes/system.dashboard.verification'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -245,6 +245,23 @@ const SystemDashboardAdSettingsRoute =
     path: '/ad-settings',
     getParentRoute: () => SystemDashboardRoute,
   } as any)
+const SystemDashboardAnnouncementsRoute =
+  SystemDashboardAnnouncementsRouteImport.update({
+    id: '/announcements',
+    path: '/announcements',
+    getParentRoute: () => SystemDashboardRoute,
+  } as any)
+const SystemDashboardAppealsRoute = SystemDashboardAppealsRouteImport.update({
+  id: '/appeals',
+  path: '/appeals',
+  getParentRoute: () => SystemDashboardRoute,
+} as any)
+const SystemDashboardApprovalsRoute =
+  SystemDashboardApprovalsRouteImport.update({
+    id: '/approvals',
+    path: '/approvals',
+    getParentRoute: () => SystemDashboardRoute,
+  } as any)
 const SystemDashboardAuditRoute = SystemDashboardAuditRouteImport.update({
   id: '/audit',
   path: '/audit',
@@ -256,16 +273,45 @@ const SystemDashboardCampaignsRoute =
     path: '/campaigns',
     getParentRoute: () => SystemDashboardRoute,
   } as any)
-const SystemDashboardGrowthRoute = SystemDashboardGrowthRouteImport.update({
-  id: '/growth',
-  path: '/growth',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
+const SystemDashboardCommentReviewRoute =
+  SystemDashboardCommentReviewRouteImport.update({
+    id: '/comment-review',
+    path: '/comment-review',
+    getParentRoute: () => SystemDashboardRoute,
+  } as any)
 const SystemDashboardContentRoute = SystemDashboardContentRouteImport.update({
   id: '/content',
   path: '/content',
   getParentRoute: () => SystemDashboardRoute,
 } as any)
+const SystemDashboardCreatorIntelligenceRoute =
+  SystemDashboardCreatorIntelligenceRouteImport.update({
+    id: '/creator-intelligence',
+    path: '/creator-intelligence',
+    getParentRoute: () => SystemDashboardRoute,
+  } as any)
+const SystemDashboardCreatorsRoute = SystemDashboardCreatorsRouteImport.update({
+  id: '/creators',
+  path: '/creators',
+  getParentRoute: () => SystemDashboardRoute,
+} as any)
+const SystemDashboardEnforcementRoute =
+  SystemDashboardEnforcementRouteImport.update({
+    id: '/enforcement',
+    path: '/enforcement',
+    getParentRoute: () => SystemDashboardRoute,
+  } as any)
+const SystemDashboardGrowthRoute = SystemDashboardGrowthRouteImport.update({
+  id: '/growth',
+  path: '/growth',
+  getParentRoute: () => SystemDashboardRoute,
+} as any)
+const SystemDashboardGuidelinesRoute =
+  SystemDashboardGuidelinesRouteImport.update({
+    id: '/guidelines',
+    path: '/guidelines',
+    getParentRoute: () => SystemDashboardRoute,
+  } as any)
 const SystemDashboardLiveRoute = SystemDashboardLiveRouteImport.update({
   id: '/live',
   path: '/live',
@@ -277,14 +323,37 @@ const SystemDashboardModerationRoute =
     path: '/moderation',
     getParentRoute: () => SystemDashboardRoute,
   } as any)
+const SystemDashboardMyPerformanceRoute =
+  SystemDashboardMyPerformanceRouteImport.update({
+    id: '/my-performance',
+    path: '/my-performance',
+    getParentRoute: () => SystemDashboardRoute,
+  } as any)
+const SystemDashboardOperationsRoute =
+  SystemDashboardOperationsRouteImport.update({
+    id: '/operations',
+    path: '/operations',
+    getParentRoute: () => SystemDashboardRoute,
+  } as any)
 const SystemDashboardPaymentsRoute = SystemDashboardPaymentsRouteImport.update({
   id: '/payments',
   path: '/payments',
   getParentRoute: () => SystemDashboardRoute,
 } as any)
+const SystemDashboardPostReviewRoute =
+  SystemDashboardPostReviewRouteImport.update({
+    id: '/post-review',
+    path: '/post-review',
+    getParentRoute: () => SystemDashboardRoute,
+  } as any)
 const SystemDashboardRewardsRoute = SystemDashboardRewardsRouteImport.update({
   id: '/rewards',
   path: '/rewards',
+  getParentRoute: () => SystemDashboardRoute,
+} as any)
+const SystemDashboardSecurityRoute = SystemDashboardSecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
   getParentRoute: () => SystemDashboardRoute,
 } as any)
 const SystemDashboardSettingsRoute = SystemDashboardSettingsRouteImport.update({
@@ -297,102 +366,46 @@ const SystemDashboardStaffRoute = SystemDashboardStaffRouteImport.update({
   path: '/staff',
   getParentRoute: () => SystemDashboardRoute,
 } as any)
-
-const SystemDashboardOperationsRoute = SystemDashboardOperationsRouteImport.update({
-  id: '/operations',
-  path: '/operations',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
-const SystemDashboardUserIntelligenceRoute = SystemDashboardUserIntelligenceRouteImport.update({
-  id: '/user-intelligence',
-  path: '/user-intelligence',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
-const SystemDashboardCreatorIntelligenceRoute = SystemDashboardCreatorIntelligenceRouteImport.update({
-  id: '/creator-intelligence',
-  path: '/creator-intelligence',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
-const SystemDashboardCreatorsRoute = SystemDashboardCreatorsRouteImport.update({
-  id: '/creators',
-  path: '/creators',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
-const SystemDashboardAnnouncementsRoute = SystemDashboardAnnouncementsRouteImport.update({
-  id: '/announcements',
-  path: '/announcements',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
-const SystemDashboardSecurityRoute = SystemDashboardSecurityRouteImport.update({
-  id: '/security',
-  path: '/security',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
-const SystemDashboardSystemControlRoute = SystemDashboardSystemControlRouteImport.update({
-  id: '/system-control',
-  path: '/system-control',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
+const SystemDashboardStoryReviewRoute =
+  SystemDashboardStoryReviewRouteImport.update({
+    id: '/story-review',
+    path: '/story-review',
+    getParentRoute: () => SystemDashboardRoute,
+  } as any)
 const SystemDashboardSupportRoute = SystemDashboardSupportRouteImport.update({
   id: '/support',
   path: '/support',
   getParentRoute: () => SystemDashboardRoute,
 } as any)
-const SystemDashboardVerificationRoute = SystemDashboardVerificationRouteImport.update({
-  id: '/verification',
-  path: '/verification',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
-const SystemDashboardApprovalsRoute = SystemDashboardApprovalsRouteImport.update({
-  id: '/approvals',
-  path: '/approvals',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
-const SystemDashboardPostReviewRoute = SystemDashboardPostReviewRouteImport.update({
-  id: '/post-review',
-  path: '/post-review',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
-const SystemDashboardCommentReviewRoute = SystemDashboardCommentReviewRouteImport.update({
-  id: '/comment-review',
-  path: '/comment-review',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
-const SystemDashboardStoryReviewRoute = SystemDashboardStoryReviewRouteImport.update({
-  id: '/story-review',
-  path: '/story-review',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
-const SystemDashboardAppealsRoute = SystemDashboardAppealsRouteImport.update({
-  id: '/appeals',
-  path: '/appeals',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
-const SystemDashboardUserInvestigationsRoute = SystemDashboardUserInvestigationsRouteImport.update({
-  id: '/user-investigations',
-  path: '/user-investigations',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
-const SystemDashboardEnforcementRoute = SystemDashboardEnforcementRouteImport.update({
-  id: '/enforcement',
-  path: '/enforcement',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
-const SystemDashboardGuidelinesRoute = SystemDashboardGuidelinesRouteImport.update({
-  id: '/guidelines',
-  path: '/guidelines',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
-const SystemDashboardMyPerformanceRoute = SystemDashboardMyPerformanceRouteImport.update({
-  id: '/my-performance',
-  path: '/my-performance',
-  getParentRoute: () => SystemDashboardRoute,
-} as any)
-const SystemDashboardWorkspaceTrendingRoute = SystemDashboardWorkspaceTrendingRouteImport.update({
+const SystemDashboardSystemControlRoute =
+  SystemDashboardSystemControlRouteImport.update({
+    id: '/system-control',
+    path: '/system-control',
+    getParentRoute: () => SystemDashboardRoute,
+  } as any)
+const SystemDashboardTrendingRoute = SystemDashboardTrendingRouteImport.update({
   id: '/trending',
   path: '/trending',
   getParentRoute: () => SystemDashboardRoute,
 } as any)
+const SystemDashboardUserIntelligenceRoute =
+  SystemDashboardUserIntelligenceRouteImport.update({
+    id: '/user-intelligence',
+    path: '/user-intelligence',
+    getParentRoute: () => SystemDashboardRoute,
+  } as any)
+const SystemDashboardUserInvestigationsRoute =
+  SystemDashboardUserInvestigationsRouteImport.update({
+    id: '/user-investigations',
+    path: '/user-investigations',
+    getParentRoute: () => SystemDashboardRoute,
+  } as any)
+const SystemDashboardVerificationRoute =
+  SystemDashboardVerificationRouteImport.update({
+    id: '/verification',
+    path: '/verification',
+    getParentRoute: () => SystemDashboardRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -428,35 +441,35 @@ export interface FileRoutesByFullPath {
   '/system/dashboard/achievements': typeof SystemDashboardAchievementsRoute
   '/system/dashboard/activity': typeof SystemDashboardActivityRoute
   '/system/dashboard/ad-settings': typeof SystemDashboardAdSettingsRoute
+  '/system/dashboard/announcements': typeof SystemDashboardAnnouncementsRoute
+  '/system/dashboard/appeals': typeof SystemDashboardAppealsRoute
+  '/system/dashboard/approvals': typeof SystemDashboardApprovalsRoute
   '/system/dashboard/audit': typeof SystemDashboardAuditRoute
   '/system/dashboard/campaigns': typeof SystemDashboardCampaignsRoute
-  '/system/dashboard/growth': typeof SystemDashboardGrowthRoute
+  '/system/dashboard/comment-review': typeof SystemDashboardCommentReviewRoute
   '/system/dashboard/content': typeof SystemDashboardContentRoute
-  '/system/dashboard/live': typeof SystemDashboardLiveRoute
-  '/system/dashboard/moderation': typeof SystemDashboardModerationRoute
-  '/system/dashboard/payments': typeof SystemDashboardPaymentsRoute
-  '/system/dashboard/rewards': typeof SystemDashboardRewardsRoute
-  '/system/dashboard/settings': typeof SystemDashboardSettingsRoute
-  '/system/dashboard/staff': typeof SystemDashboardStaffRoute
-  '/system/dashboard/operations': typeof SystemDashboardOperationsRoute
-  '/system/dashboard/user-intelligence': typeof SystemDashboardUserIntelligenceRoute
   '/system/dashboard/creator-intelligence': typeof SystemDashboardCreatorIntelligenceRoute
   '/system/dashboard/creators': typeof SystemDashboardCreatorsRoute
-  '/system/dashboard/announcements': typeof SystemDashboardAnnouncementsRoute
-  '/system/dashboard/security': typeof SystemDashboardSecurityRoute
-  '/system/dashboard/system-control': typeof SystemDashboardSystemControlRoute
-  '/system/dashboard/support': typeof SystemDashboardSupportRoute
-  '/system/dashboard/verification': typeof SystemDashboardVerificationRoute
-  '/system/dashboard/approvals': typeof SystemDashboardApprovalsRoute
-  '/system/dashboard/post-review': typeof SystemDashboardPostReviewRoute
-  '/system/dashboard/comment-review': typeof SystemDashboardCommentReviewRoute
-  '/system/dashboard/story-review': typeof SystemDashboardStoryReviewRoute
-  '/system/dashboard/appeals': typeof SystemDashboardAppealsRoute
-  '/system/dashboard/user-investigations': typeof SystemDashboardUserInvestigationsRoute
   '/system/dashboard/enforcement': typeof SystemDashboardEnforcementRoute
+  '/system/dashboard/growth': typeof SystemDashboardGrowthRoute
   '/system/dashboard/guidelines': typeof SystemDashboardGuidelinesRoute
+  '/system/dashboard/live': typeof SystemDashboardLiveRoute
+  '/system/dashboard/moderation': typeof SystemDashboardModerationRoute
   '/system/dashboard/my-performance': typeof SystemDashboardMyPerformanceRoute
-  '/system/dashboard/trending': typeof SystemDashboardWorkspaceTrendingRoute
+  '/system/dashboard/operations': typeof SystemDashboardOperationsRoute
+  '/system/dashboard/payments': typeof SystemDashboardPaymentsRoute
+  '/system/dashboard/post-review': typeof SystemDashboardPostReviewRoute
+  '/system/dashboard/rewards': typeof SystemDashboardRewardsRoute
+  '/system/dashboard/security': typeof SystemDashboardSecurityRoute
+  '/system/dashboard/settings': typeof SystemDashboardSettingsRoute
+  '/system/dashboard/staff': typeof SystemDashboardStaffRoute
+  '/system/dashboard/story-review': typeof SystemDashboardStoryReviewRoute
+  '/system/dashboard/support': typeof SystemDashboardSupportRoute
+  '/system/dashboard/system-control': typeof SystemDashboardSystemControlRoute
+  '/system/dashboard/trending': typeof SystemDashboardTrendingRoute
+  '/system/dashboard/user-intelligence': typeof SystemDashboardUserIntelligenceRoute
+  '/system/dashboard/user-investigations': typeof SystemDashboardUserInvestigationsRoute
+  '/system/dashboard/verification': typeof SystemDashboardVerificationRoute
   '/system/dashboard/': typeof SystemDashboardIndexRoute
 }
 export interface FileRoutesByTo {
@@ -492,35 +505,35 @@ export interface FileRoutesByTo {
   '/system/dashboard/achievements': typeof SystemDashboardAchievementsRoute
   '/system/dashboard/activity': typeof SystemDashboardActivityRoute
   '/system/dashboard/ad-settings': typeof SystemDashboardAdSettingsRoute
+  '/system/dashboard/announcements': typeof SystemDashboardAnnouncementsRoute
+  '/system/dashboard/appeals': typeof SystemDashboardAppealsRoute
+  '/system/dashboard/approvals': typeof SystemDashboardApprovalsRoute
   '/system/dashboard/audit': typeof SystemDashboardAuditRoute
   '/system/dashboard/campaigns': typeof SystemDashboardCampaignsRoute
-  '/system/dashboard/growth': typeof SystemDashboardGrowthRoute
+  '/system/dashboard/comment-review': typeof SystemDashboardCommentReviewRoute
   '/system/dashboard/content': typeof SystemDashboardContentRoute
-  '/system/dashboard/live': typeof SystemDashboardLiveRoute
-  '/system/dashboard/moderation': typeof SystemDashboardModerationRoute
-  '/system/dashboard/payments': typeof SystemDashboardPaymentsRoute
-  '/system/dashboard/rewards': typeof SystemDashboardRewardsRoute
-  '/system/dashboard/settings': typeof SystemDashboardSettingsRoute
-  '/system/dashboard/staff': typeof SystemDashboardStaffRoute
-  '/system/dashboard/operations': typeof SystemDashboardOperationsRoute
-  '/system/dashboard/user-intelligence': typeof SystemDashboardUserIntelligenceRoute
   '/system/dashboard/creator-intelligence': typeof SystemDashboardCreatorIntelligenceRoute
   '/system/dashboard/creators': typeof SystemDashboardCreatorsRoute
-  '/system/dashboard/announcements': typeof SystemDashboardAnnouncementsRoute
-  '/system/dashboard/security': typeof SystemDashboardSecurityRoute
-  '/system/dashboard/system-control': typeof SystemDashboardSystemControlRoute
-  '/system/dashboard/support': typeof SystemDashboardSupportRoute
-  '/system/dashboard/verification': typeof SystemDashboardVerificationRoute
-  '/system/dashboard/approvals': typeof SystemDashboardApprovalsRoute
-  '/system/dashboard/post-review': typeof SystemDashboardPostReviewRoute
-  '/system/dashboard/comment-review': typeof SystemDashboardCommentReviewRoute
-  '/system/dashboard/story-review': typeof SystemDashboardStoryReviewRoute
-  '/system/dashboard/appeals': typeof SystemDashboardAppealsRoute
-  '/system/dashboard/user-investigations': typeof SystemDashboardUserInvestigationsRoute
   '/system/dashboard/enforcement': typeof SystemDashboardEnforcementRoute
+  '/system/dashboard/growth': typeof SystemDashboardGrowthRoute
   '/system/dashboard/guidelines': typeof SystemDashboardGuidelinesRoute
+  '/system/dashboard/live': typeof SystemDashboardLiveRoute
+  '/system/dashboard/moderation': typeof SystemDashboardModerationRoute
   '/system/dashboard/my-performance': typeof SystemDashboardMyPerformanceRoute
-  '/system/dashboard/trending': typeof SystemDashboardWorkspaceTrendingRoute
+  '/system/dashboard/operations': typeof SystemDashboardOperationsRoute
+  '/system/dashboard/payments': typeof SystemDashboardPaymentsRoute
+  '/system/dashboard/post-review': typeof SystemDashboardPostReviewRoute
+  '/system/dashboard/rewards': typeof SystemDashboardRewardsRoute
+  '/system/dashboard/security': typeof SystemDashboardSecurityRoute
+  '/system/dashboard/settings': typeof SystemDashboardSettingsRoute
+  '/system/dashboard/staff': typeof SystemDashboardStaffRoute
+  '/system/dashboard/story-review': typeof SystemDashboardStoryReviewRoute
+  '/system/dashboard/support': typeof SystemDashboardSupportRoute
+  '/system/dashboard/system-control': typeof SystemDashboardSystemControlRoute
+  '/system/dashboard/trending': typeof SystemDashboardTrendingRoute
+  '/system/dashboard/user-intelligence': typeof SystemDashboardUserIntelligenceRoute
+  '/system/dashboard/user-investigations': typeof SystemDashboardUserInvestigationsRoute
+  '/system/dashboard/verification': typeof SystemDashboardVerificationRoute
   '/system/dashboard': typeof SystemDashboardIndexRoute
 }
 export interface FileRoutesById {
@@ -558,35 +571,35 @@ export interface FileRoutesById {
   '/system/dashboard/achievements': typeof SystemDashboardAchievementsRoute
   '/system/dashboard/activity': typeof SystemDashboardActivityRoute
   '/system/dashboard/ad-settings': typeof SystemDashboardAdSettingsRoute
+  '/system/dashboard/announcements': typeof SystemDashboardAnnouncementsRoute
+  '/system/dashboard/appeals': typeof SystemDashboardAppealsRoute
+  '/system/dashboard/approvals': typeof SystemDashboardApprovalsRoute
   '/system/dashboard/audit': typeof SystemDashboardAuditRoute
   '/system/dashboard/campaigns': typeof SystemDashboardCampaignsRoute
-  '/system/dashboard/growth': typeof SystemDashboardGrowthRoute
+  '/system/dashboard/comment-review': typeof SystemDashboardCommentReviewRoute
   '/system/dashboard/content': typeof SystemDashboardContentRoute
-  '/system/dashboard/live': typeof SystemDashboardLiveRoute
-  '/system/dashboard/moderation': typeof SystemDashboardModerationRoute
-  '/system/dashboard/payments': typeof SystemDashboardPaymentsRoute
-  '/system/dashboard/rewards': typeof SystemDashboardRewardsRoute
-  '/system/dashboard/settings': typeof SystemDashboardSettingsRoute
-  '/system/dashboard/staff': typeof SystemDashboardStaffRoute
-  '/system/dashboard/operations': typeof SystemDashboardOperationsRoute
-  '/system/dashboard/user-intelligence': typeof SystemDashboardUserIntelligenceRoute
   '/system/dashboard/creator-intelligence': typeof SystemDashboardCreatorIntelligenceRoute
   '/system/dashboard/creators': typeof SystemDashboardCreatorsRoute
-  '/system/dashboard/announcements': typeof SystemDashboardAnnouncementsRoute
-  '/system/dashboard/security': typeof SystemDashboardSecurityRoute
-  '/system/dashboard/system-control': typeof SystemDashboardSystemControlRoute
-  '/system/dashboard/support': typeof SystemDashboardSupportRoute
-  '/system/dashboard/verification': typeof SystemDashboardVerificationRoute
-  '/system/dashboard/approvals': typeof SystemDashboardApprovalsRoute
-  '/system/dashboard/post-review': typeof SystemDashboardPostReviewRoute
-  '/system/dashboard/comment-review': typeof SystemDashboardCommentReviewRoute
-  '/system/dashboard/story-review': typeof SystemDashboardStoryReviewRoute
-  '/system/dashboard/appeals': typeof SystemDashboardAppealsRoute
-  '/system/dashboard/user-investigations': typeof SystemDashboardUserInvestigationsRoute
   '/system/dashboard/enforcement': typeof SystemDashboardEnforcementRoute
+  '/system/dashboard/growth': typeof SystemDashboardGrowthRoute
   '/system/dashboard/guidelines': typeof SystemDashboardGuidelinesRoute
+  '/system/dashboard/live': typeof SystemDashboardLiveRoute
+  '/system/dashboard/moderation': typeof SystemDashboardModerationRoute
   '/system/dashboard/my-performance': typeof SystemDashboardMyPerformanceRoute
-  '/system/dashboard/trending': typeof SystemDashboardWorkspaceTrendingRoute
+  '/system/dashboard/operations': typeof SystemDashboardOperationsRoute
+  '/system/dashboard/payments': typeof SystemDashboardPaymentsRoute
+  '/system/dashboard/post-review': typeof SystemDashboardPostReviewRoute
+  '/system/dashboard/rewards': typeof SystemDashboardRewardsRoute
+  '/system/dashboard/security': typeof SystemDashboardSecurityRoute
+  '/system/dashboard/settings': typeof SystemDashboardSettingsRoute
+  '/system/dashboard/staff': typeof SystemDashboardStaffRoute
+  '/system/dashboard/story-review': typeof SystemDashboardStoryReviewRoute
+  '/system/dashboard/support': typeof SystemDashboardSupportRoute
+  '/system/dashboard/system-control': typeof SystemDashboardSystemControlRoute
+  '/system/dashboard/trending': typeof SystemDashboardTrendingRoute
+  '/system/dashboard/user-intelligence': typeof SystemDashboardUserIntelligenceRoute
+  '/system/dashboard/user-investigations': typeof SystemDashboardUserInvestigationsRoute
+  '/system/dashboard/verification': typeof SystemDashboardVerificationRoute
   '/system/dashboard/': typeof SystemDashboardIndexRoute
 }
 export interface FileRouteTypes {
@@ -625,35 +638,35 @@ export interface FileRouteTypes {
     | '/system/dashboard/achievements'
     | '/system/dashboard/activity'
     | '/system/dashboard/ad-settings'
+    | '/system/dashboard/announcements'
+    | '/system/dashboard/appeals'
+    | '/system/dashboard/approvals'
     | '/system/dashboard/audit'
     | '/system/dashboard/campaigns'
-    | '/system/dashboard/growth'
+    | '/system/dashboard/comment-review'
     | '/system/dashboard/content'
-    | '/system/dashboard/live'
-    | '/system/dashboard/moderation'
-    | '/system/dashboard/payments'
-    | '/system/dashboard/rewards'
-    | '/system/dashboard/settings'
-    | '/system/dashboard/staff'
-    | '/system/dashboard/operations'
-    | '/system/dashboard/user-intelligence'
     | '/system/dashboard/creator-intelligence'
     | '/system/dashboard/creators'
-    | '/system/dashboard/announcements'
-    | '/system/dashboard/security'
-    | '/system/dashboard/system-control'
-    | '/system/dashboard/support'
-    | '/system/dashboard/verification'
-    | '/system/dashboard/approvals'
-    | '/system/dashboard/post-review'
-    | '/system/dashboard/comment-review'
-    | '/system/dashboard/story-review'
-    | '/system/dashboard/appeals'
-    | '/system/dashboard/user-investigations'
     | '/system/dashboard/enforcement'
+    | '/system/dashboard/growth'
     | '/system/dashboard/guidelines'
+    | '/system/dashboard/live'
+    | '/system/dashboard/moderation'
     | '/system/dashboard/my-performance'
+    | '/system/dashboard/operations'
+    | '/system/dashboard/payments'
+    | '/system/dashboard/post-review'
+    | '/system/dashboard/rewards'
+    | '/system/dashboard/security'
+    | '/system/dashboard/settings'
+    | '/system/dashboard/staff'
+    | '/system/dashboard/story-review'
+    | '/system/dashboard/support'
+    | '/system/dashboard/system-control'
     | '/system/dashboard/trending'
+    | '/system/dashboard/user-intelligence'
+    | '/system/dashboard/user-investigations'
+    | '/system/dashboard/verification'
     | '/system/dashboard/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -689,35 +702,35 @@ export interface FileRouteTypes {
     | '/system/dashboard/achievements'
     | '/system/dashboard/activity'
     | '/system/dashboard/ad-settings'
+    | '/system/dashboard/announcements'
+    | '/system/dashboard/appeals'
+    | '/system/dashboard/approvals'
     | '/system/dashboard/audit'
     | '/system/dashboard/campaigns'
-    | '/system/dashboard/growth'
+    | '/system/dashboard/comment-review'
     | '/system/dashboard/content'
-    | '/system/dashboard/live'
-    | '/system/dashboard/moderation'
-    | '/system/dashboard/payments'
-    | '/system/dashboard/rewards'
-    | '/system/dashboard/settings'
-    | '/system/dashboard/staff'
-    | '/system/dashboard/operations'
-    | '/system/dashboard/user-intelligence'
     | '/system/dashboard/creator-intelligence'
     | '/system/dashboard/creators'
-    | '/system/dashboard/announcements'
-    | '/system/dashboard/security'
-    | '/system/dashboard/system-control'
-    | '/system/dashboard/support'
-    | '/system/dashboard/verification'
-    | '/system/dashboard/approvals'
-    | '/system/dashboard/post-review'
-    | '/system/dashboard/comment-review'
-    | '/system/dashboard/story-review'
-    | '/system/dashboard/appeals'
-    | '/system/dashboard/user-investigations'
     | '/system/dashboard/enforcement'
+    | '/system/dashboard/growth'
     | '/system/dashboard/guidelines'
+    | '/system/dashboard/live'
+    | '/system/dashboard/moderation'
     | '/system/dashboard/my-performance'
+    | '/system/dashboard/operations'
+    | '/system/dashboard/payments'
+    | '/system/dashboard/post-review'
+    | '/system/dashboard/rewards'
+    | '/system/dashboard/security'
+    | '/system/dashboard/settings'
+    | '/system/dashboard/staff'
+    | '/system/dashboard/story-review'
+    | '/system/dashboard/support'
+    | '/system/dashboard/system-control'
     | '/system/dashboard/trending'
+    | '/system/dashboard/user-intelligence'
+    | '/system/dashboard/user-investigations'
+    | '/system/dashboard/verification'
     | '/system/dashboard'
   id:
     | '__root__'
@@ -754,35 +767,35 @@ export interface FileRouteTypes {
     | '/system/dashboard/achievements'
     | '/system/dashboard/activity'
     | '/system/dashboard/ad-settings'
+    | '/system/dashboard/announcements'
+    | '/system/dashboard/appeals'
+    | '/system/dashboard/approvals'
     | '/system/dashboard/audit'
     | '/system/dashboard/campaigns'
-    | '/system/dashboard/growth'
+    | '/system/dashboard/comment-review'
     | '/system/dashboard/content'
-    | '/system/dashboard/live'
-    | '/system/dashboard/moderation'
-    | '/system/dashboard/payments'
-    | '/system/dashboard/rewards'
-    | '/system/dashboard/settings'
-    | '/system/dashboard/staff'
-    | '/system/dashboard/operations'
-    | '/system/dashboard/user-intelligence'
     | '/system/dashboard/creator-intelligence'
     | '/system/dashboard/creators'
-    | '/system/dashboard/announcements'
-    | '/system/dashboard/security'
-    | '/system/dashboard/system-control'
-    | '/system/dashboard/support'
-    | '/system/dashboard/verification'
-    | '/system/dashboard/approvals'
-    | '/system/dashboard/post-review'
-    | '/system/dashboard/comment-review'
-    | '/system/dashboard/story-review'
-    | '/system/dashboard/appeals'
-    | '/system/dashboard/user-investigations'
     | '/system/dashboard/enforcement'
+    | '/system/dashboard/growth'
     | '/system/dashboard/guidelines'
+    | '/system/dashboard/live'
+    | '/system/dashboard/moderation'
     | '/system/dashboard/my-performance'
+    | '/system/dashboard/operations'
+    | '/system/dashboard/payments'
+    | '/system/dashboard/post-review'
+    | '/system/dashboard/rewards'
+    | '/system/dashboard/security'
+    | '/system/dashboard/settings'
+    | '/system/dashboard/staff'
+    | '/system/dashboard/story-review'
+    | '/system/dashboard/support'
+    | '/system/dashboard/system-control'
     | '/system/dashboard/trending'
+    | '/system/dashboard/user-intelligence'
+    | '/system/dashboard/user-investigations'
+    | '/system/dashboard/verification'
     | '/system/dashboard/'
   fileRoutesById: FileRoutesById
 }
@@ -1057,6 +1070,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SystemDashboardAdSettingsRouteImport
       parentRoute: typeof SystemDashboardRoute
     }
+    '/system/dashboard/announcements': {
+      id: '/system/dashboard/announcements'
+      path: '/announcements'
+      fullPath: '/system/dashboard/announcements'
+      preLoaderRoute: typeof SystemDashboardAnnouncementsRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/appeals': {
+      id: '/system/dashboard/appeals'
+      path: '/appeals'
+      fullPath: '/system/dashboard/appeals'
+      preLoaderRoute: typeof SystemDashboardAppealsRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/approvals': {
+      id: '/system/dashboard/approvals'
+      path: '/approvals'
+      fullPath: '/system/dashboard/approvals'
+      preLoaderRoute: typeof SystemDashboardApprovalsRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
     '/system/dashboard/audit': {
       id: '/system/dashboard/audit'
       path: '/audit'
@@ -1071,11 +1105,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SystemDashboardCampaignsRouteImport
       parentRoute: typeof SystemDashboardRoute
     }
-    '/system/dashboard/growth': {
-      id: '/system/dashboard/growth'
-      path: '/growth'
-      fullPath: '/system/dashboard/growth'
-      preLoaderRoute: typeof SystemDashboardGrowthRouteImport
+    '/system/dashboard/comment-review': {
+      id: '/system/dashboard/comment-review'
+      path: '/comment-review'
+      fullPath: '/system/dashboard/comment-review'
+      preLoaderRoute: typeof SystemDashboardCommentReviewRouteImport
       parentRoute: typeof SystemDashboardRoute
     }
     '/system/dashboard/content': {
@@ -1083,62 +1117,6 @@ declare module '@tanstack/react-router' {
       path: '/content'
       fullPath: '/system/dashboard/content'
       preLoaderRoute: typeof SystemDashboardContentRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/live': {
-      id: '/system/dashboard/live'
-      path: '/live'
-      fullPath: '/system/dashboard/live'
-      preLoaderRoute: typeof SystemDashboardLiveRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/moderation': {
-      id: '/system/dashboard/moderation'
-      path: '/moderation'
-      fullPath: '/system/dashboard/moderation'
-      preLoaderRoute: typeof SystemDashboardModerationRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/payments': {
-      id: '/system/dashboard/payments'
-      path: '/payments'
-      fullPath: '/system/dashboard/payments'
-      preLoaderRoute: typeof SystemDashboardPaymentsRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/rewards': {
-      id: '/system/dashboard/rewards'
-      path: '/rewards'
-      fullPath: '/system/dashboard/rewards'
-      preLoaderRoute: typeof SystemDashboardRewardsRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/settings': {
-      id: '/system/dashboard/settings'
-      path: '/settings'
-      fullPath: '/system/dashboard/settings'
-      preLoaderRoute: typeof SystemDashboardSettingsRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/staff': {
-      id: '/system/dashboard/staff'
-      path: '/staff'
-      fullPath: '/system/dashboard/staff'
-      preLoaderRoute: typeof SystemDashboardStaffRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/operations': {
-      id: '/system/dashboard/operations'
-      path: '/operations'
-      fullPath: '/system/dashboard/operations'
-      preLoaderRoute: typeof SystemDashboardOperationsRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/user-intelligence': {
-      id: '/system/dashboard/user-intelligence'
-      path: '/user-intelligence'
-      fullPath: '/system/dashboard/user-intelligence'
-      preLoaderRoute: typeof SystemDashboardUserIntelligenceRouteImport
       parentRoute: typeof SystemDashboardRoute
     }
     '/system/dashboard/creator-intelligence': {
@@ -1155,88 +1133,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SystemDashboardCreatorsRouteImport
       parentRoute: typeof SystemDashboardRoute
     }
-    '/system/dashboard/announcements': {
-      id: '/system/dashboard/announcements'
-      path: '/announcements'
-      fullPath: '/system/dashboard/announcements'
-      preLoaderRoute: typeof SystemDashboardAnnouncementsRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/security': {
-      id: '/system/dashboard/security'
-      path: '/security'
-      fullPath: '/system/dashboard/security'
-      preLoaderRoute: typeof SystemDashboardSecurityRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/system-control': {
-      id: '/system/dashboard/system-control'
-      path: '/system-control'
-      fullPath: '/system/dashboard/system-control'
-      preLoaderRoute: typeof SystemDashboardSystemControlRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/support': {
-      id: '/system/dashboard/support'
-      path: '/support'
-      fullPath: '/system/dashboard/support'
-      preLoaderRoute: typeof SystemDashboardSupportRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/verification': {
-      id: '/system/dashboard/verification'
-      path: '/verification'
-      fullPath: '/system/dashboard/verification'
-      preLoaderRoute: typeof SystemDashboardVerificationRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/approvals': {
-      id: '/system/dashboard/approvals'
-      path: '/approvals'
-      fullPath: '/system/dashboard/approvals'
-      preLoaderRoute: typeof SystemDashboardApprovalsRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/post-review': {
-      id: '/system/dashboard/post-review'
-      path: '/post-review'
-      fullPath: '/system/dashboard/post-review'
-      preLoaderRoute: typeof SystemDashboardPostReviewRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/comment-review': {
-      id: '/system/dashboard/comment-review'
-      path: '/comment-review'
-      fullPath: '/system/dashboard/comment-review'
-      preLoaderRoute: typeof SystemDashboardCommentReviewRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/story-review': {
-      id: '/system/dashboard/story-review'
-      path: '/story-review'
-      fullPath: '/system/dashboard/story-review'
-      preLoaderRoute: typeof SystemDashboardStoryReviewRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/appeals': {
-      id: '/system/dashboard/appeals'
-      path: '/appeals'
-      fullPath: '/system/dashboard/appeals'
-      preLoaderRoute: typeof SystemDashboardAppealsRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
-    '/system/dashboard/user-investigations': {
-      id: '/system/dashboard/user-investigations'
-      path: '/user-investigations'
-      fullPath: '/system/dashboard/user-investigations'
-      preLoaderRoute: typeof SystemDashboardUserInvestigationsRouteImport
-      parentRoute: typeof SystemDashboardRoute
-    }
     '/system/dashboard/enforcement': {
       id: '/system/dashboard/enforcement'
       path: '/enforcement'
       fullPath: '/system/dashboard/enforcement'
       preLoaderRoute: typeof SystemDashboardEnforcementRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/growth': {
+      id: '/system/dashboard/growth'
+      path: '/growth'
+      fullPath: '/system/dashboard/growth'
+      preLoaderRoute: typeof SystemDashboardGrowthRouteImport
       parentRoute: typeof SystemDashboardRoute
     }
     '/system/dashboard/guidelines': {
@@ -1246,6 +1154,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SystemDashboardGuidelinesRouteImport
       parentRoute: typeof SystemDashboardRoute
     }
+    '/system/dashboard/live': {
+      id: '/system/dashboard/live'
+      path: '/live'
+      fullPath: '/system/dashboard/live'
+      preLoaderRoute: typeof SystemDashboardLiveRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/moderation': {
+      id: '/system/dashboard/moderation'
+      path: '/moderation'
+      fullPath: '/system/dashboard/moderation'
+      preLoaderRoute: typeof SystemDashboardModerationRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
     '/system/dashboard/my-performance': {
       id: '/system/dashboard/my-performance'
       path: '/my-performance'
@@ -1253,11 +1175,102 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SystemDashboardMyPerformanceRouteImport
       parentRoute: typeof SystemDashboardRoute
     }
+    '/system/dashboard/operations': {
+      id: '/system/dashboard/operations'
+      path: '/operations'
+      fullPath: '/system/dashboard/operations'
+      preLoaderRoute: typeof SystemDashboardOperationsRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/payments': {
+      id: '/system/dashboard/payments'
+      path: '/payments'
+      fullPath: '/system/dashboard/payments'
+      preLoaderRoute: typeof SystemDashboardPaymentsRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/post-review': {
+      id: '/system/dashboard/post-review'
+      path: '/post-review'
+      fullPath: '/system/dashboard/post-review'
+      preLoaderRoute: typeof SystemDashboardPostReviewRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/rewards': {
+      id: '/system/dashboard/rewards'
+      path: '/rewards'
+      fullPath: '/system/dashboard/rewards'
+      preLoaderRoute: typeof SystemDashboardRewardsRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/security': {
+      id: '/system/dashboard/security'
+      path: '/security'
+      fullPath: '/system/dashboard/security'
+      preLoaderRoute: typeof SystemDashboardSecurityRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/settings': {
+      id: '/system/dashboard/settings'
+      path: '/settings'
+      fullPath: '/system/dashboard/settings'
+      preLoaderRoute: typeof SystemDashboardSettingsRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/staff': {
+      id: '/system/dashboard/staff'
+      path: '/staff'
+      fullPath: '/system/dashboard/staff'
+      preLoaderRoute: typeof SystemDashboardStaffRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/story-review': {
+      id: '/system/dashboard/story-review'
+      path: '/story-review'
+      fullPath: '/system/dashboard/story-review'
+      preLoaderRoute: typeof SystemDashboardStoryReviewRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/support': {
+      id: '/system/dashboard/support'
+      path: '/support'
+      fullPath: '/system/dashboard/support'
+      preLoaderRoute: typeof SystemDashboardSupportRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/system-control': {
+      id: '/system/dashboard/system-control'
+      path: '/system-control'
+      fullPath: '/system/dashboard/system-control'
+      preLoaderRoute: typeof SystemDashboardSystemControlRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
     '/system/dashboard/trending': {
       id: '/system/dashboard/trending'
       path: '/trending'
       fullPath: '/system/dashboard/trending'
-      preLoaderRoute: typeof SystemDashboardWorkspaceTrendingRouteImport
+      preLoaderRoute: typeof SystemDashboardTrendingRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/user-intelligence': {
+      id: '/system/dashboard/user-intelligence'
+      path: '/user-intelligence'
+      fullPath: '/system/dashboard/user-intelligence'
+      preLoaderRoute: typeof SystemDashboardUserIntelligenceRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/user-investigations': {
+      id: '/system/dashboard/user-investigations'
+      path: '/user-investigations'
+      fullPath: '/system/dashboard/user-investigations'
+      preLoaderRoute: typeof SystemDashboardUserInvestigationsRouteImport
+      parentRoute: typeof SystemDashboardRoute
+    }
+    '/system/dashboard/verification': {
+      id: '/system/dashboard/verification'
+      path: '/verification'
+      fullPath: '/system/dashboard/verification'
+      preLoaderRoute: typeof SystemDashboardVerificationRouteImport
       parentRoute: typeof SystemDashboardRoute
     }
   }
@@ -1278,35 +1291,35 @@ interface SystemDashboardRouteChildren {
   SystemDashboardAchievementsRoute: typeof SystemDashboardAchievementsRoute
   SystemDashboardActivityRoute: typeof SystemDashboardActivityRoute
   SystemDashboardAdSettingsRoute: typeof SystemDashboardAdSettingsRoute
+  SystemDashboardAnnouncementsRoute: typeof SystemDashboardAnnouncementsRoute
+  SystemDashboardAppealsRoute: typeof SystemDashboardAppealsRoute
+  SystemDashboardApprovalsRoute: typeof SystemDashboardApprovalsRoute
   SystemDashboardAuditRoute: typeof SystemDashboardAuditRoute
   SystemDashboardCampaignsRoute: typeof SystemDashboardCampaignsRoute
-  SystemDashboardGrowthRoute: typeof SystemDashboardGrowthRoute
+  SystemDashboardCommentReviewRoute: typeof SystemDashboardCommentReviewRoute
   SystemDashboardContentRoute: typeof SystemDashboardContentRoute
-  SystemDashboardLiveRoute: typeof SystemDashboardLiveRoute
-  SystemDashboardModerationRoute: typeof SystemDashboardModerationRoute
-  SystemDashboardPaymentsRoute: typeof SystemDashboardPaymentsRoute
-  SystemDashboardRewardsRoute: typeof SystemDashboardRewardsRoute
-  SystemDashboardSettingsRoute: typeof SystemDashboardSettingsRoute
-  SystemDashboardStaffRoute: typeof SystemDashboardStaffRoute
-  SystemDashboardOperationsRoute: typeof SystemDashboardOperationsRoute
-  SystemDashboardUserIntelligenceRoute: typeof SystemDashboardUserIntelligenceRoute
   SystemDashboardCreatorIntelligenceRoute: typeof SystemDashboardCreatorIntelligenceRoute
   SystemDashboardCreatorsRoute: typeof SystemDashboardCreatorsRoute
-  SystemDashboardAnnouncementsRoute: typeof SystemDashboardAnnouncementsRoute
-  SystemDashboardSecurityRoute: typeof SystemDashboardSecurityRoute
-  SystemDashboardSystemControlRoute: typeof SystemDashboardSystemControlRoute
-  SystemDashboardSupportRoute: typeof SystemDashboardSupportRoute
-  SystemDashboardVerificationRoute: typeof SystemDashboardVerificationRoute
-  SystemDashboardApprovalsRoute: typeof SystemDashboardApprovalsRoute
-  SystemDashboardPostReviewRoute: typeof SystemDashboardPostReviewRoute
-  SystemDashboardCommentReviewRoute: typeof SystemDashboardCommentReviewRoute
-  SystemDashboardStoryReviewRoute: typeof SystemDashboardStoryReviewRoute
-  SystemDashboardAppealsRoute: typeof SystemDashboardAppealsRoute
-  SystemDashboardUserInvestigationsRoute: typeof SystemDashboardUserInvestigationsRoute
   SystemDashboardEnforcementRoute: typeof SystemDashboardEnforcementRoute
+  SystemDashboardGrowthRoute: typeof SystemDashboardGrowthRoute
   SystemDashboardGuidelinesRoute: typeof SystemDashboardGuidelinesRoute
+  SystemDashboardLiveRoute: typeof SystemDashboardLiveRoute
+  SystemDashboardModerationRoute: typeof SystemDashboardModerationRoute
   SystemDashboardMyPerformanceRoute: typeof SystemDashboardMyPerformanceRoute
-  SystemDashboardWorkspaceTrendingRoute: typeof SystemDashboardWorkspaceTrendingRoute
+  SystemDashboardOperationsRoute: typeof SystemDashboardOperationsRoute
+  SystemDashboardPaymentsRoute: typeof SystemDashboardPaymentsRoute
+  SystemDashboardPostReviewRoute: typeof SystemDashboardPostReviewRoute
+  SystemDashboardRewardsRoute: typeof SystemDashboardRewardsRoute
+  SystemDashboardSecurityRoute: typeof SystemDashboardSecurityRoute
+  SystemDashboardSettingsRoute: typeof SystemDashboardSettingsRoute
+  SystemDashboardStaffRoute: typeof SystemDashboardStaffRoute
+  SystemDashboardStoryReviewRoute: typeof SystemDashboardStoryReviewRoute
+  SystemDashboardSupportRoute: typeof SystemDashboardSupportRoute
+  SystemDashboardSystemControlRoute: typeof SystemDashboardSystemControlRoute
+  SystemDashboardTrendingRoute: typeof SystemDashboardTrendingRoute
+  SystemDashboardUserIntelligenceRoute: typeof SystemDashboardUserIntelligenceRoute
+  SystemDashboardUserInvestigationsRoute: typeof SystemDashboardUserInvestigationsRoute
+  SystemDashboardVerificationRoute: typeof SystemDashboardVerificationRoute
   SystemDashboardIndexRoute: typeof SystemDashboardIndexRoute
 }
 
@@ -1315,35 +1328,37 @@ const SystemDashboardRouteChildren: SystemDashboardRouteChildren = {
   SystemDashboardAchievementsRoute: SystemDashboardAchievementsRoute,
   SystemDashboardActivityRoute: SystemDashboardActivityRoute,
   SystemDashboardAdSettingsRoute: SystemDashboardAdSettingsRoute,
+  SystemDashboardAnnouncementsRoute: SystemDashboardAnnouncementsRoute,
+  SystemDashboardAppealsRoute: SystemDashboardAppealsRoute,
+  SystemDashboardApprovalsRoute: SystemDashboardApprovalsRoute,
   SystemDashboardAuditRoute: SystemDashboardAuditRoute,
   SystemDashboardCampaignsRoute: SystemDashboardCampaignsRoute,
-  SystemDashboardGrowthRoute: SystemDashboardGrowthRoute,
+  SystemDashboardCommentReviewRoute: SystemDashboardCommentReviewRoute,
   SystemDashboardContentRoute: SystemDashboardContentRoute,
+  SystemDashboardCreatorIntelligenceRoute:
+    SystemDashboardCreatorIntelligenceRoute,
+  SystemDashboardCreatorsRoute: SystemDashboardCreatorsRoute,
+  SystemDashboardEnforcementRoute: SystemDashboardEnforcementRoute,
+  SystemDashboardGrowthRoute: SystemDashboardGrowthRoute,
+  SystemDashboardGuidelinesRoute: SystemDashboardGuidelinesRoute,
   SystemDashboardLiveRoute: SystemDashboardLiveRoute,
   SystemDashboardModerationRoute: SystemDashboardModerationRoute,
+  SystemDashboardMyPerformanceRoute: SystemDashboardMyPerformanceRoute,
+  SystemDashboardOperationsRoute: SystemDashboardOperationsRoute,
   SystemDashboardPaymentsRoute: SystemDashboardPaymentsRoute,
+  SystemDashboardPostReviewRoute: SystemDashboardPostReviewRoute,
   SystemDashboardRewardsRoute: SystemDashboardRewardsRoute,
+  SystemDashboardSecurityRoute: SystemDashboardSecurityRoute,
   SystemDashboardSettingsRoute: SystemDashboardSettingsRoute,
   SystemDashboardStaffRoute: SystemDashboardStaffRoute,
-  SystemDashboardOperationsRoute: SystemDashboardOperationsRoute,
-  SystemDashboardUserIntelligenceRoute: SystemDashboardUserIntelligenceRoute,
-  SystemDashboardCreatorIntelligenceRoute: SystemDashboardCreatorIntelligenceRoute,
-  SystemDashboardCreatorsRoute: SystemDashboardCreatorsRoute,
-  SystemDashboardAnnouncementsRoute: SystemDashboardAnnouncementsRoute,
-  SystemDashboardSecurityRoute: SystemDashboardSecurityRoute,
-  SystemDashboardSystemControlRoute: SystemDashboardSystemControlRoute,
-  SystemDashboardSupportRoute: SystemDashboardSupportRoute,
-  SystemDashboardVerificationRoute: SystemDashboardVerificationRoute,
-  SystemDashboardApprovalsRoute: SystemDashboardApprovalsRoute,
-  SystemDashboardPostReviewRoute: SystemDashboardPostReviewRoute,
-  SystemDashboardCommentReviewRoute: SystemDashboardCommentReviewRoute,
   SystemDashboardStoryReviewRoute: SystemDashboardStoryReviewRoute,
-  SystemDashboardAppealsRoute: SystemDashboardAppealsRoute,
-  SystemDashboardUserInvestigationsRoute: SystemDashboardUserInvestigationsRoute,
-  SystemDashboardEnforcementRoute: SystemDashboardEnforcementRoute,
-  SystemDashboardGuidelinesRoute: SystemDashboardGuidelinesRoute,
-  SystemDashboardMyPerformanceRoute: SystemDashboardMyPerformanceRoute,
-  SystemDashboardWorkspaceTrendingRoute: SystemDashboardWorkspaceTrendingRoute,
+  SystemDashboardSupportRoute: SystemDashboardSupportRoute,
+  SystemDashboardSystemControlRoute: SystemDashboardSystemControlRoute,
+  SystemDashboardTrendingRoute: SystemDashboardTrendingRoute,
+  SystemDashboardUserIntelligenceRoute: SystemDashboardUserIntelligenceRoute,
+  SystemDashboardUserInvestigationsRoute:
+    SystemDashboardUserInvestigationsRoute,
+  SystemDashboardVerificationRoute: SystemDashboardVerificationRoute,
   SystemDashboardIndexRoute: SystemDashboardIndexRoute,
 }
 

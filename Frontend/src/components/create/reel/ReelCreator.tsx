@@ -87,7 +87,7 @@ export function ReelCreator({ onClose }: ReelCreatorProps) {
         .filter((t): t is string => t !== undefined),
       taggedPeople,
     });
-    toast.success("Reel saved to drafts");
+    toast.success("Deed saved to drafts");
     onClose();
   };
 
@@ -121,20 +121,20 @@ export function ReelCreator({ onClose }: ReelCreatorProps) {
 
       if (result?.moderation?.status === "failed") {
         setUploadStage("failed");
-        setUploadError(result.moderation.userMessage || "Your reel is saved, but its safety check needs another attempt. We'll retry it automatically.");
+        setUploadError(result.moderation.userMessage || "Your deed is saved, but its safety check needs another attempt. We'll retry it automatically.");
         return;
       }
       setUploadStage("completed");
       toast.success(result?.moderation?.status === "processing"
-        ? "Your reel is saved and will appear once its safety check is complete."
-        : "Reel published successfully!");
+        ? "Your deed is saved and will appear once its safety check is complete."
+        : "Deed published successfully!");
       setTimeout(() => {
         onClose();
         navigate({ to: "/reels" });
       }, 1000);
     } catch (err: any) {
       setUploadStage("failed");
-      setUploadError(err?.message || "Failed to upload reel.");
+      setUploadError(err?.message || "Failed to upload deed.");
     }
   };
 
@@ -149,7 +149,7 @@ export function ReelCreator({ onClose }: ReelCreatorProps) {
             <Video className="size-5" />
           </div>
           <div className="min-w-0">
-            <h2 className="truncate font-display text-lg font-extrabold tracking-tight">Create Reel</h2>
+            <h2 className="truncate font-display text-lg font-extrabold tracking-tight">Create Deed</h2>
             <p className="hidden truncate text-xs text-muted-foreground sm:block">Share short videos up to 2 minutes</p>
           </div>
         </div>
@@ -188,9 +188,9 @@ export function ReelCreator({ onClose }: ReelCreatorProps) {
             <Film className="size-10" />
           </div>
           <div>
-            <h3 className="text-base font-bold">Select a video for your Reel</h3>
+            <h3 className="text-base font-bold">Select a video for your Deed</h3>
             <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-              Reels work best with portrait (9:16) videos up to 2 minutes long.
+              Deeds work best with portrait (9:16) videos up to 2 minutes long.
             </p>
           </div>
 
@@ -240,7 +240,7 @@ export function ReelCreator({ onClose }: ReelCreatorProps) {
             <CaptionEditor
               value={caption}
               onChange={setCaption}
-              placeholder="Describe your reel. Use #tags to reach more people…"
+              placeholder="Describe your deed. Use #tags to reach more people…"
               className="rounded-2xl border border-border p-3 bg-surface"
             />
 
@@ -255,10 +255,10 @@ export function ReelCreator({ onClose }: ReelCreatorProps) {
             <div className="flex items-center justify-between pt-4 border-t border-border mt-auto">
               <Button variant="outline" onClick={() => setStep("preview")} className="gap-1.5">
                 <Eye className="size-4" />
-                Preview Reel
+                Preview Deed
               </Button>
               <Button variant="brand" onClick={handlePublish}>
-                Publish Reel
+                Publish Deed
               </Button>
             </div>
           </div>

@@ -423,7 +423,7 @@ export function StoryViewer({
       {/* Close Button */}
       <button
         type="button"
-        aria-label="Close stories"
+        aria-label="Close decisions"
         onClick={onClose}
         className="press absolute right-3 top-[max(0.75rem,env(safe-area-inset-top))] z-[70] grid size-10 place-items-center rounded-full bg-black/55 text-white shadow-lg ring-1 ring-white/20 backdrop-blur-md transition hover:bg-white/25 sm:fixed sm:right-5 sm:top-5"
       >
@@ -495,7 +495,7 @@ export function StoryViewer({
             <img
               key={storyItemId}
               src={image}
-              alt={item.caption || "Story item"}
+              alt={item.caption || "Decision item"}
               loading="eager"
               decoding="async"
               onLoad={handleImageLoad}
@@ -575,14 +575,14 @@ export function StoryViewer({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                aria-label="Story options"
+                aria-label="Decision options"
                 className="press grid size-8 place-items-center rounded-full bg-black/40 text-white backdrop-blur-md"
               >
                 <MoreHorizontal className="size-4" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setShareOpen(true)}>Share story</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShareOpen(true)}>Share decision</DropdownMenuItem>
               {isOwnStory ? (
                 <>
                   <DropdownMenuSeparator />
@@ -591,7 +591,7 @@ export function StoryViewer({
                     onClick={handleDeleteCurrentStory}
                   >
                     <Trash2 className="size-4 mr-1.5" />
-                    Delete story
+                    Delete decision
                   </DropdownMenuItem>
                 </>
               ) : (
@@ -630,7 +630,7 @@ export function StoryViewer({
         {index > 0 && (
           <button
             type="button"
-            aria-label="Previous user story"
+            aria-label="Previous user decision"
             onClick={(e) => {
               e.stopPropagation();
               prevGroup();
@@ -643,7 +643,7 @@ export function StoryViewer({
         {index < groups.length - 1 && (
           <button
             type="button"
-            aria-label="Next user story"
+            aria-label="Next user decision"
             onClick={(e) => {
               e.stopPropagation();
               nextGroup();
@@ -681,7 +681,7 @@ export function StoryViewer({
       <ShareSheet
         open={shareOpen}
         onOpenChange={setShareOpen}
-        title={`Story by @${group.author.username}`}
+        title={`Decision by @${group.author.username}`}
         url={`${typeof window !== "undefined" ? window.location.origin : ""}/story/${item._id}`}
       />
 

@@ -149,7 +149,7 @@ export function StoryAdOverlay({ ad, onClose }: StoryAdOverlayProps) {
   };
 
   const handleReport = () => {
-    feedback.mutate({ id: ad._id, action: "report", reason: "Reported from Stories" }, {
+    feedback.mutate({ id: ad._id, action: "report", reason: "Reported from Decisions" }, {
       onSuccess: () => toast.success("Advertisement reported to the moderation team."),
       onError: (error: any) => toast.error(error.message || "Could not report this advertisement"),
     });
@@ -217,7 +217,7 @@ export function StoryAdOverlay({ ad, onClose }: StoryAdOverlayProps) {
                 <button type="button" aria-label="Advertisement options" className="grid size-8 place-items-center rounded-full bg-black/40 text-white hover:bg-black/60"><MoreHorizontal className="size-4" /></button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => toast.info("This sponsored placement is part of an approved campaign that matches the current Stories placement and its audience settings.")}>Why am I seeing this ad?</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => toast.info("This sponsored placement is part of an approved campaign that matches the current Decisions placement and its audience settings.")}>Why am I seeing this ad?</DropdownMenuItem>
                 <DropdownMenuItem onClick={handleHide}>Hide this ad</DropdownMenuItem>
                 <DropdownMenuItem onClick={handleReport}>Report ad</DropdownMenuItem>
               </DropdownMenuContent>

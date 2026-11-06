@@ -150,7 +150,7 @@ export function RightRail() {
                     <span className="min-w-0 flex-1">
                       <UserName user={toDisplayUser(u)} className="text-sm" />
                       <span className="block truncate text-xs text-muted-foreground">
-                        {formatCount(u.followersCount)} followers
+                        {formatCount(u.followersCount)} esteems
                       </span>
                     </span>
                     <Button
@@ -158,11 +158,11 @@ export function RightRail() {
                       size="sm"
                       onClick={() => {
                         followUser.mutate({ username: u.username, follow: !following });
-                        if (!following) toast.success(`Following @${u.username}`);
+                        if (!following) toast.success(`Estemmed @${u.username}`);
                       }}
                       className="shrink-0"
                     >
-                      {following ? "Following" : "Follow"}
+                      {following ? "Estemmed" : "Follow"}
                     </Button>
                   </li>
                 );

@@ -14,7 +14,7 @@ export const Route = createFileRoute("/tag/$tag")({
   head: ({ loaderData }) => {
     const tag = loaderData?.tag ?? "explore";
     const title = `#${tag} — Gihanga Updates`;
-    const description = `Top posts, reels and creators using #${tag} on Gihanga Updates.`;
+    const description = `Top posts, deeds and creators using #${tag} on Gihanga Updates.`;
     return {
       meta: [
         { title },
@@ -29,7 +29,7 @@ export const Route = createFileRoute("/tag/$tag")({
   component: TagPage,
 });
 
-const tabs = ["All", "Reels"] as const;
+const tabs = ["All", "Deeds"] as const;
 
 function TagPage() {
   const { tag } = Route.useLoaderData();
@@ -66,7 +66,7 @@ function TagPage() {
   }, [hasNextPage, data?.pages.length, tag]);
 
   const allPosts = data?.pages.flatMap((p) => p.posts) ?? [];
-  const list = tab === "Reels" ? allPosts.filter((p) => p.kind === "reel") : allPosts;
+  const list = tab === "Deeds" ? allPosts.filter((p) => p.kind === "reel") : allPosts;
   const relatedTags = (trending.data?.tags ?? []).filter(
     (t) => t.tag.toLowerCase() !== tag.toLowerCase(),
   );

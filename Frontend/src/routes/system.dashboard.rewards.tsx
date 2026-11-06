@@ -19,7 +19,7 @@ export const Route = createFileRoute("/system/dashboard/rewards")({
 const RATE_LABELS: { key: keyof RewardRates; label: string; hint: string }[] = [
   { key: "upload", label: "Points per Post Upload", hint: "Awarded each time a creator publishes" },
   { key: "like", label: "Points per Like Received", hint: "Engagement reward on creator content" },
-  { key: "follow", label: "Points per New Follower", hint: "Growth reward for audience building" },
+  { key: "follow", label: "Points per New Esteem", hint: "Growth reward for audience building" },
   { key: "view_per_100", label: "Points per 100 Views", hint: "Scaled viewership reward" },
   { key: "share", label: "Points per Share", hint: "Reward for organic amplification" },
   { key: "daily_login", label: "Points per Daily Login", hint: "Retention incentive for all users" },

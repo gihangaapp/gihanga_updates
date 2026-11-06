@@ -27,7 +27,7 @@ export interface NavItem {
 
 export const primaryNav: NavItem[] = [
   { label: "Home", icon: Home, to: "/" },
-  { label: "Reels", icon: Film, to: "/reels" },
+  { label: "Deeds", icon: Film, to: "/reels" },
   { label: "Explore", icon: Compass, to: "/explore" },
   { label: "Search", icon: Search, to: "/search" },
   { label: "Trending", icon: TrendingUp, to: "/trending" },
@@ -46,6 +46,6 @@ export const secondaryNav: NavItem[] = [
 export const mobileNav: NavItem[] = [
   { label: "Home", icon: Home, to: "/" },
   { label: "Live", icon: Radio, to: "/live" },
-  { label: "Reels", icon: Film, to: "/reels" },
+  { label: "Deeds", icon: Film, to: "/reels" },
   { label: "Profile", icon: User, to: "/profile" },
 ];

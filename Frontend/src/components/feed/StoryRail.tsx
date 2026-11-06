@@ -22,7 +22,7 @@ export function StoryRail() {
   const others = groups.filter((_, i) => i !== myGroupIndex);
 
   return (
-    <section aria-label="Stories" className="surface-card mb-4 p-3">
+    <section aria-label="Decisions" className="surface-card mb-4 p-3">
       <div
         ref={railRef}
         className="flex gap-4 overflow-x-auto pb-1 no-scrollbar"
@@ -48,7 +48,7 @@ export function StoryRail() {
             />
             <span
               role="button"
-              aria-label="Add to your story"
+              aria-label="Add to your decision"
               onClick={(e) => {
                 e.stopPropagation();
                 openCreate("story");
@@ -58,7 +58,7 @@ export function StoryRail() {
               <Plus className="size-3.5 text-primary-foreground" strokeWidth={3.5} />
             </span>
           </span>
-          <span className="w-full truncate text-center text-[11px] font-semibold">Your story</span>
+          <span className="w-full truncate text-center text-[11px] font-semibold">Your decision</span>
         </button>}
 
         {!isLoading && others.map((group) => (
