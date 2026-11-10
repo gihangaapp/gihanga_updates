@@ -172,3 +172,14 @@ See `VERIFYING.md` for the full matrix and how to run it (including the 2-minute
 - Improved frontend handling of HTML responses from proxies/gateways.
 - Added regression test command `npm run test:momo-token`.
 - Documented sandbox callback URL scheme and post-deploy test procedure.
+
+
+## Atlas atomic wallet hardening (2026-11-10)
+
+- Confirmed the deployed MongoDB Atlas topology is a three-member replica set.
+- Removed the unsafe non-atomic MTN settlement fallback.
+- Wrapped provider settlement, payout reservation and manual staff payment actions in MongoDB transactions.
+- Prevented staff from manually settling MTN-linked transactions.
+- Added idempotency-key enforcement and per-user deposit/withdrawal limits.
+- Kept ambiguous MTN submission outcomes pending for reconciliation instead of releasing potentially transferred funds.
+- See `ATLAS_ATOMIC_WALLET_HARDENING.md` for details and verification limitations.

@@ -5,7 +5,7 @@ import { normalizePhone } from "../src/lib/momo";
 
 const walletRoute = readFileSync(new URL("../src/routes/v1/wallet/wallet.ts", import.meta.url), "utf8");
 const settlement = readFileSync(new URL("../src/lib/paymentSettlement.ts", import.meta.url), "utf8");
-const frontendHook = readFileSync(new URL("../../frontend/src/hooks/use-wallet.ts", import.meta.url), "utf8");
+const frontendHook = readFileSync(new URL("../../Frontend/src/hooks/use-wallet.ts", import.meta.url), "utf8");
 
 
 test("valid Rwanda MSISDN is normalized to international digits", () => {
@@ -44,9 +44,33 @@ test("settlement claims only pending transactions", () => {
   assert.match(settlement, /findOneAndUpdate/);
 });
 
-test("settlement has a database transaction path and a standalone fallback", () => {
+test("settlement requires MongoDB transactions and has no non-atomic fallback", () => {
   assert.match(settlement, /withTransaction/);
-  assert.match(settlement, /fallbackSettlement/);
+  assert.doesNotMatch(settlement, /fallbackSettlement/);
+  assert.match(settlement, /writeConcern: \{ w: "majority" as const \}/);
+});
+
+test("payment routes require idempotency keys and per-user rate limits", () => {
+  assert.match(walletRoute, /A valid Idempotency-Key is required/);
+  assert.match(walletRoute, /rateLimitHits\("wallet:deposit"/);
+  assert.match(walletRoute, /rateLimitHits\("wallet:withdraw"/);
+});
+
+test("withdrawal hold and transaction creation share one MongoDB transaction", () => {
+  assert.match(walletRoute, /Reserve funds and create the payout row in one Atlas transaction/);
+  assert.match(walletRoute, /Wallet\.findOneAndUpdate[\s\S]*?available: \{ \$gte: numericAmount \}[\s\S]*?pending: numericAmount/);
+  assert.match(walletRoute, /Transaction\.create\(\[\{/);
+});
+
+test("ambiguous provider submission does not immediately release a payout hold", () => {
+  assert.match(walletRoute, /SUBMISSION_UNKNOWN/);
+  assert.match(walletRoute, /Do not submit it again/);
+});
+
+test("staff cannot manually settle an MTN-linked transaction", () => {
+  const staffPayments = readFileSync(new URL("../src/routes/v1/system/payments/staffPayments.ts", import.meta.url), "utf8");
+  assert.match(staffPayments, /MTN transactions must be settled by verified provider status/);
+  assert.match(staffPayments, /withTransaction/);
 });
 
 test("terminal settlement writes a settlement timestamp", () => {

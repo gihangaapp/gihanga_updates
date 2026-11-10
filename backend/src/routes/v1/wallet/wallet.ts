@@ -11,8 +11,52 @@ import { requestToPay, transfer, isMomoConfigured, getRequestToPayStatus, getTra
 import { settleMomoTransaction } from "../../../lib/paymentSettlement";
 import { notify } from "../../../lib/notify";
 import { notifyStaff } from "../../../lib/staffNotify";
+import { rateLimitHits } from "../../../lib/redis";
 
 const router = Router();
+
+const MONGO_TRANSACTION_OPTIONS = {
+  readPreference: "primary" as const,
+  readConcern: { level: "snapshot" as const },
+  writeConcern: { w: "majority" as const },
+};
+
+class WalletRequestError extends Error {
+  constructor(public statusCode: number, message: string) {
+    super(message);
+    this.name = "WalletRequestError";
+  }
+}
+
+function readIdempotencyKey(req: Request): string {
+  return String(req.get("Idempotency-Key") || req.body?.idempotencyKey || "").trim();
+}
+
+function isValidIdempotencyKey(value: string): boolean {
+  return value.length >= 8 && value.length <= 128 && /^[A-Za-z0-9._:-]+$/.test(value);
+}
+
+function isDuplicateKeyError(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && "code" in error && (error as { code?: number }).code === 11000);
+}
+
+function providerHttpStatus(error: unknown): number | null {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const match = message.match(/\(HTTP (\d{3})\)/i);
+  return match ? Number(match[1]) : null;
+}
+
+// Only a clear 4xx rejection (excluding timeout/conflict/rate-limit cases)
+// proves the provider refused the request. Network errors and 5xx responses
+// are ambiguous: keep the funds reserved and reconcile by the saved reference.
+function isDefinitiveProviderRejection(error: unknown): boolean {
+  const status = providerHttpStatus(error);
+  return status !== null && status >= 400 && status < 500 && ![408, 409, 425, 429].includes(status);
+}
+
+function providerErrorMessage(error: unknown): string {
+  return (error instanceof Error ? error.message : "MTN provider response was unavailable").slice(0, 500);
+}
 
 function providerMatchesWalletTransaction(
   tx: { metadata?: unknown },
@@ -72,6 +116,8 @@ const MIN_WITHDRAW = 1000;
 
 // POST /api/v1/wallet/deposit — MTN MoMo Collections RequestToPay
 router.post("/deposit", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.userId;
+  const idempotencyKey = readIdempotencyKey(req);
   try {
     const { amount, phoneNumber } = req.body;
     const numericAmount = Number(amount);
@@ -82,84 +128,112 @@ router.post("/deposit", authenticateConsumer, async (req: AuthenticatedRequest, 
     let normalizedPhone: string;
     try { normalizedPhone = normalizePhone(phoneNumber); } catch { return res.status(400).json({ error: "Enter a valid Rwanda MTN phone number" }); }
 
-    const wallet = await Wallet.findOne({ user: req.user!.userId }).then(
-      (w) => w ?? Wallet.create({ user: req.user!.userId }),
-    );
-    if (wallet.frozen) return res.status(403).json({ error: "Your wallet is frozen — contact support" });
-    const idempotencyKey = String(req.get("Idempotency-Key") || req.body?.idempotencyKey || "").trim();
-    if (idempotencyKey) {
-      const prior = await Transaction.findOne({ user: req.user!.userId, kind: "deposit", idempotencyKey });
-      if (prior) return res.status(202).json({ transaction: prior, message: "This payment request already exists.", mode: prior.momoReferenceId ? "live" : "simulated" });
+    if (!isValidIdempotencyKey(idempotencyKey)) {
+      return res.status(400).json({ error: "A valid Idempotency-Key is required for payment requests" });
+    }
+    const prior = await Transaction.findOne({ user: userId, kind: "deposit", idempotencyKey });
+    if (prior) return res.status(202).json({ transaction: prior, message: "This payment request already exists.", mode: prior.momoReferenceId ? "live" : "simulated" });
+
+    if (!(await rateLimitHits("wallet:deposit", userId, 5, 3600))) {
+      res.set("Retry-After", "3600");
+      return res.status(429).json({ error: "Too many deposit attempts. Please try again later." });
     }
 
-    // Record the attempt as pending immediately — this is the row an admin sees in the
-    // payments queue and the one the MoMo callback (or manual approval) will complete.
+    const wallet = await Wallet.findOne({ user: userId }).then(
+      (w) => w ?? Wallet.create({ user: userId }),
+    );
+    if (wallet.frozen) return res.status(403).json({ error: "Your wallet is frozen — contact support" });
+
     let providerQuote: ReturnType<typeof getMomoProviderQuote> | null = null;
-    if (isMomoConfigured("collection")) {
-      try { providerQuote = getMomoProviderQuote(numericAmount); }
-      catch (quoteError: any) {
-        return res.status(503).json({ error: quoteError.message || "MTN currency configuration is incomplete" });
+    const collectionConfigured = isMomoConfigured("collection");
+    let providerReferenceId: string | undefined;
+    let providerCallbackUrl: string | undefined;
+    if (collectionConfigured) {
+      try {
+        providerQuote = getMomoProviderQuote(numericAmount);
+        providerReferenceId = crypto.randomUUID();
+        providerCallbackUrl = getMomoCallbackUrl(providerReferenceId);
+      } catch (quoteError: any) {
+        return res.status(503).json({ error: quoteError.message || "MTN currency/callback configuration is incomplete" });
       }
     }
 
-    const tx = await Transaction.create({
-      wallet: wallet._id,
-      user: req.user!.userId,
-      kind: "deposit",
-      amount: numericAmount,
-      label: "MTN MoMo wallet deposit",
-      status: "pending",
-      provider: "MTN_MOMO",
-      currency: "RWF",
-      customerPhone: normalizedPhone,
-      metadata: {
-        walletCurrency: "RWF",
-        ...(providerQuote ? {
-          momoProviderAmount: providerQuote.amount,
-          momoProviderCurrency: providerQuote.currency,
-          ...(providerQuote.sandboxRwfPerEur ? { sandboxRwfPerEur: providerQuote.sandboxRwfPerEur } : {}),
+    let tx: any;
+    try {
+      tx = await Transaction.create({
+        wallet: wallet._id,
+        user: userId,
+        kind: "deposit",
+        amount: numericAmount,
+        label: "MTN MoMo wallet deposit",
+        status: "pending",
+        ...(collectionConfigured ? {
+          provider: "MTN_MOMO",
+          momoReferenceId: providerReferenceId,
+          momoStatus: "PENDING",
         } : {}),
-      },
-      ...(idempotencyKey ? { idempotencyKey } : {}),
-    });
-    await notifyStaff("payments", `New deposit request: ${numericAmount.toLocaleString()} RWF pending review`, { transactionId: String(tx._id) });
+        currency: "RWF",
+        customerPhone: normalizedPhone,
+        metadata: {
+          walletCurrency: "RWF",
+          ...(providerQuote ? {
+            momoProviderAmount: providerQuote.amount,
+            momoProviderCurrency: providerQuote.currency,
+            ...(providerQuote.sandboxRwfPerEur ? { sandboxRwfPerEur: providerQuote.sandboxRwfPerEur } : {}),
+          } : {}),
+        },
+        idempotencyKey,
+      });
+    } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        const existing = await Transaction.findOne({ user: userId, kind: "deposit", idempotencyKey });
+        if (existing) return res.status(202).json({ transaction: existing, message: "This payment request already exists.", mode: existing.momoReferenceId ? "live" : "simulated" });
+      }
+      throw error;
+    }
 
-    if (isMomoConfigured("collection")) {
+    try {
+      await notifyStaff("payments", `New deposit request: ${numericAmount.toLocaleString()} RWF pending review`, { transactionId: String(tx._id) });
+    } catch (notifyError) {
+      console.error("[Wallet] Could not notify staff about deposit:", notifyError instanceof Error ? notifyError.message : "unknown error");
+    }
+
+    if (collectionConfigured) {
       try {
-        // Save the same reference used in X-Reference-Id before contacting MTN.
-        // This prevents a very fast callback racing the initial request response.
-        const referenceId = crypto.randomUUID();
-        const callbackUrl = getMomoCallbackUrl(referenceId);
-        tx.momoReferenceId = referenceId;
-        tx.momoStatus = "PENDING";
-        await tx.save();
         await requestToPay({
           amount: numericAmount,
           phone: normalizedPhone,
           externalId: String(tx._id),
           payerMessage: "Gihanga Updates wallet deposit",
-          referenceId,
-          callbackUrl,
+          referenceId: providerReferenceId!,
+          callbackUrl: providerCallbackUrl,
         });
         return res.status(202).json({
           transaction: tx,
           message: "Check your phone to approve the payment request.",
           mode: "live",
         });
-      } catch (momoError: any) {
-        tx.status = "failed";
+      } catch (momoError) {
+        const message = providerErrorMessage(momoError);
+        if (isDefinitiveProviderRejection(momoError)) {
+          await settleMomoTransaction(String(tx._id), "FAILED", message);
+          return res.status(502).json({ error: message, transaction: await Transaction.findById(tx._id) });
+        }
+        tx.momoStatus = "SUBMISSION_UNKNOWN";
+        tx.momoReason = message;
         await tx.save();
-        return res.status(502).json({ error: momoError.message || "MTN MoMo request failed" });
+        console.error(`[MoMo] Deposit submission outcome uncertain for transaction ${String(tx._id)}; keeping it pending for provider reconciliation.`);
+        return res.status(202).json({
+          transaction: tx,
+          message: "MTN submission is being verified. Do not submit this deposit again; check the transaction status shortly.",
+          mode: "live",
+        });
       }
     }
 
-    // Simulated-pending mode: no MoMo credentials configured yet. The transaction stays
-    // pending until an admin approves it from the payments queue (or real credentials
-    // are added later and this code path is naturally replaced by the live one above).
     return res.status(202).json({
       transaction: tx,
-      message:
-        "MTN MoMo isn't connected yet on this server, so your deposit is pending admin review instead of an instant phone prompt.",
+      message: "MTN MoMo is not configured, so this deposit is pending manual review.",
       mode: "simulated",
     });
   } catch (error: any) {
@@ -169,6 +243,8 @@ router.post("/deposit", authenticateConsumer, async (req: AuthenticatedRequest, 
 
 // POST /api/v1/wallet/withdraw — MTN MoMo Disbursements Transfer
 router.post("/withdraw", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
+  const userId = req.user!.userId;
+  const idempotencyKey = readIdempotencyKey(req);
   try {
     const { amount, phoneNumber } = req.body;
     const numericAmount = Number(amount);
@@ -179,84 +255,132 @@ router.post("/withdraw", authenticateConsumer, async (req: AuthenticatedRequest,
     let normalizedPhone: string;
     try { normalizedPhone = normalizePhone(phoneNumber); } catch { return res.status(400).json({ error: "Enter a valid Rwanda MTN phone number" }); }
 
+    if (!isValidIdempotencyKey(idempotencyKey)) {
+      return res.status(400).json({ error: "A valid Idempotency-Key is required for withdrawal requests" });
+    }
+    const prior = await Transaction.findOne({ user: userId, kind: "payout", idempotencyKey });
+    if (prior) return res.status(202).json({ transaction: prior, message: "This withdrawal request already exists.", mode: prior.momoReferenceId ? "live" : "simulated" });
+
+    if (!(await rateLimitHits("wallet:withdraw", userId, 3, 3600))) {
+      res.set("Retry-After", "3600");
+      return res.status(429).json({ error: "Too many withdrawal attempts. Please try again later." });
+    }
+
+    const initialWallet = await Wallet.findOne({ user: userId });
+    if (!initialWallet) return res.status(404).json({ error: "Wallet not found" });
+    if (initialWallet.frozen) return res.status(403).json({ error: "Your wallet is frozen — contact support" });
+
+    const disbursementConfigured = isMomoConfigured("disbursement");
     let providerQuote: ReturnType<typeof getMomoProviderQuote> | null = null;
-    if (isMomoConfigured("disbursement")) {
-      try { providerQuote = getMomoProviderQuote(numericAmount); }
-      catch (quoteError: any) {
-        return res.status(503).json({ error: quoteError.message || "MTN currency configuration is incomplete" });
+    let providerReferenceId: string | undefined;
+    let providerCallbackUrl: string | undefined;
+    if (disbursementConfigured) {
+      try {
+        providerQuote = getMomoProviderQuote(numericAmount);
+        providerReferenceId = crypto.randomUUID();
+        providerCallbackUrl = getMomoCallbackUrl(providerReferenceId);
+      } catch (quoteError: any) {
+        return res.status(503).json({ error: quoteError.message || "MTN currency/callback configuration is incomplete" });
       }
     }
 
-    const wallet = await Wallet.findOne({ user: req.user!.userId });
-    if (!wallet) return res.status(404).json({ error: "Wallet not found" });
-    if (wallet.frozen) return res.status(403).json({ error: "Your wallet is frozen — contact support" });
-    const idempotencyKey = String(req.get("Idempotency-Key") || req.body?.idempotencyKey || "").trim();
-    if (idempotencyKey) {
-      const prior = await Transaction.findOne({ user: req.user!.userId, kind: "payout", idempotencyKey });
-      if (prior) return res.status(202).json({ transaction: prior, message: "This withdrawal request already exists.", mode: prior.momoReferenceId ? "live" : "simulated" });
+    // Reserve funds and create the payout row in one Atlas transaction. A crash
+    // cannot leave a wallet hold without its matching transaction record.
+    const session = await mongoose.startSession();
+    let tx: any = null;
+    try {
+      await session.withTransaction(async () => {
+        const reservedWallet = await Wallet.findOneAndUpdate(
+          { user: userId, frozen: { $ne: true }, available: { $gte: numericAmount } },
+          { $inc: { available: -numericAmount, pending: numericAmount } },
+          { new: true, session },
+        );
+        if (!reservedWallet) {
+          const current = await Wallet.findOne({ user: userId }).session(session);
+          if (!current) throw new WalletRequestError(404, "Wallet not found");
+          if (current.frozen) throw new WalletRequestError(403, "Your wallet is frozen — contact support");
+          throw new WalletRequestError(400, "Insufficient available balance");
+        }
+
+        const created = await Transaction.create([{
+          wallet: reservedWallet._id,
+          user: userId,
+          kind: "payout",
+          amount: -numericAmount,
+          label: "MTN MoMo wallet withdrawal",
+          status: "pending",
+          ...(disbursementConfigured ? {
+            provider: "MTN_MOMO",
+            momoReferenceId: providerReferenceId,
+            momoStatus: "PENDING",
+          } : {}),
+          currency: "RWF",
+          customerPhone: normalizedPhone,
+          metadata: {
+            walletCurrency: "RWF",
+            ...(providerQuote ? {
+              momoProviderAmount: providerQuote.amount,
+              momoProviderCurrency: providerQuote.currency,
+              ...(providerQuote.sandboxRwfPerEur ? { sandboxRwfPerEur: providerQuote.sandboxRwfPerEur } : {}),
+            } : {}),
+          },
+          idempotencyKey,
+        }], { session });
+        tx = created[0];
+      }, MONGO_TRANSACTION_OPTIONS);
+    } catch (error) {
+      if (isDuplicateKeyError(error)) {
+        const existing = await Transaction.findOne({ user: userId, kind: "payout", idempotencyKey });
+        if (existing) return res.status(202).json({ transaction: existing, message: "This withdrawal request already exists.", mode: existing.momoReferenceId ? "live" : "simulated" });
+      }
+      if (error instanceof WalletRequestError) return res.status(error.statusCode).json({ error: error.message });
+      throw error;
+    } finally {
+      await session.endSession();
     }
-    if (wallet.available < numericAmount) return res.status(400).json({ error: "Insufficient available balance" });
 
-    // Hold the funds immediately so the same balance can't be withdrawn twice while pending.
-    wallet.available -= numericAmount;
-    wallet.pending += numericAmount;
-    await wallet.save();
+    try {
+      await notifyStaff("payments", `New withdrawal request: ${numericAmount.toLocaleString()} RWF pending review`, { transactionId: String(tx._id) });
+    } catch (notifyError) {
+      console.error("[Wallet] Could not notify staff about withdrawal:", notifyError instanceof Error ? notifyError.message : "unknown error");
+    }
 
-    const tx = await Transaction.create({
-      wallet: wallet._id,
-      user: req.user!.userId,
-      kind: "payout",
-      amount: -numericAmount,
-      label: "MTN MoMo wallet withdrawal",
-      status: "pending",
-      provider: "MTN_MOMO",
-      currency: "RWF",
-      customerPhone: normalizedPhone,
-      metadata: {
-        walletCurrency: "RWF",
-        ...(providerQuote ? {
-          momoProviderAmount: providerQuote.amount,
-          momoProviderCurrency: providerQuote.currency,
-          ...(providerQuote.sandboxRwfPerEur ? { sandboxRwfPerEur: providerQuote.sandboxRwfPerEur } : {}),
-        } : {}),
-      },
-      ...(idempotencyKey ? { idempotencyKey } : {}),
-    });
-    await notifyStaff("payments", `New withdrawal request: ${numericAmount.toLocaleString()} RWF pending review`, { transactionId: String(tx._id) });
-
-    if (isMomoConfigured("disbursement")) {
+    if (disbursementConfigured) {
       try {
-        // Persist the reference before submission so the callback can resolve
-        // the transaction even if MTN responds very quickly.
-        const referenceId = crypto.randomUUID();
-        const callbackUrl = getMomoCallbackUrl(referenceId);
-        tx.momoReferenceId = referenceId;
-        tx.momoStatus = "PENDING";
-        await tx.save();
         await transfer({
           amount: numericAmount,
           phone: normalizedPhone,
           externalId: String(tx._id),
           payerMessage: "Gihanga Updates wallet withdrawal",
-          referenceId,
-          callbackUrl,
+          referenceId: providerReferenceId!,
+          callbackUrl: providerCallbackUrl,
         });
         return res.status(202).json({ transaction: tx, message: "Withdrawal submitted to MTN MoMo.", mode: "live" });
-      } catch (momoError: any) {
-        // Roll back the hold — the disbursement never actually left.
-        wallet.available += numericAmount;
-        wallet.pending = Math.max(0, wallet.pending - numericAmount);
-        await wallet.save();
-        tx.status = "failed";
+      } catch (momoError) {
+        const message = providerErrorMessage(momoError);
+        if (isDefinitiveProviderRejection(momoError)) {
+          // A clear provider 4xx refusal is terminal; use the same atomic
+          // settlement path to return the held RWF exactly once.
+          await settleMomoTransaction(String(tx._id), "FAILED", message);
+          return res.status(502).json({ error: message, transaction: await Transaction.findById(tx._id) });
+        }
+        // Network/5xx outcomes are ambiguous. Do not release funds until MTN's
+        // transfer-status endpoint establishes whether the transfer exists.
+        tx.momoStatus = "SUBMISSION_UNKNOWN";
+        tx.momoReason = message;
         await tx.save();
-        return res.status(502).json({ error: momoError.message || "MTN MoMo transfer failed" });
+        console.error(`[MoMo] Withdrawal submission outcome uncertain for transaction ${String(tx._id)}; keeping the payout hold for provider reconciliation.`);
+        return res.status(202).json({
+          transaction: tx,
+          message: "MTN submission is being verified. Your withdrawal remains pending; do not submit it again.",
+          mode: "live",
+        });
       }
     }
 
     return res.status(202).json({
       transaction: tx,
-      message:
-        "MTN MoMo isn't connected yet on this server, so your withdrawal is held pending admin approval instead of an instant payout.",
+      message: "MTN MoMo is not configured, so this withdrawal is held pending manual review.",
       mode: "simulated",
     });
   } catch (error: any) {

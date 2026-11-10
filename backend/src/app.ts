@@ -80,9 +80,19 @@ export function createApp(): Express {
     })
   );
 
-  // Logging
+  // Logging: never write bearer-like credentials from query strings to logs.
+  // Authenticated media currently supports a short-term query-token fallback;
+  // scrub sensitive values here to prevent access logs from persisting JWTs.
+  morgan.token("safe-url", (req) => {
+    const rawUrl = req.originalUrl || req.url || "/";
+    return rawUrl.replace(
+      /([?&](?:token|access_token|refresh_token|id_token|api_key|apikey|secret|password)=)[^&]*/gi,
+      "$1[REDACTED]"
+    );
+  });
+
   if (process.env.NODE_ENV !== "test") {
-    app.use(morgan("dev"));
+    app.use(morgan(":method :safe-url :status :response-time ms - :res[content-length]"));
   }
 
   // Body Parsing

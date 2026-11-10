@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { Router, Response } from "express";
 import { Transaction } from "../../../../models/Transaction";
 import { Wallet } from "../../../../models/Wallet";
@@ -6,6 +7,22 @@ import { authenticateStaff, requirePermission, AuthenticatedRequest } from "../.
 import { notify } from "../../../../lib/notify";
 
 const router = Router();
+const TRANSACTION_OPTIONS = {
+  readPreference: "primary" as const,
+  readConcern: { level: "snapshot" as const },
+  writeConcern: { w: "majority" as const },
+};
+
+class StaffPaymentError extends Error {
+  constructor(public statusCode: number, message: string) {
+    super(message);
+    this.name = "StaffPaymentError";
+  }
+}
+
+function isProviderManaged(tx: { provider?: string; momoReferenceId?: string }): boolean {
+  return tx.provider === "MTN_MOMO" || Boolean(tx.momoReferenceId);
+}
 
 // GET /api/v1/system/payments — pending deposits/withdrawals awaiting review
 router.get("/", authenticateStaff, requirePermission("payments.view"), async (req: AuthenticatedRequest, res: Response) => {
@@ -21,90 +38,142 @@ router.get("/", authenticateStaff, requirePermission("payments.view"), async (re
   }
 });
 
-// POST /api/v1/system/payments/:id/approve
+// MTN-linked payments are settled only after the backend independently verifies
+// the provider's terminal status. Staff must not manually manufacture success.
 router.post("/:id/approve", authenticateStaff, requirePermission("payments.approve"), async (req: AuthenticatedRequest, res: Response) => {
+  const session = await mongoose.startSession();
+  let settledTransaction: any = null;
   try {
-    const tx = await Transaction.findById(req.params.id);
-    if (!tx) return res.status(404).json({ error: "Transaction not found" });
-    if (tx.status !== "pending") return res.status(400).json({ error: "Transaction is not pending" });
+    await session.withTransaction(async () => {
+      const tx = await Transaction.findById(req.params.id).session(session);
+      if (!tx) throw new StaffPaymentError(404, "Transaction not found");
+      if (tx.status !== "pending") throw new StaffPaymentError(409, "Transaction is not pending");
+      if (isProviderManaged(tx)) {
+        throw new StaffPaymentError(409, "MTN transactions must be settled by verified provider status, not manual staff approval");
+      }
 
-    const wallet = await Wallet.findById(tx.wallet);
-    if (!wallet) return res.status(404).json({ error: "Wallet not found" });
+      const claimed = await Transaction.findOneAndUpdate(
+        { _id: tx._id, status: "pending", provider: { $ne: "MTN_MOMO" }, momoReferenceId: { $in: [null, ""] } },
+        { $set: { status: "completed", approvedBy: req.staffUser!.userId, approvedAt: new Date(), settledAt: new Date() } },
+        { new: true, session },
+      );
+      if (!claimed) throw new StaffPaymentError(409, "Transaction was already processed by another action");
 
-    if (tx.kind === "deposit") {
-      wallet.available += tx.amount;
-      wallet.lifetime += tx.amount;
-    } else if (tx.kind === "payout") {
-      // amount is negative for payouts — the hold placed at request time already
-      // moved it into `pending`; approving just releases the hold (it's gone for good).
-      wallet.pending += tx.amount;
+      const amount = Math.abs(Number(tx.amount));
+      if (!Number.isSafeInteger(amount) || amount <= 0) throw new StaffPaymentError(422, "Transaction amount is invalid");
+      if ((tx.kind === "deposit" && Number(tx.amount) <= 0) || (tx.kind === "payout" && Number(tx.amount) >= 0)) {
+        throw new StaffPaymentError(422, "Transaction amount sign is inconsistent with its type");
+      }
+
+      let walletResult;
+      if (tx.kind === "deposit") {
+        walletResult = await Wallet.updateOne(
+          { _id: tx.wallet },
+          { $inc: { available: amount, lifetime: amount } },
+          { session },
+        );
+      } else if (tx.kind === "payout") {
+        walletResult = await Wallet.updateOne(
+          { _id: tx.wallet, pending: { $gte: amount } },
+          { $inc: { pending: -amount } },
+          { session },
+        );
+      } else {
+        throw new StaffPaymentError(422, "Only deposit and payout transactions can be approved here");
+      }
+      if (walletResult.matchedCount !== 1) throw new StaffPaymentError(409, "Wallet is missing or does not contain the expected payout hold");
+
+      await AuditLog.create([{
+        actor: req.staffUser!.userId,
+        action: "payments.approve",
+        targetId: String(tx._id),
+        ipAddress: req.ip,
+        meta: { kind: tx.kind, amount: tx.amount, user: String(tx.user) },
+      }], { session });
+      settledTransaction = claimed;
+    }, TRANSACTION_OPTIONS);
+
+    try {
+      await notify({
+        recipient: String(settledTransaction.user),
+        kind: "payment",
+        text: settledTransaction.kind === "deposit"
+          ? `Your deposit of ${Math.abs(settledTransaction.amount)} was approved`
+          : `Your withdrawal of ${Math.abs(settledTransaction.amount)} was approved`,
+      });
+    } catch (notificationError) {
+      console.error("[StaffPayments] Approval notification failed:", notificationError instanceof Error ? notificationError.message : "unknown error");
     }
-    await wallet.save();
 
-    tx.status = "completed";
-    tx.approvedBy = req.staffUser!.userId as any;
-    tx.approvedAt = new Date();
-    await tx.save();
-
-    await AuditLog.create({
-      actor: req.staffUser!.userId,
-      action: "payments.approve",
-      targetId: String(tx._id),
-      meta: { kind: tx.kind, amount: tx.amount, user: String(tx.user) },
-    });
-
-    await notify({
-      recipient: String(tx.user),
-      kind: "payment",
-      text:
-        tx.kind === "deposit"
-          ? `Your deposit of ${Math.abs(tx.amount)} was approved`
-          : `Your withdrawal of ${Math.abs(tx.amount)} was approved`,
-    });
-
-    return res.json({ transaction: tx });
+    return res.json({ transaction: settledTransaction });
   } catch (error: any) {
-    return res.status(500).json({ error: "Approval failed", details: error.message });
+    const status = error instanceof StaffPaymentError ? error.statusCode : 500;
+    return res.status(status).json({ error: error.message || "Approval failed" });
+  } finally {
+    await session.endSession();
   }
 });
 
 // POST /api/v1/system/payments/:id/reject
 router.post("/:id/reject", authenticateStaff, requirePermission("payments.approve"), async (req: AuthenticatedRequest, res: Response) => {
+  const session = await mongoose.startSession();
+  let rejectedTransaction: any = null;
+  const reason = String(req.body?.reason || "").trim().slice(0, 500);
   try {
-    const { reason } = req.body;
-    const tx = await Transaction.findById(req.params.id);
-    if (!tx) return res.status(404).json({ error: "Transaction not found" });
-    if (tx.status !== "pending") return res.status(400).json({ error: "Transaction is not pending" });
+    await session.withTransaction(async () => {
+      const tx = await Transaction.findById(req.params.id).session(session);
+      if (!tx) throw new StaffPaymentError(404, "Transaction not found");
+      if (tx.status !== "pending") throw new StaffPaymentError(409, "Transaction is not pending");
+      if (isProviderManaged(tx)) {
+        throw new StaffPaymentError(409, "MTN transactions must be resolved from verified provider status, not manual staff rejection");
+      }
 
-    const wallet = await Wallet.findById(tx.wallet);
-    if (wallet && tx.kind === "payout") {
-      // Release the hold back to available since the withdrawal was rejected.
-      wallet.available += Math.abs(tx.amount);
-      wallet.pending += tx.amount;
-      await wallet.save();
+      const claimed = await Transaction.findOneAndUpdate(
+        { _id: tx._id, status: "pending", provider: { $ne: "MTN_MOMO" }, momoReferenceId: { $in: [null, ""] } },
+        { $set: { status: "cancelled", failureReason: reason || "Rejected by staff", approvedBy: req.staffUser!.userId, approvedAt: new Date() } },
+        { new: true, session },
+      );
+      if (!claimed) throw new StaffPaymentError(409, "Transaction was already processed by another action");
+
+      if (tx.kind === "payout") {
+        const amount = Math.abs(Number(tx.amount));
+        if (!Number.isSafeInteger(amount) || amount <= 0 || Number(tx.amount) >= 0) {
+          throw new StaffPaymentError(422, "Payout transaction amount is invalid");
+        }
+        const walletResult = await Wallet.updateOne(
+          { _id: tx.wallet, pending: { $gte: amount } },
+          { $inc: { available: amount, pending: -amount } },
+          { session },
+        );
+        if (walletResult.matchedCount !== 1) throw new StaffPaymentError(409, "Wallet is missing or does not contain the expected payout hold");
+      }
+
+      await AuditLog.create([{
+        actor: req.staffUser!.userId,
+        action: "payments.reject",
+        targetId: String(tx._id),
+        ipAddress: req.ip,
+        meta: { kind: tx.kind, amount: tx.amount, reason },
+      }], { session });
+      rejectedTransaction = claimed;
+    }, TRANSACTION_OPTIONS);
+
+    try {
+      await notify({
+        recipient: String(rejectedTransaction.user),
+        kind: "payment",
+        text: `Your ${rejectedTransaction.kind} request was declined${reason ? `: ${reason}` : ""}`,
+      });
+    } catch (notificationError) {
+      console.error("[StaffPayments] Rejection notification failed:", notificationError instanceof Error ? notificationError.message : "unknown error");
     }
 
-    tx.status = "cancelled";
-    tx.approvedBy = req.staffUser!.userId as any;
-    tx.approvedAt = new Date();
-    await tx.save();
-
-    await AuditLog.create({
-      actor: req.staffUser!.userId,
-      action: "payments.reject",
-      targetId: String(tx._id),
-      meta: { kind: tx.kind, amount: tx.amount, reason },
-    });
-
-    await notify({
-      recipient: String(tx.user),
-      kind: "payment",
-      text: `Your ${tx.kind} request was declined${reason ? `: ${reason}` : ""}`,
-    });
-
-    return res.json({ transaction: tx });
+    return res.json({ transaction: rejectedTransaction });
   } catch (error: any) {
-    return res.status(500).json({ error: "Rejection failed", details: error.message });
+    const status = error instanceof StaffPaymentError ? error.statusCode : 500;
+    return res.status(status).json({ error: error.message || "Rejection failed" });
+  } finally {
+    await session.endSession();
   }
 });
 
