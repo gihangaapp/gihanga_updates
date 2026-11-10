@@ -114,6 +114,17 @@ router.get("/transactions", authenticateConsumer, async (req: AuthenticatedReque
 const MIN_DEPOSIT = 500; // RWF
 const MIN_WITHDRAW = 1000;
 
+// These are the only provider states that may influence a wallet. Keep this
+// allow-list explicit so unknown or future provider values cannot be treated
+// as a terminal payment result by accident.
+const SUPPORTED_MOMO_PROVIDER_STATES = ["PENDING", "SUCCESSFUL", "FAILED"] as const;
+type SupportedMomoProviderState = (typeof SUPPORTED_MOMO_PROVIDER_STATES)[number];
+
+function isSupportedMomoProviderState(value: unknown): value is SupportedMomoProviderState {
+  return typeof value === "string"
+    && (SUPPORTED_MOMO_PROVIDER_STATES as readonly string[]).includes(value);
+}
+
 // POST /api/v1/wallet/deposit — MTN MoMo Collections RequestToPay
 router.post("/deposit", authenticateConsumer, async (req: AuthenticatedRequest, res: Response) => {
   const userId = req.user!.userId;
@@ -372,7 +383,7 @@ router.post("/withdraw", authenticateConsumer, async (req: AuthenticatedRequest,
         console.error(`[MoMo] Withdrawal submission outcome uncertain for transaction ${String(tx._id)}; keeping the payout hold for provider reconciliation.`);
         return res.status(202).json({
           transaction: tx,
-          message: "MTN submission is being verified. Your withdrawal remains pending; do not submit it again.",
+          message: "MTN submission is being verified. Do not submit it again; your withdrawal remains pending until MTN confirms the result.",
           mode: "live",
         });
       }
@@ -396,6 +407,10 @@ router.get("/momo/status/:transactionId", authenticateConsumer, async (req: Auth
     if (!tx.momoReferenceId) return res.json({ transaction: tx, status: tx.status });
     const provider = tx.kind === "payout" ? await getTransferStatus(tx.momoReferenceId) : await getRequestToPayStatus(tx.momoReferenceId);
     console.info(`[MoMoStatus] Transaction ${String(tx._id)} provider status: ${provider.status}.`);
+    if (!isSupportedMomoProviderState(provider.status)) {
+      console.error(`[MoMoStatus] Unsupported provider status for transaction ${String(tx._id)}; no wallet change was applied.`);
+      return res.status(502).json({ error: "MTN returned an unrecognized payment status. The wallet was not changed." });
+    }
     if (provider.status === "SUCCESSFUL" && !providerMatchesWalletTransaction(tx, provider)) {
       return res.status(409).json({ error: "MTN payment amount or currency did not match the expected RWF wallet transaction. No wallet balance was changed." });
     }
@@ -445,11 +460,12 @@ const momoCallbackHandler = async (req: Request, res: Response) => {
       ? await getTransferStatus(tx.momoReferenceId)
       : await getRequestToPayStatus(tx.momoReferenceId);
 
+    if (!isSupportedMomoProviderState(provider.status)) {
+      console.error(`[MoMoCallback] Unsupported provider status for transaction ${String(tx._id)}; no wallet change was applied.`);
+      return res.status(502).json({ error: "MTN returned an unrecognized payment status" });
+    }
     if (provider.status === "PENDING") {
       return res.status(200).json({ ok: true, status: "PENDING" });
-    }
-    if (provider.status !== "SUCCESSFUL" && provider.status !== "FAILED") {
-      return res.status(502).json({ error: "MTN returned an unrecognized payment status" });
     }
 
     if (provider.status === "SUCCESSFUL" && !providerMatchesWalletTransaction(tx, provider)) {

@@ -36,7 +36,15 @@ test("status verification is backend authenticated and provider-specific", () =>
 });
 
 test("callbacks accept only supported provider states", () => {
-  assert.match(walletRoute, /\["PENDING", "SUCCESSFUL", "FAILED"\]/);
+  assert.ok(
+    /\["PENDING", "SUCCESSFUL", "FAILED"\]/.test(walletRoute),
+    "wallet route must explicitly allow-list PENDING, SUCCESSFUL, and FAILED",
+  );
+  assert.equal(
+    (walletRoute.match(/if \(!isSupportedMomoProviderState\(provider\.status\)\)/g) || []).length,
+    2,
+    "both status polling and callbacks must reject unrecognized provider states",
+  );
 });
 
 test("settlement claims only pending transactions", () => {
@@ -63,8 +71,8 @@ test("withdrawal hold and transaction creation share one MongoDB transaction", (
 });
 
 test("ambiguous provider submission does not immediately release a payout hold", () => {
-  assert.match(walletRoute, /SUBMISSION_UNKNOWN/);
-  assert.match(walletRoute, /Do not submit it again/);
+  assert.ok(/SUBMISSION_UNKNOWN/.test(walletRoute), "ambiguous payout submissions must remain in reconciliation state");
+  assert.ok(/Do not submit it again/.test(walletRoute), "the response must warn against retrying an ambiguous payout");
 });
 
 test("staff cannot manually settle an MTN-linked transaction", () => {
@@ -83,5 +91,20 @@ test("wallet effects distinguish deposits and payouts", () => {
 });
 
 test("transaction history polling supports recovery after refresh or restart", () => {
-  assert.match(frontendHook, /queryKey: \["wallet", "transactions"\][\s\S]*refetchInterval: 20_000/);
+  const start = frontendHook.indexOf("export function useWalletTransactions()");
+  const end = frontendHook.indexOf("export function useDeposit()");
+  assert.notEqual(start, -1, "wallet transaction query must exist");
+  assert.notEqual(end, -1, "wallet transaction query must end before mutations");
+  const hook = frontendHook.slice(start, end);
+
+  // A mount/refresh/restart starts by loading the server-persisted transaction
+  // history, then verifies pending MTN references through the authenticated API.
+  assert.ok(/queryKey: \["wallet", "transactions"\]/.test(hook), "transaction history must have a stable query key");
+  assert.ok(/api\.get<\{ transactions: WalletTransaction\[\] \}>\("\/wallet\/transactions"\)/.test(hook), "history must reload from the server after a mount or restart");
+  assert.ok(/pendingMomo\.map\(\(tx\) => api\.get\(`\/wallet\/momo\/status\/\$\{encodeURIComponent\(tx\._id\)\}`\)\)/.test(hook), "pending MTN references must be checked against the backend");
+
+  // Poll more frequently while a recent MTN transaction is pending, and keep
+  // a slower refresh interval once no pending MTN transaction remains.
+  assert.ok(/refetchInterval: \(query\) =>/.test(hook), "history must poll periodically");
+  assert.ok(/return hasRecentPendingMomo \? 5_000 : 20_000/.test(hook), "pending payments poll every 5 seconds and idle history every 20 seconds");
 });
