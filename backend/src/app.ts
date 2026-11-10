@@ -84,7 +84,10 @@ export function createApp(): Express {
   // Authenticated media currently supports a short-term query-token fallback;
   // scrub sensitive values here to prevent access logs from persisting JWTs.
   morgan.token("safe-url", (req) => {
-    const rawUrl = req.originalUrl || req.url || "/";
+    // Morgan types this callback as Node IncomingMessage; req.url is part
+    // of that type and, at this app-level middleware, contains the full path
+    // and query string needed for redaction. Avoid Express-only originalUrl.
+    const rawUrl = req.url || "/";
     return rawUrl.replace(
       /([?&](?:token|access_token|refresh_token|id_token|api_key|apikey|secret|password)=)[^&]*/gi,
       "$1[REDACTED]"
